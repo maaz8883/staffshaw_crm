@@ -1,0 +1,31 @@
+/********** Responsive **********/
+@media only screen and (max-width:1600px){
+}
+@media only screen and (max-width:1550px){
+}
+@media only screen and (max-width:1440px){
+}
+@media only screen and (max-width:1400px){
+    .header-logo img{width:80%;}
+}
+@media only screen and (max-width:1200px){
+    .banner-center img{width:32%;}
+    .banner-form{margin-top:50px;}
+    .book-box img{height:255px;}
+}
+@media only screen and (max-width:1000px){
+}
+@media only screen and (max-width:900px){
+    .banner-cont{position:relative;padding-top:100px;padding-bottom:20px;}
+    .after-banner,.banner-center,.process-sec:after,img.tt-1,img.wrk-1{display:none;}
+    .banner-back{position:absolute;height:100%;width:100%;}
+    .banner-cont h4,.ftr-quick-link ul li a{font-size:12px;}
+    .banner-cont h1{font-size:40px;}
+    .banner-cont p{font-size:15px;}
+    .banner-back img{height:100%;object-fit:contain;object-position:top;}
+    .proces-head h2{width:100%;}
+    ul.package-list p.largtt{font-size:18px!important;line-height:1.1;}
+    .btn-1{padding:.5rem;font-size:14px;}
+}
+@media only screen and (max-width:700px){
+}

@@ -1,0 +1,6 @@
+﻿@font-face {
+    font-family: 'Abril Fatface';
+    font-style: normal;
+    font-weight: 400;
+    src: url(s/abrilfatface/v23/zOL64pLDlL1D99S8g8PtiKchm-A.ttf) format('truetype');
+}

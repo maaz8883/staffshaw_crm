@@ -1,0 +1,17 @@
+@extends('admin.layout')
+
+@section('title', 'Add Brand')
+@section('page-title', 'Add Brand')
+@section('page-icon', 'plus-circle')
+
+@section('content')
+    <div class="card">
+        <div class="card-body">
+            <form action="{{ route('admin.brands.store') }}" method="POST">
+                @include('admin.brands._form', ['brand' => null])
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a href="{{ route('admin.brands.index') }}" class="btn btn-outline-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+@endsection
