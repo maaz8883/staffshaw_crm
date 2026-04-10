@@ -270,6 +270,27 @@ main {
 .avatar-lg { width: 80px; height: 80px; font-size: 2rem; font-weight: 600; }
 .empty-state-icon { font-size: 3rem; color: #dee2e6; }
 
+/* ── Notifications (header bell) ─────────────────────────────── */
+.notification-bell .btn { border-radius: 10px; min-width: 2.75rem; }
+.notification-bell .notification-badge { font-size: 0.65rem; padding: 0.25em 0.45em; }
+.notification-dropdown {
+    min-width: min(360px, calc(100vw - 2rem));
+    max-width: 400px;
+    padding: 0;
+}
+.notification-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+.notification-item {
+    white-space: normal;
+    border-bottom: 1px solid #f0f0f5;
+}
+.notification-item:last-of-type { border-bottom: none; }
+.notification-item:hover { background: rgba(46,134,193,0.06) !important; }
+
+.live-notification-toast-wrap .toast { min-width: 280px; max-width: min(380px, calc(100vw - 2rem)); }
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
     main { margin-left: 0; padding: 1rem; }

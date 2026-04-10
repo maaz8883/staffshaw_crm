@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SaleController;
@@ -60,6 +61,11 @@ Route::prefix('admin')->group(function () {
                 'destroy' => 'admin.companies.destroy',
             ])
             ->except(['show']);
+
+        Route::get('notifications', [NotificationController::class, 'index'])->name('admin.notifications.index');
+        Route::get('notifications/poll', [NotificationController::class, 'poll'])->name('admin.notifications.poll');
+        Route::get('notifications/{id}/read', [NotificationController::class, 'follow'])->name('admin.notifications.follow');
+        Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('admin.notifications.read-all');
 
         // Profile Routes
         Route::get('/profile', [ProfileController::class, 'show'])->name('admin.profile.show');

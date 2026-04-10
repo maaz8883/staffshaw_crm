@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Models\Team;
+use App\Services\SaleNotificationDispatcher;
 use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -159,12 +160,14 @@ class SaleController extends Controller
 
         $user = Auth::user();
 
-        Sale::query()->create(array_merge($validated, [
+        $sale = Sale::query()->create(array_merge($validated, [
             'user_id'         => $user->id,
             'team_id'         => $user->team_id,
             'company_id'      => $user->company_id,
             'approval_status' => Sale::APPROVAL_PENDING,
         ]));
+
+        SaleNotificationDispatcher::dispatchSaleCreated($sale);
 
         return redirect()->route('admin.sales.index')
             ->with('success', 'Sale submitted and pending approval.');
@@ -206,6 +209,8 @@ class SaleController extends Controller
             'approved_at'     => null,
         ]));
 
+        SaleNotificationDispatcher::dispatchSaleUpdated($sale, $user);
+
         return redirect()->route('admin.sales.index')
             ->with('success', 'Sale updated and re-submitted for approval.');
     }
@@ -232,6 +237,8 @@ class SaleController extends Controller
             'approval_note'   => null,
         ]);
 
+        SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), true);
+
         return back()->with('success', "Sale \"{$sale->title}\" approved.");
     }
 
@@ -249,6 +256,8 @@ class SaleController extends Controller
             'approved_at'     => now(),
             'approval_note'   => $request->approval_note,
         ]);
+
+        SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), false);
 
         return back()->with('success', "Sale \"{$sale->title}\" rejected.");
     }

@@ -330,32 +330,7 @@
 {{-- Target achievement (month) — user vs team aggregate --}}
 @php $tach = $targetAchievement; @endphp
 <div class="row g-3 mb-4">
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-3 pb-0">
-                <div class="fw-semibold"><i class="bi bi-person-badge text-primary"></i> User targets — achievement</div>
-                <div class="text-muted small">{{ $tach['label'] }} · monthly revenue vs sum of user targets</div>
-            </div>
-            <div class="card-body pt-3">
-                <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">Achieved</span>
-                    <span class="fw-semibold">${{ number_format($tach['monthly_revenue'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($tach['user_target_total'], 0) }}</span></span>
-                </div>
-                <div class="progress rounded-pill mb-2" style="height: 14px;">
-                    <div class="progress-bar bg-primary rounded-pill" style="width: {{ ($tach['user_percent'] ?? null) !== null ? min(100, $tach['user_percent']) : 0 }}%;"></div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="text-muted small">Progress</span>
-                    @if($tach['user_percent'] !== null)
-                        <span class="badge bg-primary fs-6">{{ $tach['user_percent'] }}%</span>
-                    @else
-                        <span class="text-muted small">No user targets for this month</span>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
+    <div class="col-lg-12">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white border-0 pt-3 pb-0">
                 <div class="fw-semibold"><i class="bi bi-people-fill text-success"></i> Team targets — achievement</div>

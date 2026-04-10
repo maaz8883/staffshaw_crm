@@ -77,8 +77,8 @@
 
     <!-- Main Content -->
     <main>
-        <div class="page-header fade-in">
-            <h1>
+        <div class="page-header fade-in d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <h1 class="mb-0">
                 @hasSection('page-icon')
                     <i class="bi bi-@yield('page-icon')"></i>
                 @else
@@ -86,6 +86,7 @@
                 @endif
                 @yield('page-title', 'Admin')
             </h1>
+            @include('admin.partials.notifications')
         </div>
 
         @if(session('success'))
@@ -109,6 +110,20 @@
 
         @yield('content')
     </main>
+
+    {{-- Live notification toast (near real-time via polling) --}}
+    <div class="toast-container position-fixed bottom-0 end-0 p-3 live-notification-toast-wrap" style="z-index: 1080;">
+        <div id="js-live-notification-toast" class="toast align-items-center text-bg-light border-0 shadow" role="alert" aria-live="polite" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <div class="fw-semibold small mb-1"><i class="bi bi-bell-fill text-primary me-1"></i> New notification</div>
+                    <div id="js-live-notification-toast-text" class="small"></div>
+                    <a href="#" id="js-live-notification-toast-link" class="small d-inline-block mt-1">Open</a>
+                </div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -137,6 +152,144 @@
                 }
             });
         });
+    </script>
+    <script>
+        (function () {
+            var pollUrl = @json(route('admin.notifications.poll'));
+            var pollPrimed = false;
+            var knownNewestId = null;
+            var pollMs = 5000;
+            var timer = null;
+
+            function playNotificationSound() {
+                var Ctx = window.AudioContext || window.webkitAudioContext;
+                if (!Ctx) return;
+                try {
+                    var ctx = window.__crmNotifAudioCtx;
+                    if (!ctx) {
+                        ctx = new Ctx();
+                        window.__crmNotifAudioCtx = ctx;
+                    }
+                    if (ctx.state === 'suspended') ctx.resume();
+
+                    function tone(freq, start, dur) {
+                        var osc = ctx.createOscillator();
+                        var gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+                        gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + start + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(ctx.currentTime + start);
+                        osc.stop(ctx.currentTime + start + dur + 0.05);
+                    }
+                    tone(784, 0, 0.11);
+                    tone(1047, 0.13, 0.14);
+                } catch (e) { /* ignore */ }
+            }
+
+            document.addEventListener('click', function once() {
+                var Ctx = window.AudioContext || window.webkitAudioContext;
+                if (Ctx && !window.__crmNotifAudioCtx) {
+                    var c = new Ctx();
+                    c.resume();
+                    window.__crmNotifAudioCtx = c;
+                }
+            }, { once: true });
+
+            function escapeHtml(s) {
+                var d = document.createElement('div');
+                d.textContent = s;
+                return d.innerHTML;
+            }
+
+            function renderList(items) {
+                var el = document.getElementById('js-notification-list');
+                if (!el) return;
+                if (!items || !items.length) {
+                    el.innerHTML = '<div class="dropdown-item-text text-muted small py-3 px-3 js-notification-empty">No notifications yet.</div>';
+                    return;
+                }
+                el.innerHTML = items.map(function (n) {
+                    var readCls = n.read ? '' : 'fw-semibold bg-light';
+                    return '<a href="' + escapeHtml(n.follow_url) + '" class="dropdown-item notification-item ' + readCls + ' py-2 px-3 small">' +
+                        '<div class="text-wrap">' + escapeHtml(n.body) + '</div>' +
+                        '<div class="text-muted" style="font-size:0.75rem">' + escapeHtml(n.created_human) + '</div></a>';
+                }).join('');
+            }
+
+            function updateBell(data) {
+                var badge = document.getElementById('js-notification-badge');
+                var mark = document.getElementById('js-notification-mark-wrap');
+                var c = data.unread_count || 0;
+                if (badge) {
+                    badge.textContent = c > 99 ? '99+' : String(c);
+                    badge.classList.toggle('d-none', c < 1);
+                }
+                if (mark) mark.classList.toggle('d-none', c < 1);
+            }
+
+            function showToast(item) {
+                if (!item) return;
+                var toastEl = document.getElementById('js-live-notification-toast');
+                var txt = document.getElementById('js-live-notification-toast-text');
+                var link = document.getElementById('js-live-notification-toast-link');
+                if (!toastEl || !txt || !window.bootstrap) return;
+                txt.textContent = item.body || 'Notification';
+                if (link) {
+                    link.href = item.follow_url || '#';
+                }
+                var t = window.bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 6500 });
+                t.show();
+            }
+
+            function poll() {
+                fetch(pollUrl, {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!pollPrimed) {
+                            knownNewestId = data.newest_id || null;
+                            pollPrimed = true;
+                            renderList(data.items);
+                            updateBell(data);
+                            return;
+                        }
+                        if (data.newest_id && data.newest_id !== knownNewestId) {
+                            playNotificationSound();
+                            if (data.items && data.items[0]) showToast(data.items[0]);
+                        }
+                        knownNewestId = data.newest_id || null;
+                        renderList(data.items);
+                        updateBell(data);
+                    })
+                    .catch(function () { /* offline */ });
+            }
+
+            function schedule() {
+                if (timer) clearInterval(timer);
+                timer = setInterval(poll, pollMs);
+            }
+
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    if (timer) clearInterval(timer);
+                    timer = null;
+                } else {
+                    poll();
+                    schedule();
+                }
+            });
+
+            setTimeout(function () {
+                poll();
+                schedule();
+            }, 800);
+        })();
     </script>
     @yield('scripts')
 </body>
