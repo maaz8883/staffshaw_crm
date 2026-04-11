@@ -17,6 +17,13 @@
                         <h2><i class="bi bi-shield-lock"></i> CRM Login</h2>
                         <p>Welcome back! Please login to continue</p>
                     </div>
+
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            {{ session('success') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    @endif
                     
                     @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -50,9 +57,12 @@
                             <input type="checkbox" class="form-check-input" id="remember" name="remember">
                             <label class="form-check-label" for="remember">Remember me</label>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
                             <i class="bi bi-box-arrow-in-right"></i> Login
                         </button>
+                        <p class="text-center mb-0 text-muted small">
+                            Agent? <a href="{{ route('register') }}">Create an account</a>
+                        </p>
                     </form>
                 </div>
             </div>

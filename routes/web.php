@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\PendingRegistrationController;
+use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -16,6 +18,11 @@ Route::get('/', function () {
     return redirect()->route('admin.login');
 });
 
+Route::middleware('guest')->group(function () {
+    Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
+    Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
+});
+
 // Admin Authentication Routes
 Route::prefix('admin')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('admin.login');
@@ -23,7 +30,7 @@ Route::prefix('admin')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('admin.logout');
 
     // Protected Admin Routes
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'active.account'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
         Route::get('users/datatable', [UserController::class, 'datatable'])->name('admin.users.datatable');
         Route::resource('users', UserController::class)
@@ -36,6 +43,10 @@ Route::prefix('admin')->group(function () {
                 'update' => 'admin.users.update',
                 'destroy' => 'admin.users.destroy',
             ]);
+
+        Route::get('pending-registrations', [PendingRegistrationController::class, 'index'])->name('admin.pending-registrations.index');
+        Route::post('pending-registrations/{user}/approve', [PendingRegistrationController::class, 'approve'])->name('admin.pending-registrations.approve');
+        Route::post('pending-registrations/{user}/reject', [PendingRegistrationController::class, 'reject'])->name('admin.pending-registrations.reject');
 
         Route::get('teams/datatable', [TeamController::class, 'datatable'])->name('admin.teams.datatable');
         Route::resource('teams', TeamController::class)

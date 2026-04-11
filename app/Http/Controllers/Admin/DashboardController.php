@@ -69,7 +69,7 @@ class DashboardController extends Controller
     private function adminDashboard(int $month, int $year): View
     {
         $stats = [
-            'total_users' => User::count(),
+            'total_users' => User::accountActive()->count(),
             'total_teams' => Team::count(),
             'total_companies' => Company::count(),
             'total_sales' => self::approved()->count(),
@@ -93,8 +93,13 @@ class DashboardController extends Controller
             ->get();
 
         // Per-company breakdown — only approved
-        $companies = Company::withCount(['users', 'teams'])
-            ->with(['teams' => fn ($q) => $q->withCount('users')])
+        $companies = Company::withCount([
+                'users' => fn ($q) => $q->where('account_status', User::ACCOUNT_ACTIVE),
+                'teams',
+            ])
+            ->with(['teams' => fn ($q) => $q->withCount([
+                'users' => fn ($q2) => $q2->where('account_status', User::ACCOUNT_ACTIVE),
+            ])])
             ->get()
             ->map(function (Company $company) use ($month, $year) {
                 $teamIds = $company->teams->pluck('id');
@@ -114,6 +119,7 @@ class DashboardController extends Controller
 
         // Top agents — only approved sales (exclude Admin & Manager roles)
         $topAgents = User::with(['team', 'company', 'role'])
+            ->accountActive()
             ->whereDoesntHave('role', fn (Builder $q) => $q->whereIn('name', [Role::ADMIN, Role::MANAGER]))
             ->get()
             ->map(function ($u) use ($month, $year) {
@@ -206,6 +212,7 @@ class DashboardController extends Controller
             ->pluck('target_amount', 'team_id');
 
         $userCounts = User::query()
+            ->accountActive()
             ->whereNotNull('team_id')
             ->select('team_id', DB::raw('COUNT(*) as c'))
             ->groupBy('team_id')
@@ -237,6 +244,7 @@ class DashboardController extends Controller
             ->keyBy('user_id');
 
         $usersByTeam = User::query()
+            ->accountActive()
             ->whereNotNull('team_id')
             ->with('role')
             ->orderBy('name')
@@ -349,6 +357,7 @@ class DashboardController extends Controller
         // Team members — only approved sales count
         $teamMembers = $team
             ? User::where('team_id', $team->id)
+                ->accountActive()
                 ->with('role')
                 ->get()
                 ->map(function ($member) use ($month, $year) {
@@ -367,7 +376,7 @@ class DashboardController extends Controller
         // Company info — only approved
         $companyStats = $company ? [
             'teams_count' => Team::where('company_id', $company->id)->count(),
-            'users_count' => User::where('company_id', $company->id)->count(),
+            'users_count' => User::where('company_id', $company->id)->accountActive()->count(),
             'sales_count' => self::approved()->where('company_id', $company->id)->count(),
             'revenue' => self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount'),
         ] : [];

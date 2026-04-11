@@ -21,7 +21,30 @@ class AuthController extends Controller
         ]);
 
         if (Auth::attempt($credentials, $request->filled('remember'))) {
+            $user = Auth::user();
+            if (! $user->isAccountActive()) {
+                Auth::logout();
+                $request->session()->regenerate();
+
+                if ($user->isPendingApproval()) {
+                    return back()->withErrors([
+                        'email' => 'Your account is pending approval by an admin or team lead.',
+                    ])->onlyInput('email');
+                }
+
+                if ($user->isAccountRejected()) {
+                    return back()->withErrors([
+                        'email' => 'Your registration was not approved.',
+                    ])->onlyInput('email');
+                }
+
+                return back()->withErrors([
+                    'email' => 'Your account cannot sign in.',
+                ])->onlyInput('email');
+            }
+
             $request->session()->regenerate();
+
             return redirect()->intended(route('admin.dashboard'));
         }
 

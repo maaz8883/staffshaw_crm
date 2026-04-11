@@ -92,12 +92,13 @@ class UserController extends Controller
         ]);
 
         User::query()->create([
-            'name'       => $validated['name'],
-            'email'      => $validated['email'],
-            'password'   => Hash::make($validated['password']),
-            'role_id'    => $validated['role_id'] ?? null,
-            'company_id' => $validated['company_id'] ?? null,
-            'team_id'    => $validated['team_id'] ?? null,
+            'name'            => $validated['name'],
+            'email'           => $validated['email'],
+            'password'        => Hash::make($validated['password']),
+            'role_id'         => $validated['role_id'] ?? null,
+            'company_id'      => $validated['company_id'] ?? null,
+            'team_id'         => $validated['team_id'] ?? null,
+            'account_status'  => User::ACCOUNT_ACTIVE,
         ]);
 
         return redirect()

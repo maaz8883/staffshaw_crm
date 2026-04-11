@@ -17,7 +17,27 @@
             <h4><i class="bi bi-layout-text-window-reverse"></i> CRM</h4>
         </div>
         <ul class="nav flex-column">
-            @php $isAgent = auth()->user()?->hasRole('Agent'); @endphp
+            @php
+                $isAgent = auth()->user()?->hasRole('Agent');
+                $canReviewSignups = auth()->user()?->hasRole('Admin')
+                    || \App\Models\Team::where('team_head_id', auth()->id())->exists();
+                $pendingSignupCount = 0;
+                if ($canReviewSignups) {
+                    if (auth()->user()->hasRole('Admin')) {
+                        $pendingSignupCount = \App\Models\User::query()
+                            ->where('account_status', \App\Models\User::ACCOUNT_PENDING)
+                            ->whereHas('role', fn ($q) => $q->where('name', \App\Models\Role::AGENT))
+                            ->count();
+                    } else {
+                        $teamIds = \App\Models\Team::where('team_head_id', auth()->id())->pluck('id');
+                        $pendingSignupCount = \App\Models\User::query()
+                            ->where('account_status', \App\Models\User::ACCOUNT_PENDING)
+                            ->whereIn('team_id', $teamIds)
+                            ->whereHas('role', fn ($q) => $q->where('name', \App\Models\Role::AGENT))
+                            ->count();
+                    }
+                }
+            @endphp
 
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
@@ -29,6 +49,16 @@
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
                     <i class="bi bi-people-fill"></i> <span>Users</span>
+                </a>
+            </li>
+            @endif
+            @if($canReviewSignups)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.pending-registrations.*') ? 'active' : '' }}" href="{{ route('admin.pending-registrations.index') }}">
+                    <i class="bi bi-person-plus"></i> <span>Agent signups</span>
+                    @if($pendingSignupCount > 0)
+                        <span class="badge bg-danger rounded-pill ms-1">{{ $pendingSignupCount > 99 ? '99+' : $pendingSignupCount }}</span>
+                    @endif
                 </a>
             </li>
             @endif

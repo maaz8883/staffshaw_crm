@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
 use App\Services\SaleNotificationDispatcher;
@@ -144,11 +145,19 @@ class SaleController extends Controller
 
     public function create(): View
     {
+        if (Auth::user()->hasRole(Role::ADMIN)) {
+            abort(403);
+        }
+
         return view('admin.sales.create');
     }
 
     public function store(Request $request): RedirectResponse
     {
+        if (Auth::user()->hasRole(Role::ADMIN)) {
+            abort(403);
+        }
+
         $validated = $request->validate([
             'title'       => 'required|string|max:255',
             'client_name' => 'required|string|max:255',

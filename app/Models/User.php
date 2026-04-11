@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -12,6 +13,12 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
+
+    public const ACCOUNT_ACTIVE = 'active';
+
+    public const ACCOUNT_PENDING = 'pending';
+
+    public const ACCOUNT_REJECTED = 'rejected';
 
     /**
      * The attributes that are mass assignable.
@@ -25,6 +32,8 @@ class User extends Authenticatable
         'role_id',
         'team_id',
         'company_id',
+        'account_status',
+        'rejection_note',
     ];
 
     /**
@@ -71,6 +80,12 @@ class User extends Authenticatable
         return $this->hasMany(Sale::class);
     }
 
+    /** Approved sign-in users only (excludes pending / rejected self-registrations). */
+    public function scopeAccountActive(Builder $query): Builder
+    {
+        return $query->where('account_status', self::ACCOUNT_ACTIVE);
+    }
+
     public function hasRole(string|array $roles): bool
     {
         $currentRole = $this->role?->name;
@@ -80,5 +95,20 @@ class User extends Authenticatable
         }
 
         return in_array($currentRole, (array) $roles, true);
+    }
+
+    public function isAccountActive(): bool
+    {
+        return $this->account_status === self::ACCOUNT_ACTIVE;
+    }
+
+    public function isPendingApproval(): bool
+    {
+        return $this->account_status === self::ACCOUNT_PENDING;
+    }
+
+    public function isAccountRejected(): bool
+    {
+        return $this->account_status === self::ACCOUNT_REJECTED;
     }
 }
