@@ -297,6 +297,106 @@
      ADMIN DASHBOARD
 ═══════════════════════════════════════════════════════════════ --}}
 
+{{-- Per-team progress + members table (top) --}}
+@php $tach = $targetAchievement; @endphp
+<div class="row g-3 mb-2">
+    <div class="col-12">
+        <h5 class="fw-semibold mb-1"><i class="bi bi-people-fill text-success"></i> Teams — progress</h5>
+        <p class="text-muted small mb-0">{{ $tach['label'] }} · team monthly target vs revenue (approved &amp; completed) · members: all-time sales &amp; this month vs target</p>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    @forelse(($teamDashboardCards ?? collect()) as $tc)
+    <div class="col-12 col-md-6">
+        <div class="card border-0 shadow-sm team-progress-card h-100">
+            <div class="card-header bg-white border-0 pb-0 pt-3">
+                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                    <div>
+                        <div class="fw-semibold">{{ $tc['name'] }}</div>
+                        <div class="text-muted small">
+                            @if(!empty($tc['company_name']))
+                                {{ $tc['company_name'] }} ·
+                            @endif
+                            {{ $tc['members_count'] }} members
+                        </div>
+                    </div>
+                    @if($tc['achievement_percent'] !== null)
+                        <span class="badge rounded-pill bg-success">{{ $tc['achievement_percent'] }}%</span>
+                    @else
+                        <span class="badge rounded-pill bg-secondary">—</span>
+                    @endif
+                </div>
+            </div>
+            <div class="card-body pt-2">
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">Team · this month (revenue / target)</span>
+                    <span class="fw-semibold">${{ number_format($tc['monthly_revenue'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($tc['target'], 0) }}</span></span>
+                </div>
+                <div class="progress rounded-pill mb-3" style="height: 14px;">
+                    <div class="progress-bar bg-success rounded-pill" role="progressbar"
+                         style="width: {{ $tc['achievement_percent'] !== null ? min(100, $tc['achievement_percent']) : 0 }}%;"
+                         aria-valuenow="{{ $tc['achievement_percent'] ?? 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                @if(($tc['target'] ?? 0) <= 0)
+                    <p class="text-muted small mb-3">No team target set for {{ $tc['month_label'] }}.</p>
+                @endif
+
+                <div class="fw-semibold small mb-2"><i class="bi bi-person-lines-fill text-primary"></i> Members</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th class="text-center" title="Approved completed (all time)">Sales</th>
+                                <th class="text-end">Revenue</th>
+                                <th class="text-end">Month target</th>
+                                <th class="text-end">Month revenue</th>
+                                <th class="text-center" title="This month · vs personal target">Achieve</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($tc['members'] ?? [] as $m)
+                            <tr>
+                                <td>
+                                    {{ $m['name'] }}
+                                    @if(!empty($m['is_head']))
+                                        <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
+                                    @endif
+                                </td>
+                                <td><span class="text-muted small">{{ $m['role_name'] }}</span></td>
+                                <td class="text-center">{{ $m['sales_count'] }}</td>
+                                <td class="text-end text-success">${{ number_format($m['sale_amount'], 0) }}</td>
+                                <td class="text-end">${{ number_format($m['month_target'], 0) }}</td>
+                                <td class="text-end">${{ number_format($m['month_revenue'], 0) }}</td>
+                                <td class="text-center">
+                                    @if($m['target_achievement_pct'] !== null)
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $m['target_achievement_pct'] }}%</span>
+                                    @elseif(($m['month_target'] ?? 0) <= 0)
+                                        <span class="text-muted">—</span>
+                                    @else
+                                        <span class="text-muted">0%</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="7" class="text-muted text-center py-3">No members in this team.</td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    @empty
+    <div class="col-12">
+        <div class="alert alert-light border mb-0 text-muted">No teams yet. Create teams under <strong>Teams</strong> to see progress here.</div>
+    </div>
+    @endforelse
+</div>
+
 <div class="row g-3 mb-4">
     @php
         $cards = [
@@ -325,36 +425,6 @@
         </div>
     </div>
     @endforeach
-</div>
-
-{{-- Target achievement (month) — user vs team aggregate --}}
-@php $tach = $targetAchievement; @endphp
-<div class="row g-3 mb-4">
-    <div class="col-lg-12">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-0 pt-3 pb-0">
-                <div class="fw-semibold"><i class="bi bi-people-fill text-success"></i> Team targets — achievement</div>
-                <div class="text-muted small">{{ $tach['label'] }} · monthly revenue vs sum of team targets</div>
-            </div>
-            <div class="card-body pt-3">
-                <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">Achieved</span>
-                    <span class="fw-semibold">${{ number_format($tach['monthly_revenue'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($tach['team_target_total'], 0) }}</span></span>
-                </div>
-                <div class="progress rounded-pill mb-2" style="height: 14px;">
-                    <div class="progress-bar bg-success rounded-pill" style="width: {{ ($tach['team_percent'] ?? null) !== null ? min(100, $tach['team_percent']) : 0 }}%;"></div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="text-muted small">Progress</span>
-                    @if($tach['team_percent'] !== null)
-                        <span class="badge bg-success fs-6">{{ $tach['team_percent'] }}%</span>
-                    @else
-                        <span class="text-muted small">No team targets for this month</span>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 {{-- Revenue trend + sales status --}}

@@ -173,11 +173,130 @@ class DashboardController extends Controller
             'team_percent' => self::achievementPercent($monthlyOrgRevenue, $sumTeamTargets),
         ];
 
+        // Per-team cards: monthly target vs revenue + members table
+        $teamDashboardCards = $this->buildTeamDashboardCards($month, $year);
+
         return view('admin.dashboard', compact(
             'stats', 'salesByStatus', 'recentSales', 'companies', 'topAgents', 'month', 'year',
             'revenueTrendLabels', 'revenueTrendValues', 'companyBarLabels', 'companyBarValues', 'approvalMix',
-            'targetAchievement'
+            'targetAchievement', 'teamDashboardCards'
         ));
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function buildTeamDashboardCards(int $month, int $year): \Illuminate\Support\Collection
+    {
+        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $monthEnd = (clone $monthStart)->endOfMonth();
+
+        $monthlyByTeam = self::approved()
+            ->where('status', 'completed')
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->whereNotNull('team_id')
+            ->toBase()
+            ->select('team_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('team_id')
+            ->pluck('total', 'team_id');
+
+        $targetsByTeam = TeamTarget::query()
+            ->where('month', $month)
+            ->where('year', $year)
+            ->pluck('target_amount', 'team_id');
+
+        $userCounts = User::query()
+            ->whereNotNull('team_id')
+            ->select('team_id', DB::raw('COUNT(*) as c'))
+            ->groupBy('team_id')
+            ->pluck('c', 'team_id');
+
+        $userTargets = UserTarget::query()
+            ->where('month', $month)
+            ->where('year', $year)
+            ->pluck('target_amount', 'user_id');
+
+        $monthRevByUser = self::approved()
+            ->where('status', 'completed')
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->toBase()
+            ->select('user_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('user_id')
+            ->pluck('total', 'user_id');
+
+        $salesStatsByUser = self::approved()
+            ->where('status', 'completed')
+            ->toBase()
+            ->select(
+                'user_id',
+                DB::raw('COUNT(*) as sales_count'),
+                DB::raw('SUM(amount) as sale_amount')
+            )
+            ->groupBy('user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        $usersByTeam = User::query()
+            ->whereNotNull('team_id')
+            ->with('role')
+            ->orderBy('name')
+            ->get()
+            ->groupBy('team_id');
+
+        return Team::query()
+            ->with('company')
+            ->orderBy('name')
+            ->get()
+            ->map(function (Team $team) use (
+                $year,
+                $month,
+                $monthlyByTeam,
+                $targetsByTeam,
+                $userCounts,
+                $userTargets,
+                $monthRevByUser,
+                $salesStatsByUser,
+                $usersByTeam
+            ) {
+                $tid = $team->id;
+                $target = (float) ($targetsByTeam[$tid] ?? 0);
+                $revenue = (float) ($monthlyByTeam[$tid] ?? 0);
+                $pct = self::achievementPercent($revenue, $target);
+
+                $members = ($usersByTeam->get($tid) ?? collect())
+                    ->map(function (User $member) use ($userTargets, $monthRevByUser, $salesStatsByUser, $team) {
+                        $mid = $member->id;
+                        $stats = $salesStatsByUser->get($mid);
+                        $monthTarget = (float) ($userTargets[$mid] ?? 0);
+                        $monthRev = (float) ($monthRevByUser[$mid] ?? 0);
+
+                        return [
+                            'id' => $mid,
+                            'name' => $member->name,
+                            'role_name' => $member->role?->name ?? '—',
+                            'is_head' => $team->team_head_id === $mid,
+                            'sales_count' => $stats ? (int) $stats->sales_count : 0,
+                            'sale_amount' => $stats ? (float) $stats->sale_amount : 0.0,
+                            'month_target' => $monthTarget,
+                            'month_revenue' => $monthRev,
+                            'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
+                        ];
+                    })
+                    ->values()
+                    ->all();
+
+                return [
+                    'id' => $team->id,
+                    'name' => $team->name,
+                    'company_name' => $team->company?->name,
+                    'members_count' => (int) ($userCounts[$tid] ?? 0),
+                    'month_label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+                    'target' => $target,
+                    'monthly_revenue' => $revenue,
+                    'achievement_percent' => $pct,
+                    'members' => $members,
+                ];
+            });
     }
 
     // ── Agent Dashboard ──────────────────────────────────────────────────────────
@@ -295,6 +414,6 @@ class DashboardController extends Controller
             'month', 'year',
             'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus',
             'userTargetAchievement', 'teamTargetAchievement'
-        ));
+        ))->with('teamDashboardCards', collect());
     }
 }
