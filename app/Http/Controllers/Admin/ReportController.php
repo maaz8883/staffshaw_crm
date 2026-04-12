@@ -206,7 +206,7 @@ class ReportController extends Controller
         $completedCount = (clone $approvedInPeriod)->where('status', 'completed')->count();
         $pendingApprovalCount = (clone $salesInPeriod)->where('approval_status', Sale::APPROVAL_PENDING)->count();
 
-        $salesByStatus = collect(Sale::STATUSES)->mapWithKeys(fn (string $s) => [
+        $salesByStatus = collect(Sale::allStatuses())->mapWithKeys(fn (string $s) => [
             $s => (clone $approvedInPeriod)->where('status', $s)->count(),
         ]);
 

@@ -31,6 +31,12 @@
 
     <div class="col-md-6 mb-3">
         <label for="status" class="form-label">Status <span class="text-danger">*</span></label>
+        @if(!empty($sale) && $sale->is_refunded)
+            <div>
+                <span class="badge bg-dark">{{ $sale->statusLabel() }}</span>
+                <p class="text-muted small mb-0 mt-1">Refund is managed from the sales list; status stays Refunded until reverted.</p>
+            </div>
+        @else
         <select id="status" name="status" class="form-select" required>
             @foreach(\App\Models\Sale::STATUSES as $s)
                 <option value="{{ $s }}" {{ old('status', $sale->status ?? 'completed') === $s ? 'selected' : '' }}>
@@ -38,6 +44,21 @@
                 </option>
             @endforeach
         </select>
+        @endif
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label for="sale_type" class="form-label">Sale type <span class="text-danger">*</span></label>
+        <select id="sale_type" name="sale_type" class="form-select" required>
+            @php $st = old('sale_type', isset($sale) ? $sale->sale_type : \App\Models\Sale::TYPE_FRONT); @endphp
+            <option value="{{ \App\Models\Sale::TYPE_FRONT }}" {{ $st === \App\Models\Sale::TYPE_FRONT ? 'selected' : '' }}>
+                Front
+            </option>
+            <option value="{{ \App\Models\Sale::TYPE_UPSELL }}" {{ $st === \App\Models\Sale::TYPE_UPSELL ? 'selected' : '' }}>
+                Upsell
+            </option>
+        </select>
+        <div class="form-text">Refunds are marked by admin or team lead from the sales list.</div>
     </div>
 
     <div class="col-12 mb-3">

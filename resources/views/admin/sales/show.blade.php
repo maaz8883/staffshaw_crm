@@ -21,8 +21,10 @@
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Status</small>
-                @php $colors = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
-                <span class="badge bg-{{ $colors[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span>
+                @php
+                    $colors = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger',\App\Models\Sale::STATUS_REFUNDED=>'dark'];
+                @endphp
+                <span class="badge bg-{{ $colors[$sale->status] ?? 'secondary' }}">{{ $sale->statusLabel() }}</span>
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Approval</small>
@@ -45,13 +47,41 @@
             </div>
             @endif
             <div class="col-md-6">
+                <small class="text-muted d-block">Sale type</small>
+                @php $tc = ['front'=>'primary','upsell'=>'info']; @endphp
+                <span class="badge bg-{{ $tc[$sale->sale_type ?? 'front'] ?? 'secondary' }}">{{ $sale->saleTypeLabel() }}</span>
+            </div>
+            <div class="col-md-6">
                 <small class="text-muted d-block">Client Name</small>
                 {{ $sale->client_name }}
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Amount</small>
-                <span class="fw-bold text-success fs-5">${{ number_format($sale->amount, 2) }}</span>
+                <span class="fw-bold fs-5 {{ $sale->is_refunded ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
+                @if($sale->is_refunded)
+                    <span class="badge bg-danger ms-2">Refunded</span>
+                    @if($sale->refunded_at)
+                        <span class="text-muted small ms-1">{{ $sale->refunded_at->format('d M Y H:i') }}</span>
+                    @endif
+                    @if($sale->refundedBy)
+                        <span class="text-muted small">· {{ $sale->refundedBy->name }}</span>
+                    @endif
+                @endif
             </div>
+            @if($canToggleRefund ?? false)
+            <div class="col-12">
+                <small class="text-muted d-block mb-1">Refund (admin / team lead)</small>
+                <form action="{{ route('admin.sales.toggle-refund', $sale) }}" method="POST" class="d-inline-flex align-items-center gap-2">
+                    @csrf
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="refund-switch"
+                            {{ $sale->is_refunded ? 'checked' : '' }}
+                            onchange="this.form.submit()">
+                        <label class="form-check-label" for="refund-switch">Mark as refunded</label>
+                    </div>
+                </form>
+            </div>
+            @endif
             <div class="col-md-6">
                 <small class="text-muted d-block">Sale Date</small>
                 {{ $sale->sale_date->format('d M Y') }}

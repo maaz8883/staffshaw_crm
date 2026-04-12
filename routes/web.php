@@ -98,6 +98,7 @@ Route::prefix('admin')->group(function () {
         Route::get('sales/datatable', [SaleController::class, 'datatable'])->name('admin.sales.datatable');
         Route::post('sales/{sale}/approve', [SaleController::class, 'approve'])->name('admin.sales.approve');
         Route::post('sales/{sale}/reject', [SaleController::class, 'reject'])->name('admin.sales.reject');
+        Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');
         Route::resource('sales', SaleController::class)
             ->names([
                 'index'   => 'admin.sales.index',

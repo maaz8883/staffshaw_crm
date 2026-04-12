@@ -123,17 +123,18 @@ class DemoDataSeeder extends Seeder
         $rows = [
             // Approved + completed (count toward revenue)
             ['user' => 1, 'title' => '[Demo] Website Package — Acme', 'client' => 'Acme Ltd', 'amount' => 12500, 'date' => $d(3), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
-            ['user' => 1, 'title' => '[Demo] CRM Integration', 'client' => 'Beta Inc', 'amount' => 8900, 'date' => $d(5), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
+            ['user' => 1, 'title' => '[Demo] CRM Integration', 'client' => 'Beta Inc', 'amount' => 8900, 'date' => $d(5), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED, 'sale_type' => Sale::TYPE_UPSELL],
             ['user' => 1, 'title' => '[Demo] Support Retainer Q2', 'client' => 'Gamma Co', 'amount' => 5600, 'date' => $d(8), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
             ['user' => 2, 'title' => '[Demo] Mobile App Phase 1', 'client' => 'Delta LLC', 'amount' => 15200, 'date' => $d(4), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
             ['user' => 2, 'title' => '[Demo] API Development', 'client' => 'Epsilon', 'amount' => 7800, 'date' => $d(7), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
             ['user' => 2, 'title' => '[Demo] UI Audit', 'client' => 'Zeta Studio', 'amount' => 3200, 'date' => $d(9), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
             // Pending approval (for approval UI)
-            ['user' => 2, 'title' => '[Demo] New Lead — Custom Portal', 'client' => 'Eta Corp', 'amount' => 11000, 'date' => $d(9), 'status' => 'pending', 'approval_status' => Sale::APPROVAL_PENDING],
+            ['user' => 2, 'title' => '[Demo] New Lead — Custom Portal', 'client' => 'Eta Corp', 'amount' => 11000, 'date' => $d(9), 'status' => 'pending', 'approval_status' => Sale::APPROVAL_PENDING, 'sale_type' => Sale::TYPE_UPSELL],
             // Approved but pending delivery status
             ['user' => 1, 'title' => '[Demo] Hosting Yearly', 'client' => 'Theta Web', 'amount' => 2400, 'date' => $d(6), 'status' => 'pending', 'approval_status' => Sale::APPROVAL_APPROVED],
             // Rejected example
             ['user' => 1, 'title' => '[Demo] Rejected Test Deal', 'client' => 'Fake Client', 'amount' => 999999, 'date' => $d(2), 'status' => 'cancelled', 'approval_status' => Sale::APPROVAL_REJECTED, 'approval_note' => 'Demo rejection'],
+            ['user' => 1, 'title' => '[Demo] Client refund — hosting', 'client' => 'Theta Web', 'amount' => 450, 'date' => $d(4), 'status' => Sale::STATUS_REFUNDED, 'status_before_refund' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED, 'sale_type' => Sale::TYPE_FRONT, 'is_refunded' => true],
             // Previous month (charts / history)
             ['user' => 1, 'title' => '[Demo] Old Month Sale A', 'client' => 'Old A', 'amount' => 6000, 'date' => $dPrev(15), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
             ['user' => 2, 'title' => '[Demo] Old Month Sale B', 'client' => 'Old B', 'amount' => 4500, 'date' => $dPrev(20), 'status' => 'completed', 'approval_status' => Sale::APPROVAL_APPROVED],
@@ -149,6 +150,8 @@ class DemoDataSeeder extends Seeder
                 default => null,
             };
 
+            $isRefunded = (bool) ($row['is_refunded'] ?? false);
+
             Sale::query()->create([
                 'title' => $row['title'],
                 'client_name' => $row['client'],
@@ -158,6 +161,11 @@ class DemoDataSeeder extends Seeder
                 'team_id' => $team->id,
                 'company_id' => $company->id,
                 'status' => $row['status'],
+                'status_before_refund' => $row['status_before_refund'] ?? null,
+                'sale_type' => ($row['sale_type'] ?? \App\Models\Sale::TYPE_FRONT),
+                'is_refunded' => $isRefunded,
+                'refunded_at' => $isRefunded ? Carbon::parse($row['date'])->setTime(10, 0) : null,
+                'refunded_by' => $isRefunded ? $admin?->id : null,
                 'approval_status' => $status,
                 'approval_note' => $row['approval_note'] ?? null,
                 'approved_by' => $decided ? $admin?->id : null,

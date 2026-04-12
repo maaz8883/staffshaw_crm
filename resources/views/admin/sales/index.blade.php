@@ -39,6 +39,7 @@
         <option value="completed">Completed</option>
         <option value="pending">Pending</option>
         <option value="cancelled">Cancelled</option>
+        <option value="{{ \App\Models\Sale::STATUS_REFUNDED }}">Refunded</option>
     </select>
 
     <select id="filter-approval" class="form-select form-select-sm" style="width:auto">
@@ -46,6 +47,18 @@
         <option value="pending_approval">Pending Approval</option>
         <option value="approved">Approved</option>
         <option value="rejected">Rejected</option>
+    </select>
+
+    <select id="filter-sale-type" class="form-select form-select-sm" style="width:auto">
+        <option value="">All types</option>
+        <option value="front">Front</option>
+        <option value="upsell">Upsell</option>
+    </select>
+
+    <select id="filter-refunded" class="form-select form-select-sm" style="width:auto">
+        <option value="">All (refund)</option>
+        <option value="0">Not refunded</option>
+        <option value="1">Refunded</option>
     </select>
 
     <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>
@@ -58,12 +71,14 @@
             <tr>
                 <th>Title</th>
                 <th>Client</th>
+                <th>Type</th>
                 <th>Amount</th>
                 <th>Date</th>
                 <th>Agent</th>
                 <th>Team</th>
                 <th>Status</th>
                 <th>Approval</th>
+                <th class="text-center">Refund</th>
                 <th class="text-end">Actions</th>
             </tr>
             </thead>
@@ -117,27 +132,31 @@ $(function () {
                 d.user_id         = $('#filter-user').val();
                 d.status          = $('#filter-status').val();
                 d.approval_status = $('#filter-approval').val();
+                d.sale_type       = $('#filter-sale-type').val();
+                d.refunded        = $('#filter-refunded').val();
             }
         },
         columns: [
             {data: 'title',          name: 'title'},
             {data: 'client_name',    name: 'client_name'},
+            {data: 'sale_type_badge', name: 'sale_type', orderable: true, searchable: false},
             {data: 'amount',         name: 'amount'},
             {data: 'sale_date',      name: 'sale_date'},
             {data: 'agent_name',     name: 'user.name',    searchable: false},
             {data: 'team_name',      name: 'team.name',    searchable: false},
             {data: 'status',         name: 'status'},
             {data: 'approval_badge', name: 'approval_status'},
+            {data: 'refund_toggle',  name: 'is_refunded', orderable: true, searchable: false, className: 'text-center'},
             {data: 'actions',        name: 'actions', orderable: false, searchable: false, className: 'text-end'}
         ]
     });
 
-    $('#filter-team, #filter-user, #filter-status, #filter-approval').on('change', function () {
+    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-refunded').on('change', function () {
         table.draw();
     });
 
     $('#btn-reset').on('click', function () {
-        $('#filter-team, #filter-user, #filter-status, #filter-approval').val('');
+        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-refunded').val('');
         table.draw();
     });
 

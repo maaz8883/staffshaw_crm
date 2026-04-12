@@ -81,7 +81,7 @@ class DashboardController extends Controller
         ];
 
         // Approved sales by status for chart
-        $salesByStatus = collect(Sale::STATUSES)->mapWithKeys(fn ($s) => [
+        $salesByStatus = collect(Sale::allStatuses())->mapWithKeys(fn ($s) => [
             $s => self::approved()->where('status', $s)->count(),
         ]);
 

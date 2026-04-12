@@ -84,12 +84,49 @@ class SaleController extends Controller
         if ($request->filled('approval_status')) {
             $query->where('approval_status', $request->approval_status);
         }
+        if ($request->filled('sale_type')) {
+            $query->where('sale_type', $request->sale_type);
+        }
+        if ($request->filled('refunded')) {
+            if ($request->refunded === '1') {
+                $query->where('is_refunded', true);
+            } elseif ($request->refunded === '0') {
+                $query->where('is_refunded', false);
+            }
+        }
 
         return DataTables::eloquent($query)
-            ->editColumn('amount', fn (Sale $s) => '$' . number_format($s->amount, 2))
+            ->editColumn('amount', function (Sale $s) {
+                $fmt = '$' . number_format($s->amount, 2);
+                if ($s->is_refunded) {
+                    return '<span class="text-danger">' . e($fmt) . '</span>';
+                }
+
+                return $fmt;
+            })
             ->editColumn('sale_date', fn (Sale $s) => $s->sale_date->format('d M Y'))
+            ->addColumn('sale_type_badge', fn (Sale $s) =>
+                '<span class="badge bg-' . self::saleTypeColor($s->sale_type) . '">' . e($s->saleTypeLabel()) . '</span>')
+            ->addColumn('refund_toggle', function (Sale $sale) {
+                if (! $this->canApprove($sale)) {
+                    return $sale->is_refunded
+                        ? '<span class="badge bg-danger">Refunded</span>'
+                        : '<span class="text-muted small">—</span>';
+                }
+
+                $url     = route('admin.sales.toggle-refund', $sale);
+                $checked = $sale->is_refunded ? 'checked' : '';
+                $csrf    = csrf_token();
+
+                return '<form action="' . $url . '" method="POST" class="d-inline js-refund-toggle-form" data-sale-id="' . $sale->id . '">'
+                    . '<input type="hidden" name="_token" value="' . $csrf . '">'
+                    . '<div class="form-check form-switch mb-0 d-flex justify-content-center">'
+                    . '<input class="form-check-input" type="checkbox" role="switch" ' . $checked
+                    . ' onchange="this.form.submit()" title="Mark refunded / revert" aria-label="Refunded">'
+                    . '</div></form>';
+            })
             ->editColumn('status', fn (Sale $s) =>
-                '<span class="badge bg-' . self::statusColor($s->status) . '">' . ucfirst($s->status) . '</span>')
+                '<span class="badge bg-' . self::statusColor($s->status) . '">' . e($s->statusLabel()) . '</span>')
             ->addColumn('approval_badge', fn (Sale $s) =>
                 '<span class="badge bg-' . self::approvalColor($s->approval_status) . '">' . self::approvalLabel($s->approval_status) . '</span>')
             ->addColumn('agent_name', fn (Sale $s) => e($s->user?->name ?? '-'))
@@ -137,7 +174,7 @@ class SaleController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['status', 'approval_badge', 'actions'])
+            ->rawColumns(['amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'actions'])
             ->toJson();
     }
 
@@ -164,6 +201,7 @@ class SaleController extends Controller
             'amount'      => 'required|numeric|min:0',
             'sale_date'   => 'required|date',
             'status'      => 'required|in:' . implode(',', Sale::STATUSES),
+            'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
             'notes'       => 'nullable|string',
         ]);
 
@@ -185,9 +223,11 @@ class SaleController extends Controller
     public function show(Sale $sale): View
     {
         $this->authorizeView($sale);
-        $sale->load(['user', 'team', 'company', 'approvedBy']);
+        $sale->load(['user', 'team', 'company', 'approvedBy', 'refundedBy']);
 
-        return view('admin.sales.show', compact('sale'));
+        $canToggleRefund = $this->canApprove($sale);
+
+        return view('admin.sales.show', compact('sale', 'canToggleRefund'));
     }
 
     public function edit(Sale $sale): View
@@ -201,16 +241,28 @@ class SaleController extends Controller
     {
         $this->authorizeEdit($sale);
 
-        $validated = $request->validate([
+        $rules = [
             'title'       => 'required|string|max:255',
             'client_name' => 'required|string|max:255',
             'amount'      => 'required|numeric|min:0',
             'sale_date'   => 'required|date',
-            'status'      => 'required|in:' . implode(',', Sale::STATUSES),
+            'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
             'notes'       => 'nullable|string',
-        ]);
+        ];
+        if (! $sale->is_refunded) {
+            $rules['status'] = 'required|in:' . implode(',', Sale::STATUSES);
+        }
 
-        // Re-submit for approval on edit
+        $validated = $request->validate($rules);
+
+        if ($sale->is_refunded) {
+            unset($validated['status']);
+            $sale->update($validated);
+
+            return redirect()->route('admin.sales.index')
+                ->with('success', 'Sale updated.');
+        }
+
         $sale->update(array_merge($validated, [
             'approval_status' => Sale::APPROVAL_PENDING,
             'approval_note'   => null,
@@ -218,7 +270,7 @@ class SaleController extends Controller
             'approved_at'     => null,
         ]));
 
-        SaleNotificationDispatcher::dispatchSaleUpdated($sale, $user);
+        SaleNotificationDispatcher::dispatchSaleUpdated($sale, Auth::user());
 
         return redirect()->route('admin.sales.index')
             ->with('success', 'Sale updated and re-submitted for approval.');
@@ -271,6 +323,44 @@ class SaleController extends Controller
         return back()->with('success', "Sale \"{$sale->title}\" rejected.");
     }
 
+    public function toggleRefund(Sale $sale): RedirectResponse
+    {
+        if (! $this->canApprove($sale)) {
+            abort(403);
+        }
+
+        $newRefunded = ! $sale->is_refunded;
+
+        if ($newRefunded) {
+            $prev = $sale->status === Sale::STATUS_REFUNDED
+                ? ($sale->status_before_refund ?? 'completed')
+                : $sale->status;
+            if (! in_array($prev, Sale::STATUSES, true)) {
+                $prev = 'completed';
+            }
+
+            $sale->update([
+                'is_refunded'          => true,
+                'refunded_at'          => now(),
+                'refunded_by'          => Auth::id(),
+                'status_before_refund' => $prev,
+                'status'               => Sale::STATUS_REFUNDED,
+            ]);
+        } else {
+            $sale->update([
+                'is_refunded'          => false,
+                'refunded_at'          => null,
+                'refunded_by'          => null,
+                'status'               => $sale->status_before_refund ?? 'completed',
+                'status_before_refund' => null,
+            ]);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', $newRefunded ? 'Sale marked as refunded.' : 'Refund reverted.');
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private function authorizeView(Sale $sale): void
@@ -296,6 +386,7 @@ class SaleController extends Controller
             'completed' => 'success',
             'pending'   => 'warning',
             'cancelled' => 'danger',
+            Sale::STATUS_REFUNDED => 'dark',
             default     => 'secondary',
         };
     }
@@ -315,6 +406,14 @@ class SaleController extends Controller
             Sale::APPROVAL_APPROVED => 'Approved',
             Sale::APPROVAL_REJECTED => 'Rejected',
             default                 => 'Pending',
+        };
+    }
+
+    private static function saleTypeColor(string $type): string
+    {
+        return match ($type) {
+            Sale::TYPE_UPSELL => 'info',
+            default           => 'primary',
         };
     }
 }
