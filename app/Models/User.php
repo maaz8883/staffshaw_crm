@@ -34,6 +34,7 @@ class User extends Authenticatable
         'company_id',
         'account_status',
         'rejection_note',
+        'session_token',
     ];
 
     /**

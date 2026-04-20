@@ -118,3 +118,18 @@ body::after {
 }
 
 .input-group-icon .form-control { padding-left: 45px; }
+
+/* OTP Tab pills */
+.nav-pills .nav-link {
+    color: #4a4f6a;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.nav-pills .nav-link.active {
+    background: linear-gradient(135deg, #2E86C1, #6B3A7D, #A01830);
+    border-color: transparent;
+    color: #fff;
+}

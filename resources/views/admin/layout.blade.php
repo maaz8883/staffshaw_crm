@@ -94,6 +94,13 @@
                     <i class="bi bi-person-circle"></i> <span>Profile</span>
                 </a>
             </li>
+            @if(!$isAgent)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" href="{{ route('admin.settings.index') }}">
+                    <i class="bi bi-gear"></i> <span>Settings</span>
+                </a>
+            </li>
+            @endif
             <li class="nav-item">
                 <form action="{{ route('admin.logout') }}" method="POST" class="d-inline w-100">
                     @csrf

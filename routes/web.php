@@ -2,8 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
-use App\Http\Controllers\RegisterController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -18,19 +19,22 @@ Route::get('/', function () {
     return redirect()->route('admin.login');
 });
 
-Route::middleware('guest')->group(function () {
-    Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
-    Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
-});
-
 // Admin Authentication Routes
 Route::prefix('admin')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('admin.login');
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/logout', [AuthController::class, 'logout'])->name('admin.logout');
 
+    // OTP routes (guest)
+    Route::middleware('guest')->group(function () {
+        Route::post('otp/send', [OtpController::class, 'sendOtp'])->name('admin.otp.send');
+        Route::post('otp/resend', [OtpController::class, 'resendOtp'])->name('admin.otp.resend');
+        Route::get('otp/verify', [OtpController::class, 'showVerifyForm'])->name('admin.otp.verify.form');
+        Route::post('otp/verify', [OtpController::class, 'verifyOtp'])->name('admin.otp.verify');
+    });
+
     // Protected Admin Routes
-    Route::middleware(['auth', 'active.account'])->group(function () {
+    Route::middleware(['auth', 'active.account', 'single.session'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
         Route::get('users/datatable', [UserController::class, 'datatable'])->name('admin.users.datatable');
         Route::resource('users', UserController::class)
@@ -82,6 +86,11 @@ Route::prefix('admin')->group(function () {
         Route::get('/profile', [ProfileController::class, 'show'])->name('admin.profile.show');
         Route::put('/profile', [ProfileController::class, 'updateProfile'])->name('admin.profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password');
+
+        // Settings (Admin only)
+        Route::get('settings', [SettingController::class, 'index'])->name('admin.settings.index');
+        Route::put('settings/otp', [SettingController::class, 'updateOtp'])->name('admin.settings.otp');
+        Route::put('settings/smtp', [SettingController::class, 'updateSmtp'])->name('admin.settings.smtp');
 
         // Target Routes
         Route::get('targets', [TargetController::class, 'index'])->name('admin.targets.index');
