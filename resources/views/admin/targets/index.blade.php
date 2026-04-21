@@ -32,7 +32,7 @@
 @forelse($teams as $team)
 @php
     // Can this logged-in user manage THIS team's targets?
-    $canManageThisTeam = $isAdmin || $team->team_head_id === auth()->id();
+    $canManageThisTeam = $isAdmin;
 @endphp
 
 <div class="card mb-4">
@@ -117,8 +117,10 @@
 
         @forelse($team->users as $member)
         @php
-            // Team head/admin: manage karo | Regular agent: sab dekho (read-only)
-            $showRow = true;
+            // Admin → sab rows, edit mode
+            // Team Head → sab rows, read-only
+            // Agent → sirf apna row, read-only
+            $showRow = $isAdmin || $isTeamHead || $member->id === auth()->id();
         @endphp
 
         @if($showRow)
@@ -142,7 +144,7 @@
             </div>
 
             @if($canManageThisTeam)
-            {{-- Team Head / Admin: editable --}}
+            {{-- Admin only: editable --}}
             <form method="POST" action="{{ route('admin.targets.user', $team) }}" class="row g-2 align-items-end">
                 @csrf
                 <input type="hidden" name="user_id" value="{{ $member->id }}">
@@ -173,7 +175,7 @@
             </form>
 
             @else
-            {{-- Regular agent: read-only own target --}}
+            {{-- Team Head & Agent: read-only --}}
             @if($member->currentTarget?->notes)
                 <small class="text-muted">{{ $member->currentTarget->notes }}</small>
             @endif

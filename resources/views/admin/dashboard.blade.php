@@ -12,9 +12,272 @@
 @section('page-icon', 'speedometer2')
 
 @section('content')
-@php $isAgent = auth()->user()->hasRole('Agent'); @endphp
+@php
+    $isAgent    = auth()->user()->hasRole('Agent') && !isset($isTeamHeadView);
+    $isTeamHead = isset($isTeamHeadView) && $isTeamHeadView;
+@endphp
 
-@if($isAgent)
+@if($isTeamHead)
+{{-- ═══════════════════════════════════════════════════════════════
+     TEAM HEAD DASHBOARD
+═══════════════════════════════════════════════════════════════ --}}
+
+{{-- Company + Team info --}}
+<div class="row g-3 mb-4">
+    {{-- My Company --}}
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    @if($company?->logo)
+                        <img src="{{ asset('storage/' . $company->logo) }}" alt="{{ $company->name }}"
+                             style="height:56px;width:56px;object-fit:cover;border-radius:10px;border:1px solid #dee2e6;flex-shrink:0;">
+                    @else
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                            <i class="bi bi-buildings fs-4 text-primary"></i>
+                        </div>
+                    @endif
+                    <div>
+                        <div class="text-muted small">My Company</div>
+                        <div class="fw-bold fs-5">{{ $company?->name ?? 'Not assigned' }}</div>
+                        @if($company)
+                        <div class="small text-muted">
+                            {{ $companyStats['teams_count'] }} teams &middot;
+                            {{ $companyStats['users_count'] }} users &middot;
+                            {{ $companyStats['sales_count'] }} sales
+                        </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{-- My Team --}}
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3">
+                        <i class="bi bi-people fs-4 text-success"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">My Team</div>
+                        <div class="fw-bold fs-5">{{ $teams->first()?->name ?? 'Not assigned' }}</div>
+                        @if($teams->first())
+                        <div class="small text-muted">
+                            {{ $teams->first()->users->count() }} members &middot;
+                            Head: {{ $teams->first()->teamHead?->name ?? 'N/A' }}
+                        </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- My target achievement --}}
+@php
+    $thMonth = \DateTime::createFromFormat('!m', $month)->format('F Y');
+    $thMyTarget = $myTarget?->target_amount ?? 0;
+    $thMyRevenue = $mySales['revenue'];
+    $thMyPct = $thMyTarget > 0 ? min(100, round(($thMyRevenue / $thMyTarget) * 100, 1)) : null;
+@endphp
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="text-muted small">My target achievement</div>
+                        <div class="fw-semibold">{{ $thMonth }}</div>
+                    </div>
+                    @if($thMyPct !== null)
+                        <span class="badge rounded-pill bg-primary px-3 py-2">{{ $thMyPct }}%</span>
+                    @endif
+                </div>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="fw-semibold">${{ number_format($thMyRevenue, 0) }} <span class="text-muted fw-normal">/ ${{ number_format($thMyTarget, 0) }}</span></span>
+                </div>
+                <div class="progress rounded-pill" style="height:12px">
+                    <div class="progress-bar bg-primary rounded-pill" style="width:{{ $thMyPct ?? 0 }}%"></div>
+                </div>
+                @if($thMyTarget <= 0)
+                    <p class="text-muted small mb-0 mt-2">No personal target set for this month.</p>
+                @endif
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small mb-3">My Sales Summary</div>
+                <div class="row g-2 text-center">
+                    @foreach(['completed'=>'success','pending'=>'warning','cancelled'=>'danger'] as $s => $color)
+                    <div class="col-4">
+                        <div class="fw-bold fs-4 text-{{ $color }}">{{ $mySales[$s] }}</div>
+                        <div class="text-muted small">{{ ucfirst($s) }}</div>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Revenue + Sales count --}}
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm text-center h-100">
+            <div class="card-body py-4">
+                <div class="text-muted small mb-1">My Revenue (all time)</div>
+                <div class="display-6 fw-bold text-warning">${{ number_format($mySales['revenue'], 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm text-center h-100">
+            <div class="card-body py-4">
+                <div class="text-muted small mb-1">Total Sales</div>
+                <div class="display-6 fw-bold text-info">{{ $mySales['total'] }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Charts: revenue trend + sales mix --}}
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> My revenue</h6>
+                <span class="text-muted small">Last 14 days · approved &amp; completed</span>
+            </div>
+            <div class="card-body pt-2">
+                <div class="dashboard-chart-wrap" style="height:260px;">
+                    <canvas id="agentRevenueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart-fill text-primary"></i> My sales mix</h6>
+                <span class="text-muted small">By status</span>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center pt-2" style="min-height:260px;">
+                <canvas id="agentStatusChart" style="max-height:240px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Team cards with members --}}
+@foreach($teamDashboardCards as $card)
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <strong>{{ $card['name'] }}</strong>
+            <span class="text-muted ms-2 small">{{ $card['company_name'] }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary">{{ $card['members_count'] }} members</span>
+            @if($card['achievement_percent'] !== null)
+                <span class="badge bg-success">{{ $card['achievement_percent'] }}% achieved</span>
+            @endif
+        </div>
+    </div>
+    <div class="card-body">
+        @if($card['target'] > 0)
+        <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+                <span class="text-muted">{{ $card['month_label'] }} — Team Target</span>
+                <span class="fw-semibold">${{ number_format($card['monthly_revenue'], 0) }} / ${{ number_format($card['target'], 0) }}</span>
+            </div>
+            <div class="progress rounded-pill" style="height:10px">
+                <div class="progress-bar rounded-pill" style="width:{{ min(100, $card['achievement_percent'] ?? 0) }}%"></div>
+            </div>
+        </div>
+        @endif
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Member</th>
+                        <th>Role</th>
+                        <th class="text-center">Sales</th>
+                        <th class="text-end">Revenue</th>
+                        <th class="text-end">{{ $card['month_label'] }} Target</th>
+                        <th class="text-center">Achieve</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($card['members'] as $member)
+                    <tr class="{{ $member['id'] === auth()->id() ? 'table-primary' : '' }}">
+                        <td>
+                            {{ $member['name'] }}
+                            @if($member['is_head'])
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
+                            @endif
+                            @if($member['id'] === auth()->id())
+                                <span class="badge bg-primary ms-1" style="font-size:10px">You</span>
+                            @endif
+                        </td>
+                        <td class="text-muted small">{{ $member['role_name'] }}</td>
+                        <td class="text-center">{{ $member['sales_count'] }}</td>
+                        <td class="text-end text-success">${{ number_format($member['sale_amount'], 0) }}</td>
+                        <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
+                        <td class="text-center">
+                            @if($member['target_achievement_pct'] !== null)
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $member['target_achievement_pct'] }}%</span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @empty
+                    <tr><td colspan="6" class="text-muted text-center py-3">No members.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endforeach
+
+{{-- My recent sales --}}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+        <span><i class="bi bi-cash-stack text-primary"></i> My Recent Sales</span>
+        <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>Title</th><th>Client</th><th>Status</th><th class="text-end">Amount</th></tr>
+                </thead>
+                <tbody>
+                    @forelse($recentSales as $sale)
+                    @php $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
+                    <tr>
+                        <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
+                        <td class="text-muted small">{{ $sale->client_name }}</td>
+                        <td><span class="badge bg-{{ $sc2[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span></td>
+                        <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
+                    </tr>
+                    @empty
+                    <tr><td colspan="4" class="text-muted text-center py-3">No sales yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@elseif($isAgent)
 {{-- ═══════════════════════════════════════════════════════════════
      AGENT DASHBOARD
 ═══════════════════════════════════════════════════════════════ --}}
@@ -199,69 +462,14 @@
 </div>
 
 <div class="row g-3">
-    {{-- Team Members --}}
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold">
-                <i class="bi bi-people text-success"></i> Team Members
-            </div>
-            <div class="card-body ">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Name</th>
-                                <th>Role</th>
-                                <th class="text-center">Sales</th>
-                                <th class="text-end">Revenue</th>
-                                <th class="text-end">Target</th>
-                                <th class="text-center" title="This month · approved completed vs monthly target">Achieve</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($teamMembers as $member)
-                            <tr class="{{ $member->id === auth()->id() ? 'table-primary' : '' }}">
-                                <td>
-                                    {{ $member->name }}
-                                    @if($team?->team_head_id === $member->id)
-                                        <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
-                                    @endif
-                                    @if($member->id === auth()->id())
-                                        <span class="badge bg-primary ms-1" style="font-size:10px">You</span>
-                                    @endif
-                                </td>
-                                <td><span class="text-muted small">{{ $member->role?->name ?? '-' }}</span></td>
-                                <td class="text-center">{{ $member->sales_count }}</td>
-                                <td class="text-end text-success">${{ number_format($member->sale_amount, 0) }}</td>
-                                <td class="text-end">${{ number_format($member->month_target, 0) }}</td>
-                                <td class="text-center">
-                                    @if($member->target_achievement_pct !== null)
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $member->target_achievement_pct }}%</span>
-                                    @elseif(($member->month_target ?? 0) <= 0)
-                                        <span class="text-muted">—</span>
-                                    @else
-                                        <span class="text-muted">0%</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            @empty
-                            <tr><td colspan="6" class="text-muted text-center py-3">No team members.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {{-- My Recent Sales --}}
-    <div class="col-md-6">
+    {{-- My Recent Sales — full width for agent --}}
+    <div class="col-12">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">
                 <span><i class="bi bi-cash-stack text-primary"></i> My Recent Sales</span>
                 <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
-            <div class="card-body ">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
@@ -628,7 +836,7 @@
     Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
     Chart.defaults.color = '#5c6378';
 
-@if($isAgent ?? false)
+@if(($isAgent ?? false) || ($isTeamHead ?? false))
     const arCtx = document.getElementById('agentRevenueChart');
     if (arCtx) {
         const g = arCtx.getContext('2d').createLinearGradient(0, 0, 0, 260);
@@ -741,9 +949,9 @@
         new Chart(sc, {
             type: 'doughnut',
             data: {
-                labels: @json($salesByStatus->keys()->map(fn($s) => ucfirst($s))),
+                labels: @json(isset($salesByStatus) ? $salesByStatus->keys()->map(fn($s) => ucfirst($s)) : []),
                 datasets: [{
-                    data: @json($salesByStatus->values()),
+                    data: @json(isset($salesByStatus) ? $salesByStatus->values() : []),
                     backgroundColor: [brand.amber, brand.green, brand.red],
                     borderWidth: 3,
                     borderColor: '#fff',

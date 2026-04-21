@@ -25,11 +25,17 @@ class DashboardController extends Controller
         $month = now()->month;
         $year = now()->year;
 
-        if ($user->hasRole('Agent')) {
-            return $this->agentDashboard($user, $month, $year);
+        if ($user->hasRole('Admin')) {
+            return $this->adminDashboard($month, $year);
         }
 
-        return $this->adminDashboard($month, $year);
+        // Team Head check
+        $isTeamHead = Team::where('team_head_id', $user->id)->exists();
+        if ($isTeamHead) {
+            return $this->teamHeadDashboard($user, $month, $year);
+        }
+
+        return $this->agentDashboard($user, $month, $year);
     }
 
     // ── Approved sales base scope ────────────────────────────────────────────────
@@ -307,6 +313,80 @@ class DashboardController extends Controller
             });
     }
 
+    // ── Team Head Dashboard ──────────────────────────────────────────────────────
+
+    private function teamHeadDashboard(User $user, int $month, int $year): View
+    {
+        $teams = Team::with(['company', 'users.role', 'teamHead'])
+            ->where('team_head_id', $user->id)
+            ->get();
+
+        $teamDashboardCards = $this->buildTeamDashboardCards($month, $year)
+            ->filter(fn ($card) => $teams->pluck('id')->contains($card['id']))
+            ->values();
+
+        // My own sales stats
+        $mySales = [
+            'total'     => Sale::where('user_id', $user->id)->count(),
+            'completed' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->count(),
+            'pending'   => Sale::where('user_id', $user->id)->where('status', 'pending')->count(),
+            'cancelled' => Sale::where('user_id', $user->id)->where('status', 'cancelled')->count(),
+            'revenue'   => self::approved()->where('user_id', $user->id)->where('status', 'completed')->sum('amount'),
+        ];
+
+        $myTarget = UserTarget::where('user_id', $user->id)
+            ->where('month', $month)->where('year', $year)->first();
+
+        $company = $user->company;
+        $companyStats = $company ? [
+            'teams_count'  => Team::where('company_id', $company->id)->count(),
+            'users_count'  => User::where('company_id', $company->id)->count(),
+            'sales_count'  => self::approved()->where('company_id', $company->id)->count(),
+            'revenue'      => self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount'),
+        ] : [];
+
+        $recentSales = Sale::where('user_id', $user->id)
+            ->with(['team'])->latest()->limit(6)->get();
+
+        // Charts: last 14 days revenue trend
+        $agentTrendStart = now()->subDays(13)->startOfDay();
+        $agentTrendEnd   = now()->endOfDay();
+        $agentDailyRows  = self::approved()
+            ->where('user_id', $user->id)
+            ->where('status', 'completed')
+            ->whereBetween('sale_date', [$agentTrendStart->toDateString(), $agentTrendEnd->toDateString()])
+            ->toBase()
+            ->select(DB::raw('DATE(sale_date) as d'), DB::raw('SUM(amount) as total'))
+            ->groupBy(DB::raw('DATE(sale_date)'))
+            ->pluck('total', 'd');
+
+        $agentRevenueTrendLabels = [];
+        $agentRevenueTrendValues = [];
+        foreach (CarbonPeriod::create($agentTrendStart->toDateString(), $agentTrendEnd->toDateString()) as $date) {
+            $agentRevenueTrendLabels[] = $date->format('M j');
+            $agentRevenueTrendValues[] = round((float) ($agentDailyRows[$date->format('Y-m-d')] ?? 0), 2);
+        }
+
+        $agentSalesByStatus = [
+            'labels' => ['Completed', 'Pending', 'Cancelled'],
+            'values' => [$mySales['completed'], $mySales['pending'], $mySales['cancelled']],
+        ];
+
+        return view('admin.dashboard', compact(
+            'user', 'teams', 'teamDashboardCards',
+            'mySales', 'myTarget', 'recentSales', 'month', 'year',
+            'company', 'companyStats',
+            'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus'
+        ))->with([
+            'isTeamHeadView' => true,
+            'team'           => $teams->first(),
+            'teamTarget'     => null,
+            'teamMembers'    => collect(),
+            'userTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
+            'teamTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
+        ]);
+    }
+
     // ── Agent Dashboard ──────────────────────────────────────────────────────────
 
     private function agentDashboard(User $user, int $month, int $year): View
@@ -354,24 +434,8 @@ class DashboardController extends Controller
             'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
         ];
 
-        // Team members — only approved sales count
-        $teamMembers = $team
-            ? User::where('team_id', $team->id)
-                ->accountActive()
-                ->with('role')
-                ->get()
-                ->map(function ($member) use ($month, $year) {
-                    $member->sales_count = self::approved()->where('user_id', $member->id)->where('status', 'completed')->count();
-                    $member->sale_amount = self::approved()->where('user_id', $member->id)->where('status', 'completed')->sum('amount');
-                    $member->month_target = UserTarget::where('user_id', $member->id)
-                        ->where('month', $month)->where('year', $year)
-                        ->value('target_amount') ?? 0;
-                    $member->month_revenue = self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('user_id', $member->id));
-                    $member->target_achievement_pct = self::achievementPercent($member->month_revenue, (float) $member->month_target);
-
-                    return $member;
-                })
-            : collect();
+        // Team members — Agent ko nahi dikhna chahiye
+        $teamMembers = collect();
 
         // Company info — only approved
         $companyStats = $company ? [
