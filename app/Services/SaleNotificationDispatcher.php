@@ -14,18 +14,24 @@ use Illuminate\Support\Facades\Notification;
 
 class SaleNotificationDispatcher
 {
-    /** Agent (non–team-head) creates a sale → team lead + admins. */
+    /** Agent or team head creates a sale → admins (+ team head if seller is a plain agent). */
     public static function dispatchSaleCreated(Sale $sale): void
     {
         $sale->loadMissing('user');
         $seller = $sale->user;
-        if (! $seller || ! self::isAgentOnly($seller)) {
+        if (! $seller) {
+            return;
+        }
+
+        // Only agents and team heads should trigger this; skip admins creating sales
+        if ($seller->hasRole(Role::ADMIN)) {
             return;
         }
 
         $recipients = self::adminsForCompany($sale->company_id);
 
-        if ($sale->team_id) {
+        // If seller is a plain agent (not a team head), also notify their team head
+        if (self::isAgentOnly($seller) && $sale->team_id) {
             $head = Team::query()->find($sale->team_id)?->teamHead;
             if ($head && $head->id !== $seller->id) {
                 $recipients->push($head);
