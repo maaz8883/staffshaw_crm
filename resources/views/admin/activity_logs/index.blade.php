@@ -1,29 +1,38 @@
 @extends('admin.layout')
 
-@section('title', 'User Details')
-@section('page-title', 'User Details')
-@section('page-icon', 'person-vcard')
+@section('title', 'Activity Logs')
+@section('page-title', 'Activity Logs')
+@section('page-icon', 'clock-history')
 
 @section('content')
-<div class="card mb-4">
+<div class="card mb-3">
     <div class="card-body">
-        <dl class="row mb-0">
-            <dt class="col-sm-3">Name</dt>
-            <dd class="col-sm-9">{{ $user->name }}</dd>
-
-            <dt class="col-sm-3">Email</dt>
-            <dd class="col-sm-9">{{ $user->email }}</dd>
-
-            <dt class="col-sm-3">Role</dt>
-            <dd class="col-sm-9">{{ $user->role?->name ?? '-' }}</dd>
-
-            <dt class="col-sm-3">Team</dt>
-            <dd class="col-sm-9">{{ $user->team?->name ?? '-' }}</dd>
-        </dl>
+        <form method="GET" action="{{ route('admin.activity-logs.index') }}" class="row g-2 align-items-end">
+            <div class="col-sm-4">
+                <label class="form-label small mb-1">User</label>
+                <select name="user_id" class="form-select form-select-sm">
+                    <option value="">All Users</option>
+                    @foreach($users as $u)
+                        <option value="{{ $u->id }}" @selected(request('user_id') == $u->id)>{{ $u->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label small mb-1">Type</label>
+                <select name="type" class="form-select form-select-sm">
+                    <option value="">All Types</option>
+                    @foreach($types as $t)
+                        <option value="{{ $t }}" @selected(request('type') === $t)>{{ str_replace('_', ' ', ucfirst($t)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-sm-auto">
+                <button class="btn btn-sm btn-primary">Filter</button>
+                <a href="{{ route('admin.activity-logs.index') }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+            </div>
+        </form>
     </div>
 </div>
-
-<h5 class="mb-3"><i class="bi bi-clock-history"></i> Activity Log</h5>
 
 <div class="card">
     <div class="card-body p-0">
@@ -31,6 +40,7 @@
             <table class="table table-hover mb-0 small">
                 <thead class="table-light">
                     <tr>
+                        <th>User</th>
                         <th>Type</th>
                         <th>Description</th>
                         <th>IP</th>
@@ -40,8 +50,15 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($activityLogs as $log)
+                    @forelse($logs as $log)
                     <tr>
+                        <td>
+                            @if($log->user)
+                                <a href="{{ route('admin.users.show', $log->user_id) }}">{{ $log->user->name }}</a>
+                            @else
+                                <span class="text-muted">Deleted</span>
+                            @endif
+                        </td>
                         <td>
                             <span class="badge bg-{{ $log->typeBadgeClass() }}">
                                 {{ str_replace('_', ' ', ucfirst($log->type)) }}
@@ -63,16 +80,16 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">No activity recorded yet.</td>
+                        <td colspan="7" class="text-center text-muted py-4">No activity logs found.</td>
                     </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </div>
-    @if($activityLogs->hasPages())
+    @if($logs->hasPages())
     <div class="card-footer">
-        {{ $activityLogs->links() }}
+        {{ $logs->links() }}
     </div>
     @endif
 </div>

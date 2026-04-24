@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
@@ -93,6 +95,12 @@ Route::prefix('admin')->group(function () {
         Route::put('settings/otp', [SettingController::class, 'updateOtp'])->name('admin.settings.otp');
         Route::put('settings/smtp', [SettingController::class, 'updateSmtp'])->name('admin.settings.smtp');
 
+        // Backup (Admin only)
+        Route::get('backup', [BackupController::class, 'index'])->name('admin.backup.index');
+        Route::post('backup', [BackupController::class, 'store'])->name('admin.backup.store');
+        Route::get('backup/{file}/download', [BackupController::class, 'download'])->name('admin.backup.download');
+        Route::delete('backup/{file}', [BackupController::class, 'destroy'])->name('admin.backup.destroy');
+
         // Target Routes
         Route::get('targets', [TargetController::class, 'index'])->name('admin.targets.index');
         Route::post('targets/team/{team}', [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
@@ -108,6 +116,9 @@ Route::prefix('admin')->group(function () {
         Route::get('reports/team', [ReportController::class, 'team'])->name('admin.reports.team');
         Route::get('reports/sales', [ReportController::class, 'sales'])->name('admin.reports.sales');
         Route::get('reports/user', [ReportController::class, 'user'])->name('admin.reports.user');
+
+        // Activity Logs (Admin only)
+        Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('admin.activity-logs.index');
 
         // Sales Routes
         Route::get('sales/datatable', [SaleController::class, 'datatable'])->name('admin.sales.datatable');

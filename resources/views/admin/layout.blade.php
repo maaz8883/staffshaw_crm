@@ -83,6 +83,11 @@
                     <i class="bi bi-graph-up-arrow"></i> <span>Reports</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.activity-logs.*') ? 'active' : '' }}" href="{{ route('admin.activity-logs.index') }}">
+                    <i class="bi bi-clock-history"></i> <span>Activity Logs</span>
+                </a>
+            </li>
             @endif
             @endif
 

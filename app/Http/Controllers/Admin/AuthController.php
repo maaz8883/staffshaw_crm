@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -40,6 +42,8 @@ class AuthController extends Controller
             $request->session()->regenerate();
             static::bindSession($user);
 
+            ActivityLogger::log($user, UserActivityLog::TYPE_LOGIN, 'User logged in', [], $request);
+
             return redirect()->intended(route('admin.dashboard'));
         }
 
@@ -51,6 +55,7 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         if ($user = Auth::user()) {
+            ActivityLogger::log($user, UserActivityLog::TYPE_LOGOUT, 'User logged out', [], $request);
             $user->update(['session_token' => null]);
         }
 

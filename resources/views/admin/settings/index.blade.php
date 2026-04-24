@@ -15,7 +15,7 @@
             </div>
             <div class="card-body">
 
-                @if(session('success') && request()->fragment !== 'otp')
+                @if(session('success') && !in_array(request()->fragment, ['otp','backup']))
                     <div class="alert alert-success alert-dismissible fade show">
                         <i class="bi bi-check-circle"></i> {{ session('success') }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -140,5 +140,105 @@
         </div>
     </div>
 
+    {{-- ── Database Backup ── --}}
+    <div class="col-12" id="backup">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-database-down"></i> Database Backup</span>
+                <form method="POST" action="{{ route('admin.backup.store') }}">
+                    @csrf
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="bi bi-plus-circle"></i> Create Backup Now
+                    </button>
+                </form>
+            </div>
+            <div class="card-body">
+
+                @if(session('success') && request()->fragment === 'backup')
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <i class="bi bi-check-circle"></i> {{ session('success') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+
+                @if($errors->has('backup'))
+                    <div class="alert alert-danger py-2">
+                        <i class="bi bi-exclamation-triangle"></i> {{ $errors->first('backup') }}
+                    </div>
+                @endif
+
+                <div class="table-responsive">
+                    <table class="table table-hover small mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>File</th>
+                                <th>Size</th>
+                                <th>Created</th>
+                                <th style="width:100px">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backup-list">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-3">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Loading...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="form-text mt-2">
+                    Backups are stored in <code>storage/app/backups/</code> as gzipped SQL files.
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
+@endsection
+
+@section('scripts')
+<script>
+(function () {
+    function loadBackups() {
+        fetch('{{ route('admin.backup.index') }}', {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+        .then(r => r.json())
+        .then(files => {
+            const tbody = document.getElementById('backup-list');
+            if (!tbody) return;
+            if (!files.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No backups yet.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = files.map(f => `
+                <tr>
+                    <td class="font-monospace">${f.name}</td>
+                    <td>${f.size_human}</td>
+                    <td class="text-muted">${f.created_at}</td>
+                    <td>
+                        <a href="${f.download_url}" class="btn btn-sm btn-outline-primary" title="Download">
+                            <i class="bi bi-download"></i>
+                        </a>
+                        <form action="${f.delete_url}" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this backup?">
+                            <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="_method" value="DELETE">
+                            <button class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(() => {
+            const tbody = document.getElementById('backup-list');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load backups.</td></tr>';
+        });
+    }
+    loadBackups();
+})();
+</script>
 @endsection

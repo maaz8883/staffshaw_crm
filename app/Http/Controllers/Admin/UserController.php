@@ -109,8 +109,9 @@ class UserController extends Controller
     public function show(User $user): View
     {
         $user->load(['role', 'team']);
+        $activityLogs = $user->activityLogs()->paginate(20);
 
-        return view('admin.users.show', compact('user'));
+        return view('admin.users.show', compact('user', 'activityLogs'));
     }
 
     public function edit(User $user): View

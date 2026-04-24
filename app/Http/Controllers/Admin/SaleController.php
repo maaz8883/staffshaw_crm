@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use App\Services\SaleNotificationDispatcher;
 use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
@@ -216,6 +218,11 @@ class SaleController extends Controller
 
         SaleNotificationDispatcher::dispatchSaleCreated($sale);
 
+        ActivityLogger::log($user, UserActivityLog::TYPE_SALE_CREATED,
+            "Created sale \"{$sale->title}\" (#{$sale->id})",
+            ['sale_id' => $sale->id, 'amount' => $sale->amount]
+        );
+
         return redirect()->route('admin.sales.index')
             ->with('success', 'Sale submitted and pending approval.');
     }
@@ -272,6 +279,11 @@ class SaleController extends Controller
 
         SaleNotificationDispatcher::dispatchSaleUpdated($sale, Auth::user());
 
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_UPDATED,
+            "Updated sale \"{$sale->title}\" (#{$sale->id})",
+            ['sale_id' => $sale->id, 'amount' => $sale->amount]
+        );
+
         return redirect()->route('admin.sales.index')
             ->with('success', 'Sale updated and re-submitted for approval.');
     }
@@ -279,6 +291,11 @@ class SaleController extends Controller
     public function destroy(Sale $sale): RedirectResponse
     {
         if (! Auth::user()->hasRole('Admin')) abort(403);
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_DELETED,
+            "Deleted sale \"{$sale->title}\" (#{$sale->id})",
+            ['sale_id' => $sale->id, 'amount' => $sale->amount]
+        );
 
         $sale->delete();
 

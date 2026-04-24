@@ -7,7 +7,9 @@ use App\Models\Role;
 use App\Models\Team;
 use App\Models\TeamPpcSpending;
 use App\Models\User;
+use App\Models\UserActivityLog;
 use App\Notifications\PpcSpendingAddedNotification;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -78,6 +80,11 @@ class PpcController extends Controller
         $admins = User::whereHas('role', fn ($q) => $q->where('name', Role::ADMIN))->get();
         Notification::send($admins, new PpcSpendingAddedNotification($spending));
 
+        ActivityLogger::log($user, UserActivityLog::TYPE_PPC_ADDED,
+            "Added PPC spending \${$spending->amount} for team #{$teamId}",
+            ['spending_id' => $spending->id, 'amount' => $spending->amount, 'team_id' => $teamId]
+        );
+
         return back()->with('success', 'PPC spending added successfully.');
     }
 
@@ -89,6 +96,11 @@ class PpcController extends Controller
         if (! $user->hasRole('Admin') && $spending->user_id !== $user->id) {
             abort(403);
         }
+
+        ActivityLogger::log($user, UserActivityLog::TYPE_PPC_DELETED,
+            "Deleted PPC spending \${$spending->amount} (team #{$spending->team_id})",
+            ['spending_id' => $spending->id, 'amount' => $spending->amount, 'team_id' => $spending->team_id]
+        );
 
         $spending->delete();
 
