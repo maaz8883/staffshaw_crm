@@ -201,6 +201,13 @@
             </div>
         </div>
         @endif
+        @if(($card['ppc_spending'] ?? 0) > 0 && auth()->user()->hasRole('Admin'))
+        <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded bg-light border">
+            <i class="bi bi-graph-up text-danger"></i>
+            <span class="small text-muted">PPC Spending — {{ $card['month_label'] }}</span>
+            <span class="ms-auto fw-bold text-danger">${{ number_format($card['ppc_spending'], 2) }}</span>
+        </div>
+        @endif
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light">
@@ -324,7 +331,7 @@
                         <div class="fw-bold fs-5">{{ $team?->name ?? 'Not assigned' }}</div>
                         @if($team)
                         <div class="small text-muted">
-                            {{ $teamMembers->count() }} members &middot;
+                            {{ $team->users()->count() }} members &middot;
                             Head: {{ $team->teamHead?->name ?? 'N/A' }}
                         </div>
                         @endif
@@ -547,6 +554,14 @@
                 </div>
                 @if(($tc['target'] ?? 0) <= 0)
                     <p class="text-muted small mb-3">No team target set for {{ $tc['month_label'] }}.</p>
+                @endif
+
+                @if(($tc['ppc_spending'] ?? 0) > 0)
+                <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded bg-light border">
+                    <i class="bi bi-graph-up text-danger"></i>
+                    <span class="small text-muted">PPC Spending — {{ $tc['month_label'] }}</span>
+                    <span class="ms-auto fw-bold text-danger">${{ number_format($tc['ppc_spending'], 2) }}</span>
+                </div>
                 @endif
 
                 <div class="fw-semibold small mb-2"><i class="bi bi-person-lines-fill text-primary"></i> Members</div>

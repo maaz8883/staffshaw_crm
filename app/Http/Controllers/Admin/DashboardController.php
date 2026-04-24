@@ -222,6 +222,15 @@ class DashboardController extends Controller
             ->where('year', $year)
             ->pluck('target_amount', 'team_id');
 
+        // PPC spending per team this month
+        $ppcByTeam = \App\Models\TeamPpcSpending::query()
+            ->where('month', $month)
+            ->where('year', $year)
+            ->toBase()
+            ->select('team_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('team_id')
+            ->pluck('total', 'team_id');
+
         $userCounts = User::query()
             ->accountActive()
             ->whereNotNull('team_id')
@@ -267,37 +276,33 @@ class DashboardController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function (Team $team) use (
-                $year,
-                $month,
-                $monthlyByTeam,
-                $targetsByTeam,
-                $userCounts,
-                $userTargets,
-                $monthRevByUser,
-                $salesStatsByUser,
-                $usersByTeam
+                $year, $month,
+                $monthlyByTeam, $targetsByTeam, $ppcByTeam,
+                $userCounts, $userTargets, $monthRevByUser,
+                $salesStatsByUser, $usersByTeam
             ) {
-                $tid = $team->id;
-                $target = (float) ($targetsByTeam[$tid] ?? 0);
+                $tid     = $team->id;
+                $target  = (float) ($targetsByTeam[$tid] ?? 0);
                 $revenue = (float) ($monthlyByTeam[$tid] ?? 0);
-                $pct = self::achievementPercent($revenue, $target);
+                $ppc     = (float) ($ppcByTeam[$tid] ?? 0);
+                $pct     = self::achievementPercent($revenue, $target);
 
                 $members = ($usersByTeam->get($tid) ?? collect())
                     ->map(function (User $member) use ($userTargets, $monthRevByUser, $salesStatsByUser, $team) {
-                        $mid = $member->id;
-                        $stats = $salesStatsByUser->get($mid);
+                        $mid        = $member->id;
+                        $stats      = $salesStatsByUser->get($mid);
                         $monthTarget = (float) ($userTargets[$mid] ?? 0);
-                        $monthRev = (float) ($monthRevByUser[$mid] ?? 0);
+                        $monthRev   = (float) ($monthRevByUser[$mid] ?? 0);
 
                         return [
-                            'id' => $mid,
-                            'name' => $member->name,
-                            'role_name' => $member->role?->name ?? '—',
-                            'is_head' => $team->team_head_id === $mid,
-                            'sales_count' => $stats ? (int) $stats->sales_count : 0,
-                            'sale_amount' => $stats ? (float) $stats->sale_amount : 0.0,
-                            'month_target' => $monthTarget,
-                            'month_revenue' => $monthRev,
+                            'id'                    => $mid,
+                            'name'                  => $member->name,
+                            'role_name'             => $member->role?->name ?? '—',
+                            'is_head'               => $team->team_head_id === $mid,
+                            'sales_count'           => $stats ? (int) $stats->sales_count : 0,
+                            'sale_amount'           => $stats ? (float) $stats->sale_amount : 0.0,
+                            'month_target'          => $monthTarget,
+                            'month_revenue'         => $monthRev,
                             'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
                         ];
                     })
@@ -305,15 +310,16 @@ class DashboardController extends Controller
                     ->all();
 
                 return [
-                    'id' => $team->id,
-                    'name' => $team->name,
-                    'company_name' => $team->company?->name,
-                    'members_count' => (int) ($userCounts[$tid] ?? 0),
-                    'month_label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
-                    'target' => $target,
-                    'monthly_revenue' => $revenue,
+                    'id'                 => $team->id,
+                    'name'               => $team->name,
+                    'company_name'       => $team->company?->name,
+                    'members_count'      => (int) ($userCounts[$tid] ?? 0),
+                    'month_label'        => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+                    'target'             => $target,
+                    'monthly_revenue'    => $revenue,
                     'achievement_percent' => $pct,
-                    'members' => $members,
+                    'ppc_spending'       => $ppc,
+                    'members'            => $members,
                 ];
             });
     }
