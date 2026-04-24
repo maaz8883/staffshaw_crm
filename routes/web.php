@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
+use App\Http\Controllers\Admin\PpcController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -96,6 +97,11 @@ Route::prefix('admin')->group(function () {
         Route::get('targets', [TargetController::class, 'index'])->name('admin.targets.index');
         Route::post('targets/team/{team}', [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
         Route::post('targets/user/{team}', [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
+
+        // PPC Routes
+        Route::get('ppc', [PpcController::class, 'index'])->name('admin.ppc.index');
+        Route::post('ppc', [PpcController::class, 'store'])->name('admin.ppc.store');
+        Route::delete('ppc/{spending}', [PpcController::class, 'destroy'])->name('admin.ppc.destroy');
 
         Route::get('reports', [ReportController::class, 'index'])->name('admin.reports.index');
         Route::get('reports/company', [ReportController::class, 'company'])->name('admin.reports.company');

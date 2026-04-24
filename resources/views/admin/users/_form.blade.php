@@ -62,9 +62,29 @@
 
 <script>
     (function () {
+        var roleSelect    = document.getElementById('role_id');
         var companySelect = document.getElementById('company_id');
         var teamSelect    = document.getElementById('team_id');
+        var companyWrap   = companySelect.closest('.mb-3');
+        var teamWrap      = teamSelect.closest('.mb-3');
         var currentTeamId = '{{ old('team_id', $user->team_id ?? '') }}';
+
+        // PPC role IDs — hide company/team for these
+        var ppcRoleIds = @json($roles->where('name', 'PPC')->pluck('id')->values());
+
+        function isPpc() {
+            return ppcRoleIds.includes(parseInt(roleSelect.value));
+        }
+
+        function toggleCompanyTeam() {
+            var hide = isPpc();
+            companyWrap.style.display = hide ? 'none' : '';
+            teamWrap.style.display    = hide ? 'none' : '';
+            if (hide) {
+                companySelect.value = '';
+                teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
+            }
+        }
 
         function loadTeams(companyId, preselectId) {
             teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
@@ -83,12 +103,15 @@
                 });
         }
 
+        roleSelect.addEventListener('change', toggleCompanyTeam);
+
         companySelect.addEventListener('change', function () {
             loadTeams(this.value, '');
         });
 
-        // On page load: if company already selected, load its teams
-        if (companySelect.value) {
+        // On page load
+        toggleCompanyTeam();
+        if (companySelect.value && !isPpc()) {
             loadTeams(companySelect.value, currentTeamId);
         }
     })();

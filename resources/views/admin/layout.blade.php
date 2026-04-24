@@ -19,8 +19,9 @@
         <ul class="nav flex-column">
             @php
                 $isAgent = auth()->user()?->hasRole('Agent');
-                $canReviewSignups = auth()->user()?->hasRole('Admin')
-                    || \App\Models\Team::where('team_head_id', auth()->id())->exists();
+                $isPpc   = auth()->user()?->hasRole('PPC');
+                $canReviewSignups = !$isPpc && (auth()->user()?->hasRole('Admin')
+                    || \App\Models\Team::where('team_head_id', auth()->id())->exists());
                 $pendingSignupCount = 0;
                 if ($canReviewSignups) {
                     if (auth()->user()->hasRole('Admin')) {
@@ -45,24 +46,15 @@
                 </a>
             </li>
 
-            @if(!$isAgent)
+            @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
                     <i class="bi bi-people-fill"></i> <span>Users</span>
                 </a>
             </li>
             @endif
-            @if($canReviewSignups)
-            <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.pending-registrations.*') ? 'active' : '' }}" href="{{ route('admin.pending-registrations.index') }}">
-                    <i class="bi bi-person-plus"></i> <span>Agent signups</span>
-                    @if($pendingSignupCount > 0)
-                        <span class="badge bg-danger rounded-pill ms-1">{{ $pendingSignupCount > 99 ? '99+' : $pendingSignupCount }}</span>
-                    @endif
-                </a>
-            </li>
-            @endif
-            @if(!$isAgent)
+
+            @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.companies.*') ? 'active' : '' }}" href="{{ route('admin.companies.index') }}">
                     <i class="bi bi-buildings"></i> <span>Companies</span>
@@ -74,6 +66,7 @@
                 </a>
             </li>
             @endif
+            @if(!$isPpc)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}">
                     <i class="bi bi-bullseye"></i> <span>Targets</span>
@@ -84,17 +77,36 @@
                     <i class="bi bi-cash-stack"></i> <span>Sales</span>
                 </a>
             </li>
+            @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}">
                     <i class="bi bi-graph-up-arrow"></i> <span>Reports</span>
                 </a>
             </li>
+            @endif
+            @endif
+
+            @if($isPpc || auth()->user()->hasRole('Admin'))
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.ppc.*') ? 'active' : '' }}" href="{{ route('admin.ppc.index') }}">
+                    <i class="bi bi-graph-up"></i> <span>PPC Spending</span>
+                </a>
+            </li>
+            @endif
+
+            @if($isPpc)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}">
+                    <i class="bi bi-people"></i> <span>Teams</span>
+                </a>
+            </li>
+            @endif
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.profile.*') ? 'active' : '' }}" href="{{ route('admin.profile.show') }}">
                     <i class="bi bi-person-circle"></i> <span>Profile</span>
                 </a>
             </li>
-            @if(!$isAgent)
+            @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" href="{{ route('admin.settings.index') }}">
                     <i class="bi bi-gear"></i> <span>Settings</span>

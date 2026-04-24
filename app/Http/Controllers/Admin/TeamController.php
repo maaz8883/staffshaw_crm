@@ -42,9 +42,10 @@ class TeamController extends Controller
                 $csrf = csrf_field();
                 $method = method_field('DELETE');
                 $isAgent = auth()->user()?->hasRole('Agent');
+                $isPpc   = auth()->user()?->hasRole('PPC');
 
                 $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>';
-                if (!$isAgent) {
+                if (!$isAgent && !$isPpc) {
                     $html .= '
                     <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>
                     <form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this team?">
@@ -86,7 +87,21 @@ class TeamController extends Controller
     {
         $team->load(['company', 'teamHead', 'users']);
 
-        return view('admin.teams.show', compact('team'));
+        $month = (int) request()->get('month', now()->month);
+        $year  = (int) request()->get('year', now()->year);
+
+        $isPpc = auth()->user()->hasRole('PPC');
+
+        $spendings = \App\Models\TeamPpcSpending::where('team_id', $team->id)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->with('user')
+            ->latest()
+            ->get();
+
+        $totalSpending = $spendings->sum('amount');
+
+        return view('admin.teams.show', compact('team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc'));
     }
 
     public function edit(Team $team): View

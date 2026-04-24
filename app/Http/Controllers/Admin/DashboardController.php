@@ -35,6 +35,11 @@ class DashboardController extends Controller
             return $this->teamHeadDashboard($user, $month, $year);
         }
 
+        // PPC user
+        if ($user->hasRole('PPC')) {
+            return $this->ppcDashboard($user, $month, $year);
+        }
+
         return $this->agentDashboard($user, $month, $year);
     }
 
@@ -385,6 +390,35 @@ class DashboardController extends Controller
             'userTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
             'teamTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
         ]);
+    }
+
+    // ── PPC Dashboard ────────────────────────────────────────────────────────────
+
+    private function ppcDashboard(User $user, int $month, int $year): View
+    {
+        // All teams with their current month spending
+        $teams = Team::with(['company'])
+            ->orderBy('name')
+            ->get()
+            ->map(function (Team $team) use ($month, $year) {
+                $team->month_spending = (float) \App\Models\TeamPpcSpending::where('team_id', $team->id)
+                    ->where('month', $month)
+                    ->where('year', $year)
+                    ->sum('amount');
+                return $team;
+            });
+
+        $totalSpending = $teams->sum('month_spending');
+
+        $recentSpendings = \App\Models\TeamPpcSpending::where('user_id', $user->id)
+            ->with('team')
+            ->latest()
+            ->limit(6)
+            ->get();
+
+        return view('admin.ppc.dashboard', compact(
+            'teams', 'totalSpending', 'recentSpendings', 'month', 'year'
+        ));
     }
 
     // ── Agent Dashboard ──────────────────────────────────────────────────────────
