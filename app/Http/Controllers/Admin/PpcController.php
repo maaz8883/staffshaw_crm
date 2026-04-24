@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\Team;
 use App\Models\TeamPpcSpending;
+use App\Models\User;
+use App\Notifications\PpcSpendingAddedNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\View\View;
 
 class PpcController extends Controller
@@ -61,7 +65,7 @@ class PpcController extends Controller
             ? (int) $request->team_id_override
             : $user->team_id;
 
-        TeamPpcSpending::create([
+        $spending = TeamPpcSpending::create([
             'team_id' => $teamId,
             'user_id' => $user->id,
             'month'   => $validated['month'],
@@ -69,6 +73,10 @@ class PpcController extends Controller
             'amount'  => $validated['amount'],
             'notes'   => $validated['notes'] ?? null,
         ]);
+
+        // Notify all admins
+        $admins = User::whereHas('role', fn ($q) => $q->where('name', Role::ADMIN))->get();
+        Notification::send($admins, new PpcSpendingAddedNotification($spending));
 
         return back()->with('success', 'PPC spending added successfully.');
     }
