@@ -336,6 +336,17 @@ class DashboardController extends Controller
             ->filter(fn ($card) => $teams->pluck('id')->contains($card['id']))
             ->values();
 
+        // Team target achievement for first team
+        $firstTeam       = $teams->first();
+        $teamTargetAmt   = $firstTeam ? (float) TeamTarget::where('team_id', $firstTeam->id)->where('month', $month)->where('year', $year)->value('target_amount') : 0;
+        $teamMonthRev    = $firstTeam ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $firstTeam->id)) : 0.0;
+        $teamTargetAchievement = [
+            'target'   => $teamTargetAmt,
+            'achieved' => $teamMonthRev,
+            'percent'  => self::achievementPercent($teamMonthRev, $teamTargetAmt),
+            'label'    => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+        ];
+
         // My own sales stats
         $mySales = [
             'total'     => Sale::where('user_id', $user->id)->count(),
@@ -387,14 +398,14 @@ class DashboardController extends Controller
             'user', 'teams', 'teamDashboardCards',
             'mySales', 'myTarget', 'recentSales', 'month', 'year',
             'company', 'companyStats',
-            'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus'
+            'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus',
+            'teamTargetAchievement'
         ))->with([
             'isTeamHeadView' => true,
             'team'           => $teams->first(),
             'teamTarget'     => null,
             'teamMembers'    => collect(),
             'userTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
-            'teamTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
         ]);
     }
 

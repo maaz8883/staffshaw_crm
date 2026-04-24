@@ -23,7 +23,7 @@
 ═══════════════════════════════════════════════════════════════ --}}
 
 {{-- Company + Team info --}}
-<div class="row g-3 mb-4">
+<!-- <div class="row g-3 mb-4">
     {{-- My Company --}}
     <div class="col-md-6">
         <div class="card h-100 border-0 shadow-sm">
@@ -74,7 +74,7 @@
             </div>
         </div>
     </div>
-</div>
+</div> -->
 
 {{-- My target achievement --}}
 @php
@@ -112,20 +112,31 @@
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small mb-3">My Sales Summary</div>
-                <div class="row g-2 text-center">
-                    @foreach(['completed'=>'success','pending'=>'warning','cancelled'=>'danger'] as $s => $color)
-                    <div class="col-4">
-                        <div class="fw-bold fs-4 text-{{ $color }}">{{ $mySales[$s] }}</div>
-                        <div class="text-muted small">{{ ucfirst($s) }}</div>
+                @php $ta = $teamTargetAchievement; $tp = $ta['percent']; @endphp
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="text-muted small">Team target achievement</div>
+                        <div class="fw-semibold">{{ $ta['label'] }}
+                            @if($teams->first())<span class="text-muted"> · {{ $teams->first()->name }}</span>@endif
+                        </div>
                     </div>
-                    @endforeach
+                    @if($tp !== null)
+                        <span class="badge rounded-pill bg-success px-3 py-2">{{ $tp }}%</span>
+                    @endif
                 </div>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="fw-semibold">${{ number_format($ta['achieved'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($ta['target'], 0) }}</span></span>
+                </div>
+                <div class="progress rounded-pill" style="height:12px">
+                    <div class="progress-bar bg-success rounded-pill" style="width:{{ $tp !== null ? min(100, $tp) : 0 }}%"></div>
+                </div>
+                @if(($ta['target'] ?? 0) <= 0)
+                    <p class="text-muted small mb-0 mt-2">No team target set for this month.</p>
+                @endif
             </div>
         </div>
     </div>
-</div>
-
 {{-- Revenue + Sales count --}}
 <div class="row g-3 mb-4">
     <div class="col-md-6">
@@ -289,7 +300,7 @@
      AGENT DASHBOARD
 ═══════════════════════════════════════════════════════════════ --}}
 
-<div class="row g-3 mb-4">
+<!-- <div class="row g-3 mb-4">
     {{-- My Company --}}
     <div class="col-md-6">
         <div class="card h-100 border-0 shadow-sm">
@@ -340,7 +351,7 @@
             </div>
         </div>
     </div>
-</div>
+</div> -->
 
 {{-- Target achievement + revenue --}}
 @php
@@ -422,7 +433,7 @@
 </div>
 
 {{-- Sales by status mini cards --}}
-<div class="row g-3 mb-4">
+<!-- <div class="row g-3 mb-4">
     @php $sc = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
     @foreach($sc as $s => $color)
     <div class="col-4">
@@ -434,7 +445,7 @@
         </div>
     </div>
     @endforeach
-</div>
+</div> -->
 
 {{-- Charts: my revenue trend + sales mix --}}
 <div class="row g-3 mb-4">
