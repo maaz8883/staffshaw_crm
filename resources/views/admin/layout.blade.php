@@ -103,14 +103,6 @@
             </li>
             @endif
 
-            @if($isPpc)
-            <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}" title="Teams">
-                    <i class="bi bi-people"></i> <span class="nav-label">Teams</span>
-                </a>
-            </li>
-            @endif
-
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.profile.*') ? 'active' : '' }}" href="{{ route('admin.profile.show') }}" title="Profile">
                     <i class="bi bi-person-circle"></i> <span class="nav-label">Profile</span>

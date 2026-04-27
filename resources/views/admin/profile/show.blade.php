@@ -13,6 +13,7 @@
                 <h5 class="mb-0"><i class="bi bi-person"></i> Profile Information</h5>
             </div>
             <div class="card-body">
+                @if(auth()->user()->hasRole('Admin'))
                 <form action="{{ route('admin.profile.update') }}" method="POST">
                     @csrf
                     @method('PUT')
@@ -39,10 +40,29 @@
                         </button>
                     </div>
                 </form>
+                @else
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Name</dt>
+                    <dd class="col-sm-9">{{ $user->name }}</dd>
+
+                    <dt class="col-sm-3">Email</dt>
+                    <dd class="col-sm-9">{{ $user->email }}</dd>
+
+                    <dt class="col-sm-3">Role</dt>
+                    <dd class="col-sm-9">{{ $user->role?->name ?? '-' }}</dd>
+
+                    <dt class="col-sm-3">Team</dt>
+                    <dd class="col-sm-9">{{ $user->team?->name ?? '-' }}</dd>
+                </dl>
+                <div class="alert alert-info small mb-0 mt-3">
+                    <i class="bi bi-info-circle"></i> Contact your administrator to update your profile information.
+                </div>
+                @endif
             </div>
         </div>
 
-        <!-- Change Password -->
+        <!-- Change Password (Admin only) -->
+        @if(auth()->user()->hasRole('Admin'))
         <div class="card fade-in">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-lock"></i> Change Password</h5>
@@ -82,6 +102,7 @@
                 </form>
             </div>
         </div>
+        @endif
     </div>
 
     <div class="col-md-4">

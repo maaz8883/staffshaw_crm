@@ -23,6 +23,10 @@ class ProfileController extends Controller
 
     public function updateProfile(Request $request)
     {
+        if (! Auth::user()->hasRole('Admin')) {
+            abort(403, 'Only admins can update profile information.');
+        }
+
         $user = Auth::user();
 
         $validated = $request->validate([
@@ -37,6 +41,9 @@ class ProfileController extends Controller
 
     public function updatePassword(Request $request)
     {
+        if (! Auth::user()->hasRole('Admin')) {
+            abort(403, 'Only admins can change password.');
+        }
         $request->validate([
             'current_password' => 'required',
             'password' => ['required', 'confirmed', Password::defaults()],
