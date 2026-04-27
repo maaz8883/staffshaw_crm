@@ -31,8 +31,10 @@
 
 @forelse($teams as $team)
 @php
-    // Can this logged-in user manage THIS team's targets?
-    $canManageThisTeam = $isAdmin;
+    // Team target: sirf admin
+    $canManageTeamTarget  = $isAdmin;
+    // User targets: admin ya is team ka head
+    $canManageUserTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id());
 @endphp
 
 <div class="card mb-4">
@@ -56,8 +58,8 @@
                 Team Target — {{ DateTime::createFromFormat('!m', $month)->format('F') }} {{ $year }}
             </h6>
 
-            @if($canManageThisTeam)
-            {{-- Team Head / Admin: editable form --}}
+            @if($canManageTeamTarget)
+            {{-- Admin only: editable form --}}
             <form method="POST" action="{{ route('admin.targets.team', $team) }}" class="row g-2 align-items-end">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
@@ -143,8 +145,8 @@
                 @endif
             </div>
 
-            @if($canManageThisTeam)
-            {{-- Admin only: editable --}}
+            @if($canManageUserTargets)
+            {{-- Admin / Team Head: editable --}}
             <form method="POST" action="{{ route('admin.targets.user', $team) }}" class="row g-2 align-items-end">
                 @csrf
                 <input type="hidden" name="user_id" value="{{ $member->id }}">
@@ -186,8 +188,8 @@
             <p class="text-muted mb-0">No users in this team yet.</p>
         @endforelse
 
-        {{-- Progress bar (only if team target set and user is manager/admin/head) --}}
-        @if($team->currentTarget && $canManageThisTeam)
+        {{-- Progress bar --}}
+        @if($team->currentTarget && $canManageUserTargets)
             @php
                 $totalUserTargets = $team->users->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
                 $teamTarget       = $team->currentTarget->target_amount;

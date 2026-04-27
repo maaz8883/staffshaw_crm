@@ -2,7 +2,7 @@
 
 <div class="row">
     <div class="col-md-6 mb-3">
-        <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+        <label for="title" class="form-label">Project Title <span class="text-danger">*</span></label>
         <input type="text" id="title" name="title" class="form-control"
             value="{{ old('title', $sale->title ?? '') }}" required>
     </div>
@@ -30,24 +30,6 @@
     </div>
 
     <div class="col-md-6 mb-3">
-        <label for="status" class="form-label">Status <span class="text-danger">*</span></label>
-        @if(!empty($sale) && $sale->is_refunded)
-            <div>
-                <span class="badge bg-dark">{{ $sale->statusLabel() }}</span>
-                <p class="text-muted small mb-0 mt-1">Refund is managed from the sales list; status stays Refunded until reverted.</p>
-            </div>
-        @else
-        <select id="status" name="status" class="form-select" required>
-            @foreach(\App\Models\Sale::STATUSES as $s)
-                <option value="{{ $s }}" {{ old('status', $sale->status ?? 'completed') === $s ? 'selected' : '' }}>
-                    {{ ucfirst($s) }}
-                </option>
-            @endforeach
-        </select>
-        @endif
-    </div>
-
-    <div class="col-md-6 mb-3">
         <label for="sale_type" class="form-label">Sale type <span class="text-danger">*</span></label>
         <select id="sale_type" name="sale_type" class="form-select" required>
             @php $st = old('sale_type', isset($sale) ? $sale->sale_type : \App\Models\Sale::TYPE_FRONT); @endphp
@@ -62,7 +44,7 @@
     </div>
 
     <div class="col-12 mb-3">
-        <label for="notes" class="form-label">Notes</label>
+        <label for="notes" class="form-label">Description</label>
         <textarea id="notes" name="notes" class="form-control" rows="3">{{ old('notes', $sale->notes ?? '') }}</textarea>
     </div>
 </div>

@@ -9,12 +9,18 @@
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     @stack('styles')
+    <script>if(localStorage.getItem('crm_sidebar_collapsed')==='1')document.documentElement.classList.add('sidebar-collapsed-init');</script>
+    <style>.sidebar-collapsed-init .sidebar{width:64px}.sidebar-collapsed-init main{margin-left:64px}</style>
 </head>
 <body>
     <!-- Sidebar -->
     <nav class="sidebar">
         <div class="brand">
-            <h4><i class="bi bi-layout-text-window-reverse"></i> CRM</h4>
+            <i class="bi bi-layout-text-window-reverse brand-icon"></i>
+            <span class="brand-name">CRM</span>
+            <button id="sidebar-toggle" title="Toggle sidebar">
+                <i class="bi bi-list"></i>
+            </button>
         </div>
         <ul class="nav flex-column">
             @php
@@ -41,51 +47,49 @@
             @endphp
 
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
-                    <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+                <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}" title="Dashboard">
+                    <i class="bi bi-speedometer2"></i> <span class="nav-label">Dashboard</span>
                 </a>
             </li>
 
             @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
-                    <i class="bi bi-people-fill"></i> <span>Users</span>
+                <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}" title="Users">
+                    <i class="bi bi-people-fill"></i> <span class="nav-label">Users</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.companies.*') ? 'active' : '' }}" href="{{ route('admin.companies.index') }}" title="Companies">
+                    <i class="bi bi-buildings"></i> <span class="nav-label">Companies</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}" title="Teams">
+                    <i class="bi bi-people"></i> <span class="nav-label">Teams</span>
                 </a>
             </li>
             @endif
 
-            @if(auth()->user()->hasRole('Admin'))
-            <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.companies.*') ? 'active' : '' }}" href="{{ route('admin.companies.index') }}">
-                    <i class="bi bi-buildings"></i> <span>Companies</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}">
-                    <i class="bi bi-people"></i> <span>Teams</span>
-                </a>
-            </li>
-            @endif
             @if(!$isPpc)
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}">
-                    <i class="bi bi-bullseye"></i> <span>Targets</span>
+                <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}" title="Targets">
+                    <i class="bi bi-bullseye"></i> <span class="nav-label">Targets</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.sales.*') ? 'active' : '' }}" href="{{ route('admin.sales.index') }}">
-                    <i class="bi bi-cash-stack"></i> <span>Sales</span>
+                <a class="nav-link {{ request()->routeIs('admin.sales.*') ? 'active' : '' }}" href="{{ route('admin.sales.index') }}" title="Sales">
+                    <i class="bi bi-cash-stack"></i> <span class="nav-label">Sales</span>
                 </a>
             </li>
             @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}">
-                    <i class="bi bi-graph-up-arrow"></i> <span>Reports</span>
+                <a class="nav-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}" title="Reports">
+                    <i class="bi bi-graph-up-arrow"></i> <span class="nav-label">Reports</span>
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.activity-logs.*') ? 'active' : '' }}" href="{{ route('admin.activity-logs.index') }}">
-                    <i class="bi bi-clock-history"></i> <span>Activity Logs</span>
+                <a class="nav-link {{ request()->routeIs('admin.activity-logs.*') ? 'active' : '' }}" href="{{ route('admin.activity-logs.index') }}" title="Activity Logs">
+                    <i class="bi bi-clock-history"></i> <span class="nav-label">Activity Logs</span>
                 </a>
             </li>
             @endif
@@ -93,36 +97,39 @@
 
             @if($isPpc || auth()->user()->hasRole('Admin'))
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.ppc.*') ? 'active' : '' }}" href="{{ route('admin.ppc.index') }}">
-                    <i class="bi bi-graph-up"></i> <span>PPC Spending</span>
+                <a class="nav-link {{ request()->routeIs('admin.ppc.*') ? 'active' : '' }}" href="{{ route('admin.ppc.index') }}" title="PPC Spending">
+                    <i class="bi bi-graph-up"></i> <span class="nav-label">PPC Spending</span>
                 </a>
             </li>
             @endif
 
             @if($isPpc)
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}">
-                    <i class="bi bi-people"></i> <span>Teams</span>
+                <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}" title="Teams">
+                    <i class="bi bi-people"></i> <span class="nav-label">Teams</span>
                 </a>
             </li>
             @endif
+
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.profile.*') ? 'active' : '' }}" href="{{ route('admin.profile.show') }}">
-                    <i class="bi bi-person-circle"></i> <span>Profile</span>
+                <a class="nav-link {{ request()->routeIs('admin.profile.*') ? 'active' : '' }}" href="{{ route('admin.profile.show') }}" title="Profile">
+                    <i class="bi bi-person-circle"></i> <span class="nav-label">Profile</span>
                 </a>
             </li>
+
             @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" href="{{ route('admin.settings.index') }}">
-                    <i class="bi bi-gear"></i> <span>Settings</span>
+                <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" href="{{ route('admin.settings.index') }}" title="Settings">
+                    <i class="bi bi-gear"></i> <span class="nav-label">Settings</span>
                 </a>
             </li>
             @endif
+
             <li class="nav-item">
-                <form action="{{ route('admin.logout') }}" method="POST" class="d-inline w-100">
+                <form action="{{ route('admin.logout') }}" method="POST">
                     @csrf
-                    <button type="submit" class="nav-link border-0 bg-transparent w-100 text-start">
-                        <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
+                    <button type="submit" class="nav-link w-100" title="Logout">
+                        <i class="bi bi-box-arrow-right"></i> <span class="nav-label">Logout</span>
                     </button>
                 </form>
             </li>
@@ -343,6 +350,40 @@
                 poll();
                 schedule();
             }, 800);
+        })();
+    </script>
+    <script>
+        (function () {
+            var STORAGE_KEY = 'crm_sidebar_collapsed';
+            var body = document.body;
+
+            // Restore saved state instantly (before paint)
+            if (localStorage.getItem(STORAGE_KEY) === '1') {
+                body.classList.add('sidebar-collapsed');
+            }
+            // Remove init class (already handled by body class now)
+            document.documentElement.classList.remove('sidebar-collapsed-init');
+
+            document.getElementById('sidebar-toggle').addEventListener('click', function () {
+                body.classList.toggle('sidebar-collapsed');
+                localStorage.setItem(STORAGE_KEY, body.classList.contains('sidebar-collapsed') ? '1' : '0');
+                // Re-init tooltips on state change
+                initTooltips();
+            });
+
+            function initTooltips() {
+                var collapsed = body.classList.contains('sidebar-collapsed');
+                document.querySelectorAll('.sidebar .nav-link[title]').forEach(function (el) {
+                    var existing = bootstrap.Tooltip.getInstance(el);
+                    if (existing) existing.dispose();
+                    if (collapsed) {
+                        new bootstrap.Tooltip(el, { placement: 'right', trigger: 'hover' });
+                    }
+                });
+            }
+
+            // Init after bootstrap loads
+            setTimeout(initTooltips, 100);
         })();
     </script>
     @yield('scripts')

@@ -95,7 +95,9 @@ class TargetController extends Controller
 
     public function setTeamTarget(Request $request, Team $team): RedirectResponse
     {
-        $this->authorizeTeam($team);
+        if (! Auth::user()->hasRole('Admin')) {
+            abort(403, 'Only admins can set team targets.');
+        }
 
         $validated = $request->validate([
             'month'         => 'required|integer|min:1|max:12',

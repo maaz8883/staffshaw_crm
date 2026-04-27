@@ -202,7 +202,6 @@ class SaleController extends Controller
             'client_name' => 'required|string|max:255',
             'amount'      => 'required|numeric|min:0',
             'sale_date'   => 'required|date',
-            'status'      => 'required|in:' . implode(',', Sale::STATUSES),
             'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
             'notes'       => 'nullable|string',
         ]);
@@ -213,6 +212,7 @@ class SaleController extends Controller
             'user_id'         => $user->id,
             'team_id'         => $user->team_id,
             'company_id'      => $user->company_id,
+            'status'          => 'completed',
             'approval_status' => Sale::APPROVAL_PENDING,
         ]));
 
@@ -256,9 +256,6 @@ class SaleController extends Controller
             'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
             'notes'       => 'nullable|string',
         ];
-        if (! $sale->is_refunded) {
-            $rules['status'] = 'required|in:' . implode(',', Sale::STATUSES);
-        }
 
         $validated = $request->validate($rules);
 
