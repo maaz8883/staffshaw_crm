@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 class SettingController extends Controller
@@ -46,6 +49,11 @@ class SettingController extends Controller
 
         Setting::set('otp_emails', implode("\n", $lines));
 
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_OTP_UPDATED,
+            'Updated OTP recipient emails',
+            ['email_count' => count($lines)]
+        );
+
         return back()->with('success', 'OTP settings saved.')->withFragment('otp');
     }
 
@@ -73,6 +81,11 @@ class SettingController extends Controller
         ]);
 
         Artisan::call('config:clear');
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SMTP_UPDATED,
+            'Updated SMTP settings',
+            ['host' => $request->mail_host, 'port' => $request->mail_port]
+        );
 
         return back()->with('success', 'SMTP settings saved.')->withFragment('smtp');
     }

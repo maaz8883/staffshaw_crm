@@ -23,6 +23,10 @@ class UserActivityLog extends Model
     public const TYPE_SALE_DELETED = 'sale_deleted';
     public const TYPE_PPC_ADDED    = 'ppc_added';
     public const TYPE_PPC_DELETED  = 'ppc_deleted';
+    public const TYPE_SMTP_UPDATED = 'smtp_updated';
+    public const TYPE_OTP_UPDATED  = 'otp_updated';
+    public const TYPE_BACKUP_CREATED = 'backup_created';
+    public const TYPE_BACKUP_DELETED = 'backup_deleted';
 
     public function user(): BelongsTo
     {
@@ -32,14 +36,18 @@ class UserActivityLog extends Model
     public function typeBadgeClass(): string
     {
         return match ($this->type) {
-            self::TYPE_LOGIN        => 'success',
-            self::TYPE_LOGOUT       => 'secondary',
-            self::TYPE_SALE_CREATED => 'primary',
-            self::TYPE_SALE_UPDATED => 'warning',
-            self::TYPE_SALE_DELETED => 'danger',
-            self::TYPE_PPC_ADDED    => 'info',
-            self::TYPE_PPC_DELETED  => 'danger',
-            default                 => 'light',
+            self::TYPE_LOGIN          => 'success',
+            self::TYPE_LOGOUT         => 'secondary',
+            self::TYPE_SALE_CREATED   => 'primary',
+            self::TYPE_SALE_UPDATED   => 'warning',
+            self::TYPE_SALE_DELETED   => 'danger',
+            self::TYPE_PPC_ADDED      => 'info',
+            self::TYPE_PPC_DELETED    => 'danger',
+            self::TYPE_SMTP_UPDATED   => 'info',
+            self::TYPE_OTP_UPDATED    => 'info',
+            self::TYPE_BACKUP_CREATED => 'success',
+            self::TYPE_BACKUP_DELETED => 'danger',
+            default                   => 'light',
         };
     }
 }

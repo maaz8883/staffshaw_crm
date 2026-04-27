@@ -87,6 +87,7 @@ Route::prefix('admin')->group(function () {
             Route::get('reports/user',    [ReportController::class, 'user'])->name('admin.reports.user');
 
             Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('admin.activity-logs.index');
+            Route::get('activity-logs/datatable', [ActivityLogController::class, 'datatable'])->name('admin.activity-logs.datatable');
 
             Route::get('settings',      [SettingController::class, 'index'])->name('admin.settings.index');
             Route::put('settings/otp',  [SettingController::class, 'updateOtp'])->name('admin.settings.otp');

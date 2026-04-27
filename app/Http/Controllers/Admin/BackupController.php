@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -97,6 +100,11 @@ class BackupController extends Controller
         gzclose($gz);
         unlink($sqlFile); // remove plain .sql
 
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_BACKUP_CREATED,
+            'Created database backup: ' . basename($gzFile),
+            ['filename' => basename($gzFile), 'size' => filesize($gzFile)]
+        );
+
         return back()->with('success', 'Backup created: ' . basename($gzFile))->withFragment('backup');
     }
 
@@ -113,6 +121,11 @@ class BackupController extends Controller
         $path = "{$this->folder}/{$file}";
         if (Storage::disk($this->disk)->exists($path)) {
             Storage::disk($this->disk)->delete($path);
+            
+            ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_BACKUP_DELETED,
+                'Deleted database backup: ' . $file,
+                ['filename' => $file]
+            );
         }
 
         return back()->with('success', 'Backup deleted.')->withFragment('backup');
