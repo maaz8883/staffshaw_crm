@@ -314,6 +314,13 @@ class SaleController extends Controller
 
         SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), true);
 
+        // Log activity
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_SALE_APPROVED,
+            "Approved sale: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
+        );
+
         return back()->with('success', "Sale \"{$sale->title}\" approved.");
     }
 
@@ -333,6 +340,13 @@ class SaleController extends Controller
         ]);
 
         SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), false);
+
+        // Log activity
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_SALE_REJECTED,
+            "Rejected sale: {$sale->title} (\$" . number_format($sale->amount, 2) . ") - Reason: {$request->approval_note}"
+        );
 
         return back()->with('success', "Sale \"{$sale->title}\" rejected.");
     }
@@ -360,6 +374,13 @@ class SaleController extends Controller
                 'status_before_refund' => $prev,
                 'status'               => Sale::STATUS_REFUNDED,
             ]);
+
+            // Log refund activity
+            ActivityLogger::log(
+                Auth::user(),
+                UserActivityLog::TYPE_SALE_REFUNDED,
+                "Marked sale as refunded: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
+            );
         } else {
             $sale->update([
                 'is_refunded'          => false,
@@ -368,6 +389,13 @@ class SaleController extends Controller
                 'status'               => $sale->status_before_refund ?? 'completed',
                 'status_before_refund' => null,
             ]);
+
+            // Log refund revert activity
+            ActivityLogger::log(
+                Auth::user(),
+                UserActivityLog::TYPE_SALE_REFUND_REVERTED,
+                "Reverted refund for sale: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
+            );
         }
 
         return redirect()

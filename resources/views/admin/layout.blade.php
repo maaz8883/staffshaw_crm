@@ -9,7 +9,10 @@
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     @stack('styles')
-    <script>if(localStorage.getItem('crm_sidebar_collapsed')==='1')document.documentElement.classList.add('sidebar-collapsed-init');</script>
+    <script>
+        if(localStorage.getItem('crm_sidebar_collapsed')==='1')document.documentElement.classList.add('sidebar-collapsed-init');
+        if(localStorage.getItem('crm_theme')==='dark')document.documentElement.setAttribute('data-theme','dark');
+    </script>
     <style>.sidebar-collapsed-init .sidebar{width:64px}.sidebar-collapsed-init main{margin-left:64px}</style>
 </head>
 <body>
@@ -139,7 +142,12 @@
                 @endif
                 @yield('page-title', 'Admin')
             </h1>
-            @include('admin.partials.notifications')
+            <div class="d-flex align-items-center gap-2">
+                <button id="theme-toggle" class="btn btn-sm btn-outline-secondary" title="Toggle theme">
+                    <i class="bi bi-moon-fill" id="theme-icon"></i>
+                </button>
+                @include('admin.partials.notifications')
+            </div>
         </div>
 
         @if(session('success'))
@@ -376,6 +384,34 @@
 
             // Init after bootstrap loads
             setTimeout(initTooltips, 100);
+        })();
+
+        // Theme toggle
+        (function () {
+            var THEME_KEY = 'crm_theme';
+            var html = document.documentElement;
+            var themeBtn = document.getElementById('theme-toggle');
+            var themeIcon = document.getElementById('theme-icon');
+
+            function setTheme(theme) {
+                if (theme === 'dark') {
+                    html.setAttribute('data-theme', 'dark');
+                    themeIcon.className = 'bi bi-sun-fill';
+                } else {
+                    html.removeAttribute('data-theme');
+                    themeIcon.className = 'bi bi-moon-fill';
+                }
+                localStorage.setItem(THEME_KEY, theme);
+            }
+
+            // Restore saved theme
+            var saved = localStorage.getItem(THEME_KEY) || 'light';
+            setTheme(saved);
+
+            themeBtn.addEventListener('click', function () {
+                var current = html.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
         })();
     </script>
     @yield('scripts')

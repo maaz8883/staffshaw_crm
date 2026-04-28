@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\Team;
 use App\Models\User;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use App\Support\AuthScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -76,7 +79,15 @@ class TeamController extends Controller
             'description'  => 'nullable|string',
         ]);
 
-        Team::query()->create($validated);
+        $team = Team::query()->create($validated);
+
+        // Log activity
+        $companyName = $team->company?->name ?? 'No company';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_TEAM_CREATED,
+            "Created team: {$team->name} (Company: {$companyName})"
+        );
 
         return redirect()
             ->route('admin.teams.index')
@@ -121,7 +132,18 @@ class TeamController extends Controller
             'description'  => 'nullable|string',
         ]);
 
+        $oldName = $team->name;
         $team->update($validated);
+
+        // Log activity
+        $team->load('company');
+        $companyName = $team->company?->name ?? 'No company';
+        $nameChanged = $oldName !== $team->name ? " (renamed from {$oldName})" : '';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_TEAM_UPDATED,
+            "Updated team: {$team->name}{$nameChanged} (Company: {$companyName})"
+        );
 
         return redirect()
             ->route('admin.teams.index')
@@ -130,7 +152,18 @@ class TeamController extends Controller
 
     public function destroy(Team $team): RedirectResponse
     {
+        $teamName = $team->name;
+        $companyName = $team->company?->name ?? 'No company';
+        $membersCount = $team->users()->count();
+
         $team->delete();
+
+        // Log activity
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_TEAM_DELETED,
+            "Deleted team: {$teamName} (Company: {$companyName}, {$membersCount} members)"
+        );
 
         return redirect()
             ->route('admin.teams.index')

@@ -7,10 +7,13 @@ use App\Models\Company;
 use App\Models\Role;
 use App\Models\Team;
 use App\Models\User;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use App\Support\AuthScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -91,7 +94,7 @@ class UserController extends Controller
             'team_id'    => 'nullable|exists:teams,id',
         ]);
 
-        User::query()->create([
+        $user = User::query()->create([
             'name'            => $validated['name'],
             'email'           => $validated['email'],
             'password'        => Hash::make($validated['password']),
@@ -100,6 +103,17 @@ class UserController extends Controller
             'team_id'         => $validated['team_id'] ?? null,
             'account_status'  => User::ACCOUNT_ACTIVE,
         ]);
+
+        // Log activity
+        $user->load(['role', 'team', 'company']);
+        $roleName = $user->role?->name ?? 'No role';
+        $teamName = $user->team?->name ?? 'No team';
+        $companyName = $user->company?->name ?? 'No company';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_USER_CREATED,
+            "Created user: {$user->name} ({$user->email}) - Role: {$roleName}, Team: {$teamName}, Company: {$companyName}"
+        );
 
         return redirect()
             ->route('admin.users.index')
@@ -136,6 +150,9 @@ class UserController extends Controller
             'team_id'    => 'nullable|exists:teams,id',
         ]);
 
+        $oldName = $user->name;
+        $oldEmail = $user->email;
+
         $payload = [
             'name'       => $validated['name'],
             'email'      => $validated['email'],
@@ -150,6 +167,23 @@ class UserController extends Controller
 
         $user->update($payload);
 
+        // Log activity
+        $user->load(['role', 'team', 'company']);
+        $roleName = $user->role?->name ?? 'No role';
+        $teamName = $user->team?->name ?? 'No team';
+        $companyName = $user->company?->name ?? 'No company';
+        $changes = [];
+        if ($oldName !== $user->name) $changes[] = "name changed from '{$oldName}'";
+        if ($oldEmail !== $user->email) $changes[] = "email changed from '{$oldEmail}'";
+        if (!empty($validated['password'])) $changes[] = "password updated";
+        $changeText = !empty($changes) ? ' (' . implode(', ', $changes) . ')' : '';
+        
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_USER_UPDATED,
+            "Updated user: {$user->name} ({$user->email}){$changeText} - Role: {$roleName}, Team: {$teamName}, Company: {$companyName}"
+        );
+
         return redirect()
             ->route('admin.users.index')
             ->with('success', 'User updated successfully.');
@@ -157,7 +191,20 @@ class UserController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
+        $userName = $user->name;
+        $userEmail = $user->email;
+        $roleName = $user->role?->name ?? 'No role';
+        $teamName = $user->team?->name ?? 'No team';
+        $companyName = $user->company?->name ?? 'No company';
+
         $user->delete();
+
+        // Log activity
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_USER_DELETED,
+            "Deleted user: {$userName} ({$userEmail}) - Role: {$roleName}, Team: {$teamName}, Company: {$companyName}"
+        );
 
         return redirect()
             ->route('admin.users.index')

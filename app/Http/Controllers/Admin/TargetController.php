@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamTarget;
 use App\Models\UserTarget;
+use App\Models\UserActivityLog;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -106,9 +108,24 @@ class TargetController extends Controller
             'notes'         => 'nullable|string',
         ]);
 
+        $existing = TeamTarget::where([
+            'team_id' => $team->id,
+            'month'   => $validated['month'],
+            'year'    => $validated['year'],
+        ])->first();
+
         TeamTarget::updateOrCreate(
             ['team_id' => $team->id, 'month' => $validated['month'], 'year' => $validated['year']],
             ['target_amount' => $validated['target_amount'], 'notes' => $validated['notes'] ?? null]
+        );
+
+        // Log activity
+        $monthName = \DateTime::createFromFormat('!m', $validated['month'])->format('F');
+        $action = $existing ? 'Updated' : 'Set';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_TEAM_TARGET_SET,
+            "{$action} team target for {$team->name}: \$" . number_format($validated['target_amount'], 2) . " ({$monthName} {$validated['year']})"
         );
 
         return back()->with('success', "Team target set for {$team->name}.");
@@ -134,6 +151,13 @@ class TargetController extends Controller
             return back()->withErrors(['user_id' => 'This user does not belong to the selected team.']);
         }
 
+        $existing = UserTarget::where([
+            'user_id' => $validated['user_id'],
+            'team_id' => $team->id,
+            'month'   => $validated['month'],
+            'year'    => $validated['year'],
+        ])->first();
+
         UserTarget::updateOrCreate(
             [
                 'user_id' => $validated['user_id'],
@@ -142,6 +166,16 @@ class TargetController extends Controller
                 'year'    => $validated['year'],
             ],
             ['target_amount' => $validated['target_amount'], 'notes' => $validated['notes'] ?? null]
+        );
+
+        // Log activity
+        $targetUser = $team->users->firstWhere('id', $validated['user_id']);
+        $monthName = \DateTime::createFromFormat('!m', $validated['month'])->format('F');
+        $action = $existing ? 'Updated' : 'Set';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_USER_TARGET_SET,
+            "{$action} user target for {$targetUser->name} ({$team->name}): \$" . number_format($validated['target_amount'], 2) . " ({$monthName} {$validated['year']})"
         );
 
         return back()->with('success', 'User target updated.');
