@@ -32,6 +32,8 @@ class User extends Authenticatable
         'password',
         'role_id',
         'team_id',
+        'sub_team_id',
+        'sub_team_head_id',
         'company_id',
         'account_status',
         'rejection_note',
@@ -65,6 +67,16 @@ class User extends Authenticatable
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function subTeam(): BelongsTo
+    {
+        return $this->belongsTo(Team::class, 'sub_team_id');
+    }
+
+    public function subTeamHead(): BelongsTo
+    {
+        return $this->belongsTo(SubTeamHead::class, 'sub_team_head_id');
     }
 
     public function company(): BelongsTo

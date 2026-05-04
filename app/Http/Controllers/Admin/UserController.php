@@ -86,33 +86,39 @@ class UserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'       => 'required|string|max:255',
-            'email'      => 'required|email|max:255|unique:users,email',
-            'password'   => 'required|string|min:8|confirmed',
-            'role_id'    => 'nullable|exists:roles,id',
-            'company_id' => 'nullable|exists:companies,id',
-            'team_id'    => 'nullable|exists:teams,id',
+            'name'             => 'required|string|max:255',
+            'email'            => 'required|email|max:255|unique:users,email',
+            'password'         => 'required|string|min:8|confirmed',
+            'role_id'          => 'nullable|exists:roles,id',
+            'company_id'       => 'nullable|exists:companies,id',
+            'team_id'          => 'nullable|exists:teams,id',
+            'sub_team_id'      => 'nullable|exists:teams,id',
+            'sub_team_head_id' => 'nullable|exists:sub_team_heads,id',
         ]);
 
         $user = User::query()->create([
-            'name'            => $validated['name'],
-            'email'           => $validated['email'],
-            'password'        => Hash::make($validated['password']),
-            'role_id'         => $validated['role_id'] ?? null,
-            'company_id'      => $validated['company_id'] ?? null,
-            'team_id'         => $validated['team_id'] ?? null,
-            'account_status'  => User::ACCOUNT_ACTIVE,
+            'name'             => $validated['name'],
+            'email'            => $validated['email'],
+            'password'         => Hash::make($validated['password']),
+            'role_id'          => $validated['role_id'] ?? null,
+            'company_id'       => $validated['company_id'] ?? null,
+            'team_id'          => $validated['team_id'] ?? null,
+            'sub_team_id'      => $validated['sub_team_id'] ?? null,
+            'sub_team_head_id' => $validated['sub_team_head_id'] ?? null,
+            'account_status'   => User::ACCOUNT_ACTIVE,
         ]);
 
         // Log activity
-        $user->load(['role', 'team', 'company']);
+        $user->load(['role', 'team', 'subTeam', 'subTeamHead', 'company']);
         $roleName = $user->role?->name ?? 'No role';
         $teamName = $user->team?->name ?? 'No team';
+        $subTeamName = $user->subTeam ? " / {$user->subTeam->name}" : '';
+        $subTeamHeadName = $user->subTeamHead ? " (Sub-Team Head: {$user->subTeamHead->title})" : '';
         $companyName = $user->company?->name ?? 'No company';
         ActivityLogger::log(
             Auth::user(),
             UserActivityLog::TYPE_USER_CREATED,
-            "Created user: {$user->name} ({$user->email}) - Role: {$roleName}, Team: {$teamName}, Company: {$companyName}"
+            "Created user: {$user->name} ({$user->email}) - Role: {$roleName}, Team: {$teamName}{$subTeamName}{$subTeamHeadName}, Company: {$companyName}"
         );
 
         return redirect()
@@ -142,23 +148,27 @@ class UserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         $validated = $request->validate([
-            'name'       => 'required|string|max:255',
-            'email'      => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password'   => 'nullable|string|min:8|confirmed',
-            'role_id'    => 'nullable|exists:roles,id',
-            'company_id' => 'nullable|exists:companies,id',
-            'team_id'    => 'nullable|exists:teams,id',
+            'name'             => 'required|string|max:255',
+            'email'            => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password'         => 'nullable|string|min:8|confirmed',
+            'role_id'          => 'nullable|exists:roles,id',
+            'company_id'       => 'nullable|exists:companies,id',
+            'team_id'          => 'nullable|exists:teams,id',
+            'sub_team_id'      => 'nullable|exists:teams,id',
+            'sub_team_head_id' => 'nullable|exists:sub_team_heads,id',
         ]);
 
         $oldName = $user->name;
         $oldEmail = $user->email;
 
         $payload = [
-            'name'       => $validated['name'],
-            'email'      => $validated['email'],
-            'role_id'    => $validated['role_id'] ?? null,
-            'company_id' => $validated['company_id'] ?? null,
-            'team_id'    => $validated['team_id'] ?? null,
+            'name'             => $validated['name'],
+            'email'            => $validated['email'],
+            'role_id'          => $validated['role_id'] ?? null,
+            'company_id'       => $validated['company_id'] ?? null,
+            'team_id'          => $validated['team_id'] ?? null,
+            'sub_team_id'      => $validated['sub_team_id'] ?? null,
+            'sub_team_head_id' => $validated['sub_team_head_id'] ?? null,
         ];
 
         if (! empty($validated['password'])) {
@@ -168,9 +178,11 @@ class UserController extends Controller
         $user->update($payload);
 
         // Log activity
-        $user->load(['role', 'team', 'company']);
+        $user->load(['role', 'team', 'subTeam', 'subTeamHead', 'company']);
         $roleName = $user->role?->name ?? 'No role';
         $teamName = $user->team?->name ?? 'No team';
+        $subTeamName = $user->subTeam ? " / {$user->subTeam->name}" : '';
+        $subTeamHeadName = $user->subTeamHead ? " (Sub-Team Head: {$user->subTeamHead->title})" : '';
         $companyName = $user->company?->name ?? 'No company';
         $changes = [];
         if ($oldName !== $user->name) $changes[] = "name changed from '{$oldName}'";
@@ -181,7 +193,7 @@ class UserController extends Controller
         ActivityLogger::log(
             Auth::user(),
             UserActivityLog::TYPE_USER_UPDATED,
-            "Updated user: {$user->name} ({$user->email}){$changeText} - Role: {$roleName}, Team: {$teamName}, Company: {$companyName}"
+            "Updated user: {$user->name} ({$user->email}){$changeText} - Role: {$roleName}, Team: {$teamName}{$subTeamName}{$subTeamHeadName}, Company: {$companyName}"
         );
 
         return redirect()

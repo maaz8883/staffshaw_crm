@@ -48,6 +48,15 @@
     <small class="text-muted">Select a company first to load its teams.</small>
 </div>
 
+<div class="mb-3" id="sub-team-head-wrap" style="display: none;">
+    <label for="sub_team_head_id" class="form-label">Sub-Team Head (Optional)</label>
+    <select id="sub_team_head_id" name="sub_team_head_id" class="form-select">
+        <option value="">-- No Sub-Team Head --</option>
+        {{-- Populated via AJAX based on team --}}
+    </select>
+    <small class="text-muted">Select a team first to load its sub-team heads.</small>
+</div>
+
 <div class="mb-3">
     <label for="password" class="form-label">Password</label>
     <input type="password" id="password" name="password" class="form-control"
@@ -62,18 +71,26 @@
 
 <script>
     (function () {
-        var roleSelect    = document.getElementById('role_id');
-        var companySelect = document.getElementById('company_id');
-        var teamSelect    = document.getElementById('team_id');
-        var companyWrap   = companySelect.closest('.mb-3');
-        var teamWrap      = teamSelect.closest('.mb-3');
-        var currentTeamId = '{{ old('team_id', $user->team_id ?? '') }}';
+        var roleSelect       = document.getElementById('role_id');
+        var companySelect    = document.getElementById('company_id');
+        var teamSelect       = document.getElementById('team_id');
+        var subTeamHeadSelect = document.getElementById('sub_team_head_id');
+        var companyWrap      = companySelect.closest('.mb-3');
+        var teamWrap         = teamSelect.closest('.mb-3');
+        var subTeamHeadWrap  = document.getElementById('sub-team-head-wrap');
+        var currentTeamId    = '{{ old('team_id', $user->team_id ?? '') }}';
+        var currentSubTeamHeadId = '{{ old('sub_team_head_id', $user->sub_team_head_id ?? '') }}';
 
-        // PPC role IDs — hide company/team for these
-        var ppcRoleIds = @json($roles->where('name', 'PPC')->pluck('id')->values());
+        // Role IDs
+        var ppcRoleIds   = @json($roles->where('name', 'PPC')->pluck('id')->values());
+        var agentRoleIds = @json($roles->where('name', 'Agent')->pluck('id')->values());
 
         function isPpc() {
             return ppcRoleIds.includes(parseInt(roleSelect.value));
+        }
+
+        function isAgent() {
+            return agentRoleIds.includes(parseInt(roleSelect.value));
         }
 
         function toggleCompanyTeam() {
@@ -83,11 +100,27 @@
             if (hide) {
                 companySelect.value = '';
                 teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
+                subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
+                subTeamHeadWrap.style.display = 'none';
+            } else {
+                toggleSubTeamHead();
+            }
+        }
+
+        function toggleSubTeamHead() {
+            // Show sub-team head dropdown only for Agent role
+            if (isAgent() && teamSelect.value) {
+                loadSubTeamHeads(teamSelect.value, currentSubTeamHeadId);
+            } else {
+                subTeamHeadWrap.style.display = 'none';
+                subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
             }
         }
 
         function loadTeams(companyId, preselectId) {
             teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
+            subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
+            subTeamHeadWrap.style.display = 'none';
             if (!companyId) return;
 
             fetch('/admin/companies/' + companyId + '/teams')
@@ -100,13 +133,48 @@
                         if (String(t.id) === String(preselectId)) opt.selected = true;
                         teamSelect.appendChild(opt);
                     });
+                    if (preselectId && isAgent()) {
+                        loadSubTeamHeads(preselectId, currentSubTeamHeadId);
+                    }
                 });
         }
 
-        roleSelect.addEventListener('change', toggleCompanyTeam);
+        function loadSubTeamHeads(teamId, preselectId) {
+            subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
+            if (!teamId || !isAgent()) {
+                subTeamHeadWrap.style.display = 'none';
+                return;
+            }
+
+            fetch('/admin/teams/' + teamId + '/sub-team-heads')
+                .then(function (r) { return r.json(); })
+                .then(function (subTeamHeads) {
+                    if (subTeamHeads.length > 0) {
+                        subTeamHeadWrap.style.display = '';
+                        subTeamHeads.forEach(function (sth) {
+                            var opt = document.createElement('option');
+                            opt.value = sth.id;
+                            opt.textContent = sth.title + ' - ' + sth.user_name;
+                            if (String(sth.id) === String(preselectId)) opt.selected = true;
+                            subTeamHeadSelect.appendChild(opt);
+                        });
+                    } else {
+                        subTeamHeadWrap.style.display = 'none';
+                    }
+                });
+        }
+
+        roleSelect.addEventListener('change', function() {
+            toggleCompanyTeam();
+            toggleSubTeamHead();
+        });
 
         companySelect.addEventListener('change', function () {
             loadTeams(this.value, '');
+        });
+
+        teamSelect.addEventListener('change', function () {
+            toggleSubTeamHead();
         });
 
         // On page load

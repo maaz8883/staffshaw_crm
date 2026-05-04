@@ -13,7 +13,9 @@ class Team extends Model
 
     protected $fillable = [
         'company_id',
+        'parent_team_id',
         'team_head_id',
+        'sub_team_head_id',
         'name',
         'description',
     ];
@@ -26,6 +28,21 @@ class Team extends Model
     public function teamHead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'team_head_id');
+    }
+
+    public function subTeamHead(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sub_team_head_id');
+    }
+
+    public function parentTeam(): BelongsTo
+    {
+        return $this->belongsTo(Team::class, 'parent_team_id');
+    }
+
+    public function subTeams(): HasMany
+    {
+        return $this->hasMany(Team::class, 'parent_team_id');
     }
 
     public function users(): HasMany
@@ -41,5 +58,10 @@ class Team extends Model
     public function userTargets(): HasMany
     {
         return $this->hasMany(UserTarget::class);
+    }
+
+    public function subTeamHeads(): HasMany
+    {
+        return $this->hasMany(SubTeamHead::class);
     }
 }

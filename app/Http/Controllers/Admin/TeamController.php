@@ -65,28 +65,49 @@ class TeamController extends Controller
     public function create(): View
     {
         $companies = Company::query()->orderBy('name')->get();
-        $users     = User::query()->orderBy('name')->get();
+        $allUsers  = User::query()->orderBy('name')->get();
+        $teamUsers = collect(); // Empty for create
 
-        return view('admin.teams.create', compact('companies', 'users'));
+        return view('admin.teams.create', compact('companies', 'allUsers', 'teamUsers'));
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'company_id'   => 'nullable|exists:companies,id',
-            'team_head_id' => 'nullable|exists:users,id',
-            'name'         => 'required|string|max:255|unique:teams,name',
-            'description'  => 'nullable|string',
+            'company_id'       => 'nullable|exists:companies,id',
+            'team_head_id'     => 'nullable|exists:users,id',
+            'name'             => 'required|string|max:255|unique:teams,name',
+            'description'      => 'nullable|string',
+            'sub_heads'        => 'nullable|array',
+            'sub_heads.*.title' => 'required|string|max:255',
+            'sub_heads.*.user_id' => 'required|exists:users,id',
         ]);
 
-        $team = Team::query()->create($validated);
+        $team = Team::query()->create([
+            'company_id'   => $validated['company_id'] ?? null,
+            'team_head_id' => $validated['team_head_id'] ?? null,
+            'name'         => $validated['name'],
+            'description'  => $validated['description'] ?? null,
+        ]);
+
+        // Create sub-team heads
+        if (!empty($validated['sub_heads'])) {
+            foreach ($validated['sub_heads'] as $subHead) {
+                $team->subTeamHeads()->create([
+                    'title'   => $subHead['title'],
+                    'user_id' => $subHead['user_id'],
+                ]);
+            }
+        }
 
         // Log activity
         $companyName = $team->company?->name ?? 'No company';
+        $subHeadsCount = $team->subTeamHeads()->count();
+        $subHeadsInfo = $subHeadsCount > 0 ? " with {$subHeadsCount} sub-team heads" : '';
         ActivityLogger::log(
             Auth::user(),
             UserActivityLog::TYPE_TEAM_CREATED,
-            "Created team: {$team->name} (Company: {$companyName})"
+            "Created team: {$team->name} (Company: {$companyName}){$subHeadsInfo}"
         );
 
         return redirect()
@@ -118,31 +139,55 @@ class TeamController extends Controller
     public function edit(Team $team): View
     {
         $companies = Company::query()->orderBy('name')->get();
-        $users     = User::query()->orderBy('name')->get();
+        $allUsers  = User::query()->orderBy('name')->get();
+        $teamUsers = $team->users()->orderBy('name')->get(); // Only users in this team
+        $team->load('subTeamHeads');
 
-        return view('admin.teams.edit', compact('team', 'companies', 'users'));
+        return view('admin.teams.edit', compact('team', 'companies', 'allUsers', 'teamUsers'));
     }
 
     public function update(Request $request, Team $team): RedirectResponse
     {
         $validated = $request->validate([
-            'company_id'   => 'nullable|exists:companies,id',
-            'team_head_id' => 'nullable|exists:users,id',
-            'name'         => 'required|string|max:255|unique:teams,name,' . $team->id,
-            'description'  => 'nullable|string',
+            'company_id'       => 'nullable|exists:companies,id',
+            'team_head_id'     => 'nullable|exists:users,id',
+            'name'             => 'required|string|max:255|unique:teams,name,' . $team->id,
+            'description'      => 'nullable|string',
+            'sub_heads'        => 'nullable|array',
+            'sub_heads.*.title' => 'required|string|max:255',
+            'sub_heads.*.user_id' => 'required|exists:users,id',
         ]);
 
         $oldName = $team->name;
-        $team->update($validated);
+        
+        $team->update([
+            'company_id'   => $validated['company_id'] ?? null,
+            'team_head_id' => $validated['team_head_id'] ?? null,
+            'name'         => $validated['name'],
+            'description'  => $validated['description'] ?? null,
+        ]);
+
+        // Update sub-team heads - delete old ones and create new ones
+        $team->subTeamHeads()->delete();
+        if (!empty($validated['sub_heads'])) {
+            foreach ($validated['sub_heads'] as $subHead) {
+                $team->subTeamHeads()->create([
+                    'title'   => $subHead['title'],
+                    'user_id' => $subHead['user_id'],
+                ]);
+            }
+        }
 
         // Log activity
         $team->load('company');
         $companyName = $team->company?->name ?? 'No company';
         $nameChanged = $oldName !== $team->name ? " (renamed from {$oldName})" : '';
+        $subHeadsCount = $team->subTeamHeads()->count();
+        $subHeadsInfo = $subHeadsCount > 0 ? " with {$subHeadsCount} sub-team heads" : '';
         ActivityLogger::log(
             Auth::user(),
             UserActivityLog::TYPE_TEAM_UPDATED,
-            "Updated team: {$team->name}{$nameChanged} (Company: {$companyName})"
+            "Updated team: {$team->name}{$nameChanged} (Company: {$companyName}){$subHeadsInfo}"
         );
 
         return redirect()
@@ -168,5 +213,39 @@ class TeamController extends Controller
         return redirect()
             ->route('admin.teams.index')
             ->with('success', 'Team deleted successfully.');
+    }
+
+    /**
+     * Get sub-teams for a given team (AJAX endpoint)
+     */
+    public function subTeams(Team $team): JsonResponse
+    {
+        $subTeams = Team::query()
+            ->where('parent_team_id', $team->id)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json($subTeams);
+    }
+
+    /**
+     * Get sub-team heads for a given team (AJAX endpoint)
+     */
+    public function subTeamHeads(Team $team): JsonResponse
+    {
+        $subTeamHeads = $team->subTeamHeads()
+            ->with('user:id,name')
+            ->orderBy('title')
+            ->get(['id', 'title', 'user_id'])
+            ->map(function ($subHead) {
+                return [
+                    'id' => $subHead->id,
+                    'title' => $subHead->title,
+                    'user_id' => $subHead->user_id,
+                    'user_name' => $subHead->user->name,
+                ];
+            });
+
+        return response()->json($subTeamHeads);
     }
 }

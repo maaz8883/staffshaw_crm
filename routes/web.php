@@ -76,6 +76,9 @@ Route::prefix('admin')->group(function () {
                 'update'=> 'admin.companies.update','destroy'=> 'admin.companies.destroy',
             ])->except(['show']);
 
+            Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
+            Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');
+
             Route::get('pending-registrations',                  [PendingRegistrationController::class, 'index'])->name('admin.pending-registrations.index');
             Route::post('pending-registrations/{user}/approve', [PendingRegistrationController::class, 'approve'])->name('admin.pending-registrations.approve');
             Route::post('pending-registrations/{user}/reject',  [PendingRegistrationController::class, 'reject'])->name('admin.pending-registrations.reject');
