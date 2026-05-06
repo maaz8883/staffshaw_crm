@@ -114,14 +114,112 @@
             @endif
         </div>
 
-        {{-- ── Individual User Targets ── --}}
-        <h6 class="mb-3"><i class="bi bi-person-check"></i> Individual User Targets</h6>
-
-        @forelse($team->users as $member)
+        {{-- ── Sub-Team Heads with their Users ── --}}
+        @if($team->subTeamHeads->isNotEmpty())
+        <h6 class="mb-3"><i class="bi bi-people-fill"></i> Sub-Team Heads & Their Members</h6>
+        
+        @foreach($team->subTeamHeads as $subHead)
         @php
-            // Admin → sab rows, edit mode
-            // Team Head → sab rows, read-only
-            // Agent → sirf apna row, read-only
+            // Get users under this sub-team head (including the sub-team head themselves)
+            $subTeamUsers = $team->users->filter(fn($u) => $u->sub_team_head_id === $subHead->id || $u->id === $subHead->user_id);
+            $totalMembers = $subTeamUsers->count();
+        @endphp
+        
+        <div class="border rounded p-3 mb-3 bg-light">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <strong class="fs-5">{{ $subHead->title }}</strong>
+                    <span class="text-muted small ms-2">(Sub-Team Head: {{ $subHead->user->name }})</span>
+                </div>
+                <span class="badge bg-info">{{ $totalMembers }} members</span>
+            </div>
+
+            @if($subTeamUsers->isNotEmpty())
+                @foreach($subTeamUsers as $member)
+                @php
+                    $showRow = $isAdmin || $isTeamHead || $member->id === auth()->id();
+                @endphp
+
+                @if($showRow)
+                <div class="border rounded p-3 mb-2 bg-white {{ $member->id === auth()->id() ? 'border-primary' : '' }}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>{{ $member->name }}</strong>
+                            <span class="text-muted small ms-2">{{ $member->email }}</span>
+                            @if($member->id === $subHead->user_id)
+                                <span class="badge bg-info text-dark ms-1">Sub-Team Head</span>
+                            @endif
+                            @if($member->id === auth()->id())
+                                <span class="badge bg-primary ms-1">You</span>
+                            @endif
+                        </div>
+                        @if($member->currentTarget)
+                            <span class="badge bg-success fs-6">${{ number_format($member->currentTarget->target_amount, 2) }}</span>
+                        @else
+                            <span class="badge bg-light text-muted">No target</span>
+                        @endif
+                    </div>
+
+                    @if($canManageUserTargets)
+                    {{-- Admin / Team Head: editable --}}
+                    <form method="POST" action="{{ route('admin.targets.user', $team) }}" class="row g-2 align-items-end">
+                        @csrf
+                        <input type="hidden" name="user_id" value="{{ $member->id }}">
+                        <input type="hidden" name="month" value="{{ $month }}">
+                        <input type="hidden" name="year" value="{{ $year }}">
+
+                        <div class="col-md-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">$</span>
+                                <input type="number" name="target_amount" step="0.01" min="0"
+                                    class="form-control"
+                                    value="{{ $member->currentTarget?->target_amount ?? '' }}"
+                                    placeholder="0.00" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-5">
+                            <input type="text" name="notes" class="form-control form-control-sm"
+                                value="{{ $member->currentTarget?->notes ?? '' }}"
+                                placeholder="Notes (optional)">
+                        </div>
+
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                                {{ $member->currentTarget ? 'Update' : 'Set Target' }}
+                            </button>
+                        </div>
+                    </form>
+
+                    @else
+                    {{-- Team Head & Agent: read-only --}}
+                    @if($member->currentTarget?->notes)
+                        <small class="text-muted">{{ $member->currentTarget->notes }}</small>
+                    @endif
+                    @endif
+                </div>
+                @endif
+                @endforeach
+            @else
+                <p class="text-muted mb-0 small">No members assigned to this sub-team yet.</p>
+            @endif
+        </div>
+        @endforeach
+        @endif
+
+        {{-- ── Users without Sub-Team Head (including Team Head, but excluding Sub-Team Heads) ── --}}
+        @php
+            $subTeamHeadUserIds = $team->subTeamHeads->pluck('user_id')->toArray();
+            $usersWithoutSubHead = $team->users->filter(function($u) use ($subTeamHeadUserIds) {
+                return $u->sub_team_head_id === null && !in_array($u->id, $subTeamHeadUserIds);
+            });
+        @endphp
+
+        @if($usersWithoutSubHead->isNotEmpty())
+        <h6 class="mb-3"><i class="bi bi-person-check"></i> Other Team Members</h6>
+
+        @foreach($usersWithoutSubHead as $member)
+        @php
             $showRow = $isAdmin || $isTeamHead || $member->id === auth()->id();
         @endphp
 
@@ -184,9 +282,12 @@
             @endif
         </div>
         @endif
-        @empty
+        @endforeach
+        @endif
+
+        @if($team->users->isEmpty())
             <p class="text-muted mb-0">No users in this team yet.</p>
-        @endforelse
+        @endif
 
         {{-- Progress bar --}}
         @if($team->currentTarget && $canManageUserTargets)

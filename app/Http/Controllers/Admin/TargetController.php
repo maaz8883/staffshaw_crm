@@ -59,16 +59,16 @@ class TargetController extends Controller
 
         if ($isAdmin) {
             // Admin: all teams
-            $teams = Team::with(['company', 'users'])->orderBy('name')->get();
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])->orderBy('name')->get();
         } elseif ($isTeamHead) {
             // Team head: only their teams
-            $teams = Team::with(['company', 'users'])
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])
                 ->where('team_head_id', $authUser->id)
                 ->orderBy('name')
                 ->get();
         } else {
             // Regular agent: apni team dikhao with ALL members (read-only)
-            $teams = Team::with(['company', 'users'])
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])
                 ->where('id', $authUser->team_id)
                 ->get();
         }
