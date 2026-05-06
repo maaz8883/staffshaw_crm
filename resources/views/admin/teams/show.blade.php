@@ -19,18 +19,104 @@
     </div>
 </div>
 
-{{-- Members --}}
+{{-- Team Hierarchy --}}
 @if(!auth()->user()->hasRole('PPC'))
 <div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <i class="bi bi-diagram-3-fill"></i> Team Hierarchy
+    </div>
     <div class="card-body">
-        <h6>Users in team</h6>
-        <ul class="mb-0">
-            @forelse($team->users as $u)
-                <li>{{ $u->name }} ({{ $u->email }})</li>
-            @empty
-                <li>No users assigned.</li>
-            @endforelse
-        </ul>
+        {{-- Team Head --}}
+        @if($team->teamHead)
+        <div class="mb-4">
+            <div class="d-flex align-items-center mb-2">
+                <i class="bi bi-person-badge-fill text-primary fs-5 me-2"></i>
+                <div>
+                    <div class="fw-bold">{{ $team->teamHead->name }}</div>
+                    <small class="text-muted">Team Head</small>
+                    @if($team->teamHead->email)
+                        <small class="text-muted"> • {{ $team->teamHead->email }}</small>
+                    @endif
+                </div>
+            </div>
+        </div>
+        @endif
+
+        {{-- Sub-Team Heads --}}
+        @if($team->subTeamHeads->count() > 0)
+        <div class="mb-3">
+            <h6 class="text-muted mb-3"><i class="bi bi-people-fill"></i> Sub-Team Heads</h6>
+            
+            @foreach($team->subTeamHeads as $subHead)
+            <div class="mb-4 ps-4 border-start border-3 border-primary">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-person-fill text-info fs-5 me-2"></i>
+                    <div>
+                        <div class="fw-bold">{{ $subHead->user->name }}</div>
+                        <small class="text-muted">{{ $subHead->title }}</small>
+                        @if($subHead->user->email)
+                            <small class="text-muted"> • {{ $subHead->user->email }}</small>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Users under this Sub-Team Head --}}
+                @php
+                    $usersUnderSubHead = $team->users->where('sub_team_head_id', $subHead->id);
+                @endphp
+                @if($usersUnderSubHead->count() > 0)
+                <div class="mt-2 ps-4 border-start border-2 border-secondary">
+                    <div class="small text-muted mb-2">Team Members:</div>
+                    <ul class="list-unstyled mb-0">
+                        @foreach($usersUnderSubHead as $user)
+                        <li class="mb-2">
+                            <i class="bi bi-arrow-return-right text-secondary"></i>
+                            <strong>{{ $user->name }}</strong>
+                            @if($user->email)
+                                <span class="text-muted small">({{ $user->email }})</span>
+                            @endif
+                            @if($user->role)
+                                <span class="badge bg-secondary">{{ $user->role->name }}</span>
+                            @endif
+                        </li>
+                        @endforeach
+                    </ul>
+                </div>
+                @endif
+            </div>
+            @endforeach
+        </div>
+        @endif
+
+        {{-- Users without Sub-Team Head --}}
+        @php
+            $usersWithoutSubHead = $team->users->whereNull('sub_team_head_id');
+        @endphp
+        @if($usersWithoutSubHead->count() > 0)
+        <div class="mt-4 ps-4 border-start border-3 border-secondary">
+            <h6 class="text-muted mb-3"><i class="bi bi-people"></i> Other Team Members</h6>
+            <ul class="list-unstyled mb-0">
+                @foreach($usersWithoutSubHead as $user)
+                <li class="mb-2">
+                    <i class="bi bi-person text-secondary"></i>
+                    <strong>{{ $user->name }}</strong>
+                    @if($user->email)
+                        <span class="text-muted small">({{ $user->email }})</span>
+                    @endif
+                    @if($user->role)
+                        <span class="badge bg-secondary">{{ $user->role->name }}</span>
+                    @endif
+                </li>
+                @endforeach
+            </ul>
+        </div>
+        @endif
+
+        @if($team->users->count() === 0)
+        <div class="text-muted text-center py-3">
+            <i class="bi bi-inbox"></i> No users assigned to this team yet.
+        </div>
+        @endif
     </div>
 </div>
 @endif

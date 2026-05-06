@@ -43,7 +43,7 @@
     <div id="sub-team-heads-container">
         @if(isset($team) && $team->subTeamHeads && $team->subTeamHeads->count() > 0)
             @foreach($team->subTeamHeads as $index => $subHead)
-                <div class="sub-team-head-row mb-2" data-index="{{ $index }}">
+                <div class="sub-team-head-row mb-3 border rounded p-3 bg-light" data-index="{{ $index }}">
                     <div class="row g-2">
                         <div class="col-md-4">
                             <input type="text" name="sub_heads[{{ $index }}][title]" class="form-control" placeholder="Title (e.g., Front Head)" value="{{ old('sub_heads.'.$index.'.title', $subHead->title) }}" required>
@@ -62,6 +62,28 @@
                             <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-sub-head">Remove</button>
                         </div>
                     </div>
+                    @php
+                        $usersUnderSubHead = $teamUsers->where('sub_team_head_id', $subHead->id);
+                    @endphp
+                    @if($usersUnderSubHead->count() > 0)
+                        <div class="mt-3 ps-4 border-start border-3 border-primary">
+                            <div class="small text-muted mb-2"><i class="bi bi-people-fill"></i> Users under this Sub-Team Head:</div>
+                            <ul class="list-unstyled mb-0">
+                                @foreach($usersUnderSubHead as $user)
+                                    <li class="mb-1">
+                                        <i class="bi bi-arrow-return-right text-primary"></i>
+                                        <strong>{{ $user->name }}</strong>
+                                        @if($user->email)
+                                            <span class="text-muted small">({{ $user->email }})</span>
+                                        @endif
+                                        @if($user->role)
+                                            <span class="badge bg-secondary">{{ $user->role->name }}</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
                 </div>
             @endforeach
         @endif
@@ -119,7 +141,7 @@
 
     function createSubHeadRow() {
         const row = document.createElement('div');
-        row.className = 'sub-team-head-row mb-2';
+        row.className = 'sub-team-head-row mb-3 border rounded p-3 bg-light';
         row.dataset.index = subHeadIndex;
         
         const availableUsers = getAvailableUsers();

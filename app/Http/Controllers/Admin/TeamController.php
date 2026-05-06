@@ -117,7 +117,14 @@ class TeamController extends Controller
 
     public function show(Team $team): View
     {
-        $team->load(['company', 'teamHead', 'users']);
+        $team->load([
+            'company', 
+            'teamHead', 
+            'users' => function($query) {
+                $query->with(['role', 'subTeamHead.user'])->orderBy('name');
+            },
+            'subTeamHeads.user'
+        ]);
 
         $month = (int) request()->get('month', now()->month);
         $year  = (int) request()->get('year', now()->year);
@@ -140,8 +147,8 @@ class TeamController extends Controller
     {
         $companies = Company::query()->orderBy('name')->get();
         $allUsers  = User::query()->orderBy('name')->get();
-        $teamUsers = $team->users()->orderBy('name')->get(); // Only users in this team
-        $team->load('subTeamHeads');
+        $teamUsers = $team->users()->with(['role', 'subTeamHead'])->orderBy('name')->get(); // Only users in this team
+        $team->load('subTeamHeads.user');
 
         return view('admin.teams.edit', compact('team', 'companies', 'allUsers', 'teamUsers'));
     }
