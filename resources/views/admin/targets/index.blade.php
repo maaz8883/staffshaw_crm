@@ -134,6 +134,65 @@
                 <span class="badge bg-info">{{ $totalMembers }} members</span>
             </div>
 
+            {{-- Sub-Team Target Form --}}
+            @if($canManageUserTargets)
+            <div class="border rounded p-3 mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h6 class="mb-2 text-white"><i class="bi bi-flag-fill"></i> Sub-Team Target</h6>
+                <form method="POST" action="{{ route('admin.targets.sub-team', $team) }}" class="row g-2 align-items-end">
+                    @csrf
+                    <input type="hidden" name="sub_team_head_id" value="{{ $subHead->id }}">
+                    <input type="hidden" name="month" value="{{ $month }}">
+                    <input type="hidden" name="year" value="{{ $year }}">
+
+                    <div class="col-md-4">
+                        <label class="form-label mb-1 small text-white">Target Amount</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="target_amount" step="0.01" min="0"
+                                class="form-control"
+                                value="{{ $subHead->currentTarget?->target_amount ?? '' }}"
+                                placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label class="form-label mb-1 small text-white">Notes</label>
+                        <input type="text" name="notes" class="form-control form-control-sm"
+                            value="{{ $subHead->currentTarget?->notes ?? '' }}"
+                            placeholder="Optional notes">
+                    </div>
+
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-light btn-sm w-100">
+                            {{ $subHead->currentTarget ? 'Update' : 'Set' }} Sub-Team Target
+                        </button>
+                    </div>
+                </form>
+
+                @if($subHead->currentTarget)
+                    <div class="mt-2 small text-white">
+                        Current: <strong class="text-white" style="text-shadow: 0 0 10px rgba(255,255,255,0.5);">${{ number_format($subHead->currentTarget->target_amount, 2) }}</strong>
+                        @if($subHead->currentTarget->notes)
+                            — {{ $subHead->currentTarget->notes }}
+                        @endif
+                    </div>
+                @endif
+            </div>
+            @else
+            {{-- Read-only for non-managers --}}
+            @if($subHead->currentTarget)
+                <div class="border rounded p-3 mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <h6 class="mb-2 text-white"><i class="bi bi-flag-fill"></i> Sub-Team Target</h6>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="fs-5 fw-bold text-white" style="text-shadow: 0 0 10px rgba(255,255,255,0.5);">${{ number_format($subHead->currentTarget->target_amount, 2) }}</span>
+                        @if($subHead->currentTarget->notes)
+                            <span class="small text-white">{{ $subHead->currentTarget->notes }}</span>
+                        @endif
+                    </div>
+                </div>
+            @endif
+            @endif
+
             @if($subTeamUsers->isNotEmpty())
                 @foreach($subTeamUsers as $member)
                 @php
@@ -202,6 +261,26 @@
                 @endforeach
             @else
                 <p class="text-muted mb-0 small">No members assigned to this sub-team yet.</p>
+            @endif
+
+            {{-- Sub-Team Progress bar --}}
+            @if($subHead->currentTarget && $canManageUserTargets)
+                @php
+                    $totalSubTeamUserTargets = $subTeamUsers->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
+                    $subTeamTarget = $subHead->currentTarget->target_amount;
+                    $subPct = $subTeamTarget > 0 ? min(100, round(($totalSubTeamUserTargets / $subTeamTarget) * 100)) : 0;
+                @endphp
+                <div class="mt-3 pt-3 border-top">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>Allocated to members: <strong>${{ number_format($totalSubTeamUserTargets, 2) }}</strong></span>
+                        <span>Sub-team target: <strong>${{ number_format($subTeamTarget, 2) }}</strong></span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div class="progress-bar {{ $subPct >= 100 ? 'bg-success' : ($subPct >= 60 ? 'bg-warning' : 'bg-danger') }}"
+                            style="width: {{ $subPct }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ $subPct }}% of sub-team target distributed</small>
+                </div>
             @endif
         </div>
         @endforeach
@@ -292,13 +371,24 @@
         {{-- Progress bar --}}
         @if($team->currentTarget && $canManageUserTargets)
             @php
-                $totalUserTargets = $team->users->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
-                $teamTarget       = $team->currentTarget->target_amount;
-                $pct              = $teamTarget > 0 ? min(100, round(($totalUserTargets / $teamTarget) * 100)) : 0;
+                $totalSubTeamTargets = $team->subTeamHeads->sum(fn($sh) => $sh->currentTarget?->target_amount ?? 0);
+                $totalOtherMembersTargets = $team->users->filter(function($u) use ($team) {
+                    $subTeamHeadUserIds = $team->subTeamHeads->pluck('user_id')->toArray();
+                    return $u->sub_team_head_id === null && !in_array($u->id, $subTeamHeadUserIds);
+                })->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
+                $totalAllocated = $totalSubTeamTargets + $totalOtherMembersTargets;
+                $teamTarget = $team->currentTarget->target_amount;
+                $pct = $teamTarget > 0 ? min(100, round(($totalAllocated / $teamTarget) * 100)) : 0;
             @endphp
             <div class="mt-3 pt-3 border-top">
                 <div class="d-flex justify-content-between small mb-1">
-                    <span>Allocated to members: <strong>${{ number_format($totalUserTargets, 2) }}</strong></span>
+                    <span>
+                        Allocated: 
+                        <strong>${{ number_format($totalAllocated, 2) }}</strong>
+                        <span class="text-muted">
+                            (Sub-teams: ${{ number_format($totalSubTeamTargets, 2) }} + Others: ${{ number_format($totalOtherMembersTargets, 2) }})
+                        </span>
+                    </span>
                     <span>Team target: <strong>${{ number_format($teamTarget, 2) }}</strong></span>
                 </div>
                 <div class="progress" style="height:8px">

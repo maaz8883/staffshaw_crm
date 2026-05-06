@@ -113,9 +113,10 @@ Route::prefix('admin')->group(function () {
                 'destroy' => 'admin.teams.destroy',
             ]);
 
-            Route::get('targets',              [TargetController::class, 'index'])->name('admin.targets.index');
-            Route::post('targets/team/{team}', [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
-            Route::post('targets/user/{team}', [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
+            Route::get('targets',                      [TargetController::class, 'index'])->name('admin.targets.index');
+            Route::post('targets/team/{team}',         [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
+            Route::post('targets/sub-team/{team}',     [TargetController::class, 'setSubTeamHeadTarget'])->name('admin.targets.sub-team');
+            Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
 
             Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');

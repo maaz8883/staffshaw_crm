@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamTarget;
 use App\Models\UserTarget;
+use App\Models\SubTeamHeadTarget;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
@@ -80,6 +81,16 @@ class TargetController extends Controller
                 'year'    => $year,
             ])->first();
 
+            // Load sub-team head targets
+            $team->subTeamHeads->each(function ($subHead) use ($team, $month, $year) {
+                $subHead->currentTarget = SubTeamHeadTarget::where([
+                    'sub_team_head_id' => $subHead->id,
+                    'team_id' => $team->id,
+                    'month'   => $month,
+                    'year'    => $year,
+                ])->first();
+            });
+
             $team->users->each(function ($user) use ($team, $month, $year) {
                 $user->currentTarget = UserTarget::where([
                     'user_id' => $user->id,
@@ -129,6 +140,55 @@ class TargetController extends Controller
         );
 
         return back()->with('success', "Team target set for {$team->name}.");
+    }
+
+    // ─── Sub-Team Head Target ───────────────────────────────────────────────────
+
+    public function setSubTeamHeadTarget(Request $request, Team $team): RedirectResponse
+    {
+        $this->authorizeTeam($team);
+
+        $validated = $request->validate([
+            'sub_team_head_id' => 'required|exists:sub_team_heads,id',
+            'month'            => 'required|integer|min:1|max:12',
+            'year'             => 'required|integer|min:2020|max:2100',
+            'target_amount'    => 'required|numeric|min:0',
+            'notes'            => 'nullable|string',
+        ]);
+
+        // Make sure the sub-team head belongs to this team
+        $subTeamHead = \App\Models\SubTeamHead::find($validated['sub_team_head_id']);
+        if ($subTeamHead->team_id !== $team->id) {
+            return back()->withErrors(['sub_team_head_id' => 'This sub-team head does not belong to the selected team.']);
+        }
+
+        $existing = SubTeamHeadTarget::where([
+            'sub_team_head_id' => $validated['sub_team_head_id'],
+            'team_id'          => $team->id,
+            'month'            => $validated['month'],
+            'year'             => $validated['year'],
+        ])->first();
+
+        SubTeamHeadTarget::updateOrCreate(
+            [
+                'sub_team_head_id' => $validated['sub_team_head_id'],
+                'team_id'          => $team->id,
+                'month'            => $validated['month'],
+                'year'             => $validated['year'],
+            ],
+            ['target_amount' => $validated['target_amount'], 'notes' => $validated['notes'] ?? null]
+        );
+
+        // Log activity
+        $monthName = \DateTime::createFromFormat('!m', $validated['month'])->format('F');
+        $action = $existing ? 'Updated' : 'Set';
+        ActivityLogger::log(
+            Auth::user(),
+            UserActivityLog::TYPE_TEAM_TARGET_SET,
+            "{$action} sub-team target for {$subTeamHead->title} ({$team->name}): \$" . number_format($validated['target_amount'], 2) . " ({$monthName} {$validated['year']})"
+        );
+
+        return back()->with('success', 'Sub-team target updated.');
     }
 
     // ─── User Target ────────────────────────────────────────────────────────────
