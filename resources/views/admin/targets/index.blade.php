@@ -33,8 +33,10 @@
 @php
     // Team target: sirf admin
     $canManageTeamTarget  = $isAdmin;
-    // User targets: admin ya is team ka head
-    $canManageUserTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id());
+    // Sub-team targets: admin or team head only (NOT sub-team heads)
+    $canManageSubTeamTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id());
+    // User targets: admin, team head, or sub-team head
+    $canManageUserTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id()) || $isSubTeamHead;
 @endphp
 
 <div class="card mb-4">
@@ -135,7 +137,7 @@
             </div>
 
             {{-- Sub-Team Target Form --}}
-            @if($canManageUserTargets)
+            @if($canManageSubTeamTargets)
             <div class="border rounded p-3 mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                 <h6 class="mb-2 text-white"><i class="bi bi-flag-fill"></i> Sub-Team Target</h6>
                 <form method="POST" action="{{ route('admin.targets.sub-team', $team) }}" class="row g-2 align-items-end">
@@ -196,7 +198,7 @@
             @if($subTeamUsers->isNotEmpty())
                 @foreach($subTeamUsers as $member)
                 @php
-                    $showRow = $isAdmin || $isTeamHead || $member->id === auth()->id();
+                    $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || $member->id === auth()->id();
                 @endphp
 
                 @if($showRow)
@@ -294,12 +296,12 @@
             });
         @endphp
 
-        @if($usersWithoutSubHead->isNotEmpty())
+        @if($usersWithoutSubHead->isNotEmpty() && !$isSubTeamHead)
         <h6 class="mb-3"><i class="bi bi-person-check"></i> Other Team Members</h6>
 
         @foreach($usersWithoutSubHead as $member)
         @php
-            $showRow = $isAdmin || $isTeamHead || $member->id === auth()->id();
+            $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || $member->id === auth()->id();
         @endphp
 
         @if($showRow)
@@ -368,8 +370,8 @@
             <p class="text-muted mb-0">No users in this team yet.</p>
         @endif
 
-        {{-- Progress bar --}}
-        @if($team->currentTarget && $canManageUserTargets)
+        {{-- Progress bar (only for Admin and Team Head, not for Sub-Team Heads) --}}
+        @if($team->currentTarget && $canManageUserTargets && !$isSubTeamHead)
             @php
                 $totalSubTeamTargets = $team->subTeamHeads->sum(fn($sh) => $sh->currentTarget?->target_amount ?? 0);
                 $totalOtherMembersTargets = $team->users->filter(function($u) use ($team) {

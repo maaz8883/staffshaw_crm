@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Notification;
 
 class SaleNotificationDispatcher
 {
-    /** Agent or team head creates a sale → admins (+ team head if seller is a plain agent). */
+    /** Agent or team head creates a sale → admins (+ team head if seller is a plain agent) (+ sub-team head if seller is in a sub-team). */
     public static function dispatchSaleCreated(Sale $sale): void
     {
         $sale->loadMissing('user');
@@ -38,6 +38,17 @@ class SaleNotificationDispatcher
             }
         }
 
+        // If seller belongs to a sub-team, notify their sub-team head
+        if ($seller->sub_team_head_id) {
+            $subTeamHead = \App\Models\SubTeamHead::find($seller->sub_team_head_id);
+            if ($subTeamHead && $subTeamHead->user_id !== $seller->id) {
+                $subTeamHeadUser = User::find($subTeamHead->user_id);
+                if ($subTeamHeadUser) {
+                    $recipients->push($subTeamHeadUser);
+                }
+            }
+        }
+
         $recipients = self::uniqueRecipients($recipients, $seller->id);
         if ($recipients->isEmpty()) {
             return;
@@ -46,7 +57,7 @@ class SaleNotificationDispatcher
         Notification::send($recipients, new SaleCreatedNotification($sale));
     }
 
-    /** Approve / reject → agent; if decider is not Admin, also all relevant admins. */
+    /** Approve / reject → agent; if decider is not Admin, also all relevant admins + sub-team head. */
     public static function dispatchSaleDecision(Sale $sale, User $decider, bool $approved): void
     {
         $sale->loadMissing('user');
@@ -65,6 +76,17 @@ class SaleNotificationDispatcher
             }
         }
 
+        // If agent belongs to a sub-team and decider is not the sub-team head, notify the sub-team head
+        if ($agent && $agent->sub_team_head_id) {
+            $subTeamHead = \App\Models\SubTeamHead::find($agent->sub_team_head_id);
+            if ($subTeamHead && $subTeamHead->user_id !== $decider->id) {
+                $subTeamHeadUser = User::find($subTeamHead->user_id);
+                if ($subTeamHeadUser) {
+                    $recipients->push($subTeamHeadUser);
+                }
+            }
+        }
+
         $recipients = self::uniqueRecipients($recipients, $decider->id);
         if ($recipients->isEmpty()) {
             return;
@@ -73,7 +95,7 @@ class SaleNotificationDispatcher
         Notification::send($recipients, new SaleDecisionNotification($sale, $decider, $approved));
     }
 
-    /** Sale edited → admins + team lead (not the editor). */
+    /** Sale edited → admins + team lead + sub-team head (not the editor). */
     public static function dispatchSaleUpdated(Sale $sale, User $editor): void
     {
         $recipients = collect();
@@ -88,6 +110,18 @@ class SaleNotificationDispatcher
             $head = Team::query()->find($sale->team_id)?->teamHead;
             if ($head && $head->id !== $editor->id) {
                 $recipients->push($head);
+            }
+        }
+
+        // If editor belongs to a sub-team, notify their sub-team head
+        $sale->loadMissing('user');
+        if ($sale->user && $sale->user->sub_team_head_id) {
+            $subTeamHead = \App\Models\SubTeamHead::find($sale->user->sub_team_head_id);
+            if ($subTeamHead && $subTeamHead->user_id !== $editor->id) {
+                $subTeamHeadUser = User::find($subTeamHead->user_id);
+                if ($subTeamHeadUser) {
+                    $recipients->push($subTeamHeadUser);
+                }
             }
         }
 

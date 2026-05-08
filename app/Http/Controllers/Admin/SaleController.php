@@ -37,12 +37,29 @@ class SaleController extends Controller
         $query = Sale::query()->with(['user', 'team', 'company'])->select('sales.*');
 
         if ($user->hasRole('Admin')) {
-            // all
+            // Admin: all sales
         } elseif ($this->isTeamHead()) {
+            // Team Head: sales from their teams
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
             $query->whereIn('team_id', $teamIds);
         } else {
-            $query->where('user_id', $user->id);
+            // Check if user is a sub-team head
+            $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
+            
+            if ($subTeamHead) {
+                // Sub-Team Head: their own sales + their sub-team members' sales
+                $subTeamMemberIds = \App\Models\User::where('sub_team_head_id', $subTeamHead->id)
+                    ->pluck('id')
+                    ->toArray();
+                
+                // Include the sub-team head themselves
+                $subTeamMemberIds[] = $user->id;
+                
+                $query->whereIn('user_id', $subTeamMemberIds);
+            } else {
+                // Regular Agent: only their own sales
+                $query->where('user_id', $user->id);
+            }
         }
 
         return $query;
@@ -53,6 +70,16 @@ class SaleController extends Controller
         $user = Auth::user();
         if ($user->hasRole('Admin')) return true;
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return true;
+        
+        // Check if user is a sub-team head and the sale belongs to their sub-team member
+        $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
+        if ($subTeamHead) {
+            $saleUser = \App\Models\User::find($sale->user_id);
+            if ($saleUser && $saleUser->sub_team_head_id === $subTeamHead->id) {
+                return true;
+            }
+        }
+        
         return false;
     }
 
@@ -411,6 +438,16 @@ class SaleController extends Controller
         if ($user->hasRole('Admin')) return;
         if ($sale->user_id === $user->id) return;
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return;
+        
+        // Check if user is a sub-team head and the sale belongs to their sub-team member
+        $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
+        if ($subTeamHead) {
+            $saleUser = \App\Models\User::find($sale->user_id);
+            if ($saleUser && $saleUser->sub_team_head_id === $subTeamHead->id) {
+                return;
+            }
+        }
+        
         abort(403);
     }
 

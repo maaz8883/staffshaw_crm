@@ -57,6 +57,7 @@ class TargetController extends Controller
 
         $isAdmin    = $authUser->hasRole('Admin');
         $isTeamHead = Team::where('team_head_id', $authUser->id)->exists();
+        $isSubTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)->exists();
 
         if ($isAdmin) {
             // Admin: all teams
@@ -68,18 +69,37 @@ class TargetController extends Controller
                 ->orderBy('name')
                 ->get();
         } else {
-            // Regular agent: apni team dikhao with ALL members (read-only)
+            // Regular agent or Sub-Team Head: apni team dikhao
             $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])
                 ->where('id', $authUser->team_id)
                 ->get();
         }
 
-        $teams->each(function (Team $team) use ($month, $year) {
+        $teams->each(function (Team $team) use ($month, $year, $authUser, $isSubTeamHead) {
             $team->currentTarget = TeamTarget::where([
                 'team_id' => $team->id,
                 'month'   => $month,
                 'year'    => $year,
             ])->first();
+
+            // If user is a sub-team head, filter to show only their sub-team
+            if ($isSubTeamHead) {
+                $userSubTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)
+                    ->where('team_id', $team->id)
+                    ->first();
+                
+                if ($userSubTeamHead) {
+                    // Filter subTeamHeads to only show the one they manage
+                    $team->setRelation('subTeamHeads', $team->subTeamHeads->filter(function($sh) use ($userSubTeamHead) {
+                        return $sh->id === $userSubTeamHead->id;
+                    }));
+                    
+                    // Filter users to only show those in their sub-team (including themselves)
+                    $team->setRelation('users', $team->users->filter(function($u) use ($userSubTeamHead) {
+                        return $u->sub_team_head_id === $userSubTeamHead->id || $u->id === $userSubTeamHead->user_id;
+                    }));
+                }
+            }
 
             // Load sub-team head targets
             $team->subTeamHeads->each(function ($subHead) use ($team, $month, $year) {
@@ -101,7 +121,7 @@ class TargetController extends Controller
             });
         });
 
-        return view('admin.targets.index', compact('teams', 'month', 'year', 'isAdmin', 'isTeamHead'));
+        return view('admin.targets.index', compact('teams', 'month', 'year', 'isAdmin', 'isTeamHead', 'isSubTeamHead'));
     }
 
     // ─── Team Target ────────────────────────────────────────────────────────────
@@ -146,7 +166,12 @@ class TargetController extends Controller
 
     public function setSubTeamHeadTarget(Request $request, Team $team): RedirectResponse
     {
-        $this->authorizeTeam($team);
+        $authUser = Auth::user();
+        
+        // Authorization: Only Admin or Team Head can set sub-team targets
+        if (!$authUser->hasRole('Admin') && $team->team_head_id !== $authUser->id) {
+            abort(403, 'Only admins and team heads can set sub-team targets.');
+        }
 
         $validated = $request->validate([
             'sub_team_head_id' => 'required|exists:sub_team_heads,id',
@@ -195,7 +220,33 @@ class TargetController extends Controller
 
     public function setUserTarget(Request $request, Team $team): RedirectResponse
     {
-        $this->authorizeTeam($team);
+        $authUser = Auth::user();
+        
+        // Authorization: Admin, Team Head, or Sub-Team Head
+        if (!$authUser->hasRole('Admin') && $team->team_head_id !== $authUser->id) {
+            // Check if user is a sub-team head
+            $subTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)
+                ->where('team_id', $team->id)
+                ->first();
+            
+            if (!$subTeamHead) {
+                abort(403, 'You can only manage targets for your team.');
+            }
+            
+            // Validate that the target user belongs to this sub-team head
+            $validated = $request->validate([
+                'user_id' => 'required|exists:users,id',
+            ]);
+            
+            $targetUser = \App\Models\User::find($validated['user_id']);
+            
+            // Check if user is in this sub-team
+            $isInMySubTeam = $targetUser->sub_team_head_id === $subTeamHead->id || $targetUser->id === $subTeamHead->user_id;
+            
+            if (!$isInMySubTeam) {
+                abort(403, 'You can only set targets for members of your sub-team.');
+            }
+        }
 
         $validated = $request->validate([
             'user_id'       => 'required|exists:users,id',
