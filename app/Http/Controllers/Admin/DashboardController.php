@@ -35,6 +35,12 @@ class DashboardController extends Controller
             return $this->teamHeadDashboard($user, $month, $year);
         }
 
+        // Sub-Team Head check
+        $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
+        if ($subTeamHead) {
+            return $this->subTeamHeadDashboard($user, $subTeamHead, $month, $year);
+        }
+
         // PPC user
         if ($user->hasRole('PPC')) {
             return $this->ppcDashboard($user, $month, $year);
@@ -406,6 +412,184 @@ class DashboardController extends Controller
             'teamTarget'     => null,
             'teamMembers'    => collect(),
             'userTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
+        ]);
+    }
+
+    // ── Sub-Team Head Dashboard ─────────────────────────────────────────────────
+
+    private function subTeamHeadDashboard(User $user, \App\Models\SubTeamHead $subTeamHead, int $month, int $year): View
+    {
+        $team = $subTeamHead->team;
+        $company = $user->company;
+
+        // Get sub-team members (including the sub-team head themselves)
+        $subTeamMembers = User::where('sub_team_head_id', $subTeamHead->id)
+            ->orWhere('id', $user->id)
+            ->with('role')
+            ->orderBy('name')
+            ->get();
+
+        $subTeamMemberIds = $subTeamMembers->pluck('id')->toArray();
+
+        // Sub-team target
+        $subTeamTarget = \App\Models\SubTeamHeadTarget::where('sub_team_head_id', $subTeamHead->id)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->first();
+
+        $subTeamTargetAmt = (float) ($subTeamTarget?->target_amount ?? 0);
+
+        // Sub-team revenue (approved + completed sales from all sub-team members)
+        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $monthEnd = (clone $monthStart)->endOfMonth();
+
+        $subTeamMonthRevenue = self::approved()
+            ->where('status', 'completed')
+            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->sum('amount');
+
+        // Sub-team sales stats
+        $subTeamSales = [
+            'total' => self::approved()->whereIn('user_id', $subTeamMemberIds)->count(),
+            'completed' => self::approved()->whereIn('user_id', $subTeamMemberIds)->where('status', 'completed')->count(),
+            'pending' => Sale::whereIn('user_id', $subTeamMemberIds)->where('status', 'pending')->count(),
+            'revenue' => self::approved()->whereIn('user_id', $subTeamMemberIds)->where('status', 'completed')->sum('amount'),
+        ];
+
+        // Sub-team target achievement
+        $subTeamTargetAchievement = [
+            'target' => $subTeamTargetAmt,
+            'achieved' => (float) $subTeamMonthRevenue,
+            'percent' => self::achievementPercent((float) $subTeamMonthRevenue, $subTeamTargetAmt),
+            'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+        ];
+
+        // Get user targets and revenue for each member
+        $userTargets = UserTarget::whereIn('user_id', $subTeamMemberIds)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->pluck('target_amount', 'user_id');
+
+        $monthRevByUser = self::approved()
+            ->where('status', 'completed')
+            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->toBase()
+            ->select('user_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('user_id')
+            ->pluck('total', 'user_id');
+
+        $salesStatsByUser = self::approved()
+            ->where('status', 'completed')
+            ->whereIn('user_id', $subTeamMemberIds)
+            ->toBase()
+            ->select(
+                'user_id',
+                DB::raw('COUNT(*) as sales_count'),
+                DB::raw('SUM(amount) as sale_amount')
+            )
+            ->groupBy('user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        // Build member stats
+        $memberStats = $subTeamMembers->map(function (User $member) use (
+            $userTargets, $monthRevByUser, $salesStatsByUser, $user
+        ) {
+            $mid = $member->id;
+            $stats = $salesStatsByUser->get($mid);
+            $monthTarget = (float) ($userTargets[$mid] ?? 0);
+            $monthRev = (float) ($monthRevByUser[$mid] ?? 0);
+
+            return [
+                'id' => $mid,
+                'name' => $member->name,
+                'role_name' => $member->role?->name ?? '—',
+                'is_sub_team_head' => $mid === $user->id,
+                'sales_count' => $stats ? (int) $stats->sales_count : 0,
+                'sale_amount' => $stats ? (float) $stats->sale_amount : 0.0,
+                'month_target' => $monthTarget,
+                'month_revenue' => $monthRev,
+                'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
+            ];
+        })->values();
+
+        // My own sales stats
+        $mySales = [
+            'total' => Sale::where('user_id', $user->id)->count(),
+            'completed' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->count(),
+            'pending' => Sale::where('user_id', $user->id)->where('status', 'pending')->count(),
+            'cancelled' => Sale::where('user_id', $user->id)->where('status', 'cancelled')->count(),
+            'revenue' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->sum('amount'),
+        ];
+
+        $myTarget = UserTarget::where('user_id', $user->id)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->first();
+
+        // Recent sales from sub-team
+        $recentSales = Sale::whereIn('user_id', $subTeamMemberIds)
+            ->with(['user', 'team'])
+            ->latest()
+            ->limit(8)
+            ->get();
+
+        // Charts: last 14 days revenue trend for sub-team
+        $trendStart = now()->subDays(13)->startOfDay();
+        $trendEnd = now()->endOfDay();
+        $dailyRows = self::approved()
+            ->where('status', 'completed')
+            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereBetween('sale_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
+            ->toBase()
+            ->select(DB::raw('DATE(sale_date) as d'), DB::raw('SUM(amount) as total'))
+            ->groupBy(DB::raw('DATE(sale_date)'))
+            ->pluck('total', 'd');
+
+        $revenueTrendLabels = [];
+        $revenueTrendValues = [];
+        foreach (CarbonPeriod::create($trendStart->toDateString(), $trendEnd->toDateString()) as $date) {
+            $revenueTrendLabels[] = $date->format('M j');
+            $revenueTrendValues[] = round((float) ($dailyRows[$date->format('Y-m-d')] ?? 0), 2);
+        }
+
+        return view('admin.dashboard', compact(
+            'user', 'team', 'company',
+            'subTeamHead', 'subTeamMembers', 'memberStats',
+            'subTeamSales', 'subTeamTarget', 'subTeamTargetAchievement',
+            'mySales', 'myTarget', 'recentSales',
+            'month', 'year',
+            'revenueTrendLabels', 'revenueTrendValues'
+        ))->with([
+            'isSubTeamHeadView' => true,
+            'teamMembers' => collect(),
+            'companyStats' => [
+                'teams_count' => $company ? Team::where('company_id', $company->id)->count() : 0,
+                'users_count' => $company ? User::where('company_id', $company->id)->accountActive()->count() : 0,
+                'sales_count' => $company ? self::approved()->where('company_id', $company->id)->count() : 0,
+                'revenue' => $company ? self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount') : 0,
+            ],
+            'teamDashboardCards' => collect(),
+            'agentRevenueTrendLabels' => [],
+            'agentRevenueTrendValues' => [],
+            'agentSalesByStatus' => ['labels' => [], 'values' => []],
+            'userTargetAchievement' => [
+                'target' => (float) ($myTarget?->target_amount ?? 0),
+                'achieved' => self::monthlyCompletedRevenue($year, $month, fn ($q) => $q->where('user_id', $user->id)),
+                'percent' => self::achievementPercent(
+                    self::monthlyCompletedRevenue($year, $month, fn ($q) => $q->where('user_id', $user->id)),
+                    (float) ($myTarget?->target_amount ?? 0)
+                ),
+                'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            ],
+            'teamTargetAchievement' => [
+                'target' => 0,
+                'achieved' => 0,
+                'percent' => null,
+                'label' => '',
+            ],
         ]);
     }
 
