@@ -400,12 +400,56 @@ class DashboardController extends Controller
             'values' => [$mySales['completed'], $mySales['pending'], $mySales['cancelled']],
         ];
 
+        // Get sub-teams progress for the first team
+        $subTeamsProgress = collect();
+        if ($firstTeam) {
+            $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+            $monthEnd = (clone $monthStart)->endOfMonth();
+
+            $subTeamHeads = \App\Models\SubTeamHead::where('team_id', $firstTeam->id)
+                ->with('user')
+                ->get();
+
+            $subTeamsProgress = $subTeamHeads->map(function ($subHead) use ($month, $year, $monthStart, $monthEnd, $firstTeam) {
+                // Get sub-team target
+                $subTeamTarget = \App\Models\SubTeamHeadTarget::where('sub_team_head_id', $subHead->id)
+                    ->where('month', $month)
+                    ->where('year', $year)
+                    ->first();
+
+                // Get sub-team members
+                $subTeamMemberIds = User::where('sub_team_head_id', $subHead->id)
+                    ->orWhere('id', $subHead->user_id)
+                    ->pluck('id')
+                    ->toArray();
+
+                // Get sub-team revenue
+                $subTeamRevenue = self::approved()
+                    ->where('status', 'completed')
+                    ->whereIn('user_id', $subTeamMemberIds)
+                    ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                    ->sum('amount');
+
+                $targetAmt = (float) ($subTeamTarget?->target_amount ?? 0);
+                $revenueAmt = (float) $subTeamRevenue;
+
+                return [
+                    'title' => $subHead->title,
+                    'head_name' => $subHead->user->name,
+                    'members_count' => count($subTeamMemberIds),
+                    'target' => $targetAmt,
+                    'revenue' => $revenueAmt,
+                    'percent' => self::achievementPercent($revenueAmt, $targetAmt),
+                ];
+            });
+        }
+
         return view('admin.dashboard', compact(
             'user', 'teams', 'teamDashboardCards',
             'mySales', 'myTarget', 'recentSales', 'month', 'year',
             'company', 'companyStats',
             'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus',
-            'teamTargetAchievement'
+            'teamTargetAchievement', 'subTeamsProgress'
         ))->with([
             'isTeamHeadView' => true,
             'team'           => $teams->first(),

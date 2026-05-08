@@ -268,7 +268,7 @@
 
 {{-- My target achievement --}}
 @php
-    $thMonth = \DateTime::createFromFormat('!m', $month)->format('F Y');
+    $thMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y');
     $thMyTarget = $myTarget?->target_amount ?? 0;
     $thMyRevenue = $mySales['revenue'];
     $thMyPct = $thMyTarget > 0 ? min(100, round(($thMyRevenue / $thMyTarget) * 100, 1)) : null;
@@ -374,6 +374,58 @@
         </div>
     </div>
 </div>
+
+{{-- Sub-Teams Progress --}}
+@if(isset($subTeamsProgress) && $subTeamsProgress->isNotEmpty())
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-white border-0">
+        <h5 class="fw-semibold mb-1"><i class="bi bi-diagram-3 text-info"></i> Sub-Teams Progress</h5>
+        <p class="text-muted small mb-0">{{ \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y') }} · Target vs Achievement</p>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            @foreach($subTeamsProgress as $subTeam)
+            <div class="col-md-6">
+                <div class="card border h-100" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h6 class="fw-bold mb-1">{{ $subTeam['title'] }}</h6>
+                                <small class="text-muted">Head: {{ $subTeam['head_name'] }} · {{ $subTeam['members_count'] }} members</small>
+                            </div>
+                            @if($subTeam['percent'] !== null)
+                                @php
+                                    $pct = $subTeam['percent'];
+                                    $badgeColor = $pct >= 100 ? 'success' : ($pct >= 60 ? 'warning' : 'danger');
+                                @endphp
+                                <span class="badge bg-{{ $badgeColor }} px-3 py-2">{{ $pct }}%</span>
+                            @else
+                                <span class="badge bg-secondary px-3 py-2">—</span>
+                            @endif
+                        </div>
+                        <div class="d-flex justify-content-between small mb-2">
+                            <span class="text-muted">Target</span>
+                            <span class="fw-semibold">${{ number_format($subTeam['target'], 0) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between small mb-2">
+                            <span class="text-muted">Achieved</span>
+                            <span class="fw-semibold text-success">${{ number_format($subTeam['revenue'], 0) }}</span>
+                        </div>
+                        <div class="progress rounded-pill" style="height:10px">
+                            <div class="progress-bar bg-{{ $badgeColor ?? 'secondary' }} rounded-pill" 
+                                 style="width:{{ min(100, $subTeam['percent'] ?? 0) }}%"></div>
+                        </div>
+                        @if($subTeam['target'] <= 0)
+                            <p class="text-muted small mb-0 mt-2">No target set for this sub-team.</p>
+                        @endif
+                    </div>
+                </div>
+            </div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Team cards with members --}}
 @foreach($teamDashboardCards as $card)
