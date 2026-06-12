@@ -16,7 +16,7 @@ class PendingRegistrationController extends Controller
 {
     private function isTeamHead(): bool
     {
-        return Team::where('team_head_id', auth()->id())->exists();
+        return Team::where('team_head_id', (int)auth()->id())->exists();
     }
 
     private function pendingUsersQuery(): \Illuminate\Database\Eloquent\Builder
@@ -32,7 +32,7 @@ class PendingRegistrationController extends Controller
         }
 
         if ($this->isTeamHead()) {
-            $teamIds = Team::where('team_head_id', auth()->id())->pluck('id');
+            $teamIds = Team::where('team_head_id', (int)auth()->id())->pluck('id');
 
             return $query->whereIn('team_id', $teamIds);
         }

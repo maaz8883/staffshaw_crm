@@ -42,7 +42,7 @@ class TargetController extends Controller
             return;
         }
 
-        if ($team->team_head_id !== $user->id) {
+        if ((int)$team->team_head_id !== (int)$user->id) {
             abort(403, 'You can only manage targets for your own team.');
         }
     }
@@ -61,16 +61,16 @@ class TargetController extends Controller
 
         if ($isAdmin) {
             // Admin: all teams
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])->orderBy('name')->get();
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])->orderBy('name')->get();
         } elseif ($isTeamHead) {
             // Team head: only their teams
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])
                 ->where('team_head_id', $authUser->id)
                 ->orderBy('name')
                 ->get();
         } else {
             // Regular agent or Sub-Team Head: apni team dikhao
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user'])
+            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])
                 ->where('id', $authUser->team_id)
                 ->get();
         }
@@ -169,7 +169,7 @@ class TargetController extends Controller
         $authUser = Auth::user();
         
         // Authorization: Only Admin or Team Head can set sub-team targets
-        if (!$authUser->hasRole('Admin') && $team->team_head_id !== $authUser->id) {
+        if (!$authUser->hasRole('Admin') && (int)$team->team_head_id !== (int)$authUser->id) {
             abort(403, 'Only admins and team heads can set sub-team targets.');
         }
 
@@ -223,7 +223,7 @@ class TargetController extends Controller
         $authUser = Auth::user();
         
         // Authorization: Admin, Team Head, or Sub-Team Head
-        if (!$authUser->hasRole('Admin') && $team->team_head_id !== $authUser->id) {
+        if (!$authUser->hasRole('Admin') && (int)$team->team_head_id !== (int)$authUser->id) {
             // Check if user is a sub-team head
             $subTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)
                 ->where('team_id', $team->id)

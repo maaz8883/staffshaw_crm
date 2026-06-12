@@ -28,4 +28,12 @@ class SubTeamHead extends Model
     {
         return $this->hasMany(SubTeamHeadTarget::class);
     }
+
+    /**
+     * Get all users (members) under this sub-team head
+     */
+    public function members(): HasMany
+    {
+        return $this->hasMany(User::class, 'sub_team_head_id');
+    }
 }

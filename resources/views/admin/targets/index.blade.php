@@ -32,11 +32,18 @@
 @forelse($teams as $team)
 @php
     // Team target: sirf admin
-    $canManageTeamTarget  = $isAdmin;
+    $canManageTeamTarget = $isAdmin;
+
     // Sub-team targets: admin or team head only (NOT sub-team heads)
-    $canManageSubTeamTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id());
+    $canManageSubTeamTargets =
+        $isAdmin ||
+        ($isTeamHead && (int)$team->team_head_id === (int)auth()->id());
+
     // User targets: admin, team head, or sub-team head
-    $canManageUserTargets = $isAdmin || ($isTeamHead && $team->team_head_id === auth()->id()) || $isSubTeamHead;
+    $canManageUserTargets =
+        $isAdmin ||
+        ($isTeamHead && (int)$team->team_head_id === (int)auth()->id()) ||
+        $isSubTeamHead;
 @endphp
 
 <div class="card mb-4">
@@ -44,7 +51,7 @@
         <div>
             <strong>{{ $team->name }}</strong>
             <span class="text-muted ms-2 small">{{ $team->company?->name }}</span>
-            @if($team->team_head_id === auth()->id())
+            @if((int)$team->team_head_id === (int)auth()->id())
                 <span class="badge bg-warning text-dark ms-2">Your Team</span>
             @endif
         </div>
@@ -122,9 +129,26 @@
         
         @foreach($team->subTeamHeads as $subHead)
         @php
-            // Get users under this sub-team head (including the sub-team head themselves)
-            $subTeamUsers = $team->users->filter(fn($u) => $u->sub_team_head_id === $subHead->id || $u->id === $subHead->user_id);
+            // Get users under this sub-team head
+            // Include both: users with matching sub_team_head_id AND the sub-team head themselves
+            $subTeamUsers = $team->users->filter(function($u) use ($subHead) {
+                return (int) $u->sub_team_head_id === (int) $subHead->id
+                    || (int) $u->id === (int) $subHead->user_id;
+            });
             $totalMembers = $subTeamUsers->count();
+            
+            // Debug output (remove after testing)
+            if (config('app.debug')) {
+                \Log::info('Target Page - Sub-Team Debug', [
+                    'sub_head_id' => $subHead->id,
+                    'sub_head_title' => $subHead->title,
+                    'sub_head_user_id' => $subHead->user_id,
+                    'total_team_users' => $team->users->count(),
+                    'filtered_users_count' => $totalMembers,
+                    'filtered_user_ids' => $subTeamUsers->pluck('id')->toArray(),
+                    'filtered_user_names' => $subTeamUsers->pluck('name')->toArray(),
+                ]);
+            }
         @endphp
         
         <div class="border rounded p-3 mb-3 bg-light">
@@ -198,11 +222,11 @@
             @if($subTeamUsers->isNotEmpty())
                 @foreach($subTeamUsers as $member)
                 @php
-                    $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || $member->id === auth()->id();
+                    $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || (int)$member->id === (int)auth()->id();
                 @endphp
 
                 @if($showRow)
-                <div class="border rounded p-3 mb-2 bg-white {{ $member->id === auth()->id() ? 'border-primary' : '' }}">
+                <div class="border rounded p-3 mb-2 bg-white {{ (int)$member->id === (int)auth()->id() ? 'border-primary' : '' }}">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
                             <strong>{{ $member->name }}</strong>
@@ -210,7 +234,7 @@
                             @if($member->id === $subHead->user_id)
                                 <span class="badge bg-info text-dark ms-1">Sub-Team Head</span>
                             @endif
-                            @if($member->id === auth()->id())
+                            @if((int)$member->id === (int)auth()->id())
                                 <span class="badge bg-primary ms-1">You</span>
                             @endif
                         </div>
@@ -301,19 +325,19 @@
 
         @foreach($usersWithoutSubHead as $member)
         @php
-            $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || $member->id === auth()->id();
+            $showRow = $isAdmin || $isTeamHead || $isSubTeamHead || (int)$member->id === (int)auth()->id();
         @endphp
 
         @if($showRow)
-        <div class="border rounded p-3 mb-2 {{ $member->id === auth()->id() ? 'border-primary' : '' }}">
+        <div class="border rounded p-3 mb-2 {{ (int)$member->id === (int)auth()->id() ? 'border-primary' : '' }}">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <div>
                     <strong>{{ $member->name }}</strong>
                     <span class="text-muted small ms-2">{{ $member->email }}</span>
-                    @if($team->team_head_id === $member->id)
+                    @if((int)$team->team_head_id === (int)$member->id)
                         <span class="badge bg-warning text-dark ms-1">Team Head</span>
                     @endif
-                    @if($member->id === auth()->id())
+                    @if((int)$member->id === (int)auth()->id())
                         <span class="badge bg-primary ms-1">You</span>
                     @endif
                 </div>

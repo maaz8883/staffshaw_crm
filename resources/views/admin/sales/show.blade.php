@@ -6,7 +6,7 @@
 
 @section('content')
 <div class="mb-3">
-    @if(auth()->user()->hasRole('Admin') || $sale->user_id === auth()->id())
+    @if(auth()->user()->hasRole('Admin') || (int)$sale->user_id === (int)auth()->id())
     <a href="{{ route('admin.sales.edit', $sale) }}" class="btn btn-outline-warning btn-sm">Edit</a>
     @endif
     <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>

@@ -122,7 +122,7 @@
                         <td class="text-muted small">{{ $entry->notes ?: '-' }}</td>
                         <td class="text-end fw-semibold text-danger">${{ number_format($entry->amount, 2) }}</td>
                         <td class="text-end">
-                            @if(auth()->user()->hasRole('Admin') || $entry->user_id === auth()->id())
+                            @if(auth()->user()->hasRole('Admin') || (int)$entry->user_id === (int)auth()->id())
                             <form method="POST"
                                 action="{{ route('admin.ppc.destroy', $entry) }}"
                                 class="d-inline js-admin-delete-form"

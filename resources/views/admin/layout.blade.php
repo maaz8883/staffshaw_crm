@@ -30,7 +30,7 @@
                 $isAgent = auth()->user()?->hasRole('Agent');
                 $isPpc   = auth()->user()?->hasRole('PPC');
                 $canReviewSignups = !$isPpc && (auth()->user()?->hasRole('Admin')
-                    || \App\Models\Team::where('team_head_id', auth()->id())->exists());
+                    || \App\Models\Team::where('team_head_id', (int)auth()->id())->exists());
                 $pendingSignupCount = 0;
                 if ($canReviewSignups) {
                     if (auth()->user()->hasRole('Admin')) {
@@ -39,7 +39,7 @@
                             ->whereHas('role', fn ($q) => $q->where('name', \App\Models\Role::AGENT))
                             ->count();
                     } else {
-                        $teamIds = \App\Models\Team::where('team_head_id', auth()->id())->pluck('id');
+                        $teamIds = \App\Models\Team::where('team_head_id', (int)auth()->id())->pluck('id');
                         $pendingSignupCount = \App\Models\User::query()
                             ->where('account_status', \App\Models\User::ACCOUNT_PENDING)
                             ->whereIn('team_id', $teamIds)
