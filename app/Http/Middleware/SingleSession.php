@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\Admin\AuthController;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,11 +15,23 @@ class SingleSession
         $user = Auth::user();
 
         if ($user) {
+            $user->refresh();
             $storedToken  = $user->session_token;
             $currentToken = session('session_token');
 
-            // If tokens don't match — another device logged in
-            if ($storedToken && $currentToken !== $storedToken) {
+            if (! $storedToken) {
+                AuthController::bindSession($user, $request);
+
+                return $next($request);
+            }
+
+            if ($currentToken === null) {
+                $request->session()->put('session_token', $storedToken);
+
+                return $next($request);
+            }
+
+            if (! hash_equals($storedToken, $currentToken)) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

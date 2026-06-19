@@ -28,6 +28,9 @@ Route::get('/clear-all', function () {
 
 Route::get('/', fn () => redirect()->route('admin.login'));
 
+Route::get('/admin/auth/hrm-sso', [AuthController::class, 'hrmSso'])->name('admin.hrm.sso');
+Route::get('/admin/auth/global-logout', [AuthController::class, 'globalLogout'])->name('admin.global.logout');
+
 Route::prefix('admin')->group(function () {
 
     // ── Guest ────────────────────────────────────────────────────────────────

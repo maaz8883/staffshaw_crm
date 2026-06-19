@@ -55,6 +55,19 @@
                 </a>
             </li>
 
+            @if(env('HRM_APP_URL'))
+            <li class="nav-item">
+                <a class="nav-link" href="{{ rtrim(env('HRM_APP_URL'), '/') }}/dashboard" title="HRM System">
+                    <i class="bi bi-person-badge"></i> <span class="nav-label">HRM System</span>
+                </a>
+            </li>
+            <!-- <li class="nav-item">
+                <a class="nav-link" href="{{ rtrim(env('HRM_APP_URL'), '/') }}/api/integrations/trello/sso" title="Trello">
+                    <i class="bi bi-kanban"></i> <span class="nav-label">Trello</span>
+                </a>
+            </li> -->
+            @endif
+
             @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}" title="Users">

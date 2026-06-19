@@ -116,7 +116,7 @@ class OtpController extends Controller
         $user = User::where('email', $request->email)->first();
         Auth::login($user, true);
         $request->session()->regenerate();
-        AuthController::bindSession($user);
+        AuthController::bindSession($user, $request);
 
         return redirect()->route('admin.dashboard');
     }

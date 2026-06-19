@@ -12,6 +12,12 @@ class Authenticate extends Middleware
      */
     protected function redirectTo(Request $request): ?string
     {
-        return $request->expectsJson() ? null : route('admin.login');
+        if ($request->expectsJson()) {
+            return null;
+        }
+
+        $hrm = rtrim(env('HRM_APP_URL', ''), '/');
+
+        return $hrm ? "{$hrm}/login" : route('admin.login');
     }
 }
