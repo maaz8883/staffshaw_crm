@@ -9,6 +9,7 @@ use App\Models\Team;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use App\Services\SaleNotificationDispatcher;
+use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -36,8 +37,8 @@ class SaleController extends Controller
         $user  = Auth::user();
         $query = Sale::query()->with(['user', 'team', 'company'])->select('sales.*');
 
-        if ($user->hasRole('Admin')) {
-            // Admin: all sales
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            // Admin and Manager: all sales
         } elseif ($this->isTeamHead()) {
             // Team Head: sales from their teams
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
@@ -162,7 +163,7 @@ class SaleController extends Controller
             ->addColumn('team_name', fn (Sale $s) => e($s->team?->name ?? '-'))
             ->addColumn('actions', function (Sale $sale) {
                 $user      = Auth::user();
-                $canEdit   = ($user->hasRole('Admin') || $sale->user_id === $user->id)
+                $canEdit   = ($user->hasRole('Admin') || (int) $sale->user_id === (int) $user->id)
                              && $sale->approval_status === Sale::APPROVAL_PENDING;
                 $canDelete = $user->hasRole('Admin');
                 $canApprove = $this->canApprove($sale) && $sale->isPendingApproval();
@@ -225,12 +226,14 @@ class SaleController extends Controller
         }
 
         $validated = $request->validate([
-            'title'       => 'required|string|max:255',
-            'client_name' => 'required|string|max:255',
-            'amount'      => 'required|numeric|min:0',
-            'sale_date'   => 'required|date',
-            'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
-            'notes'       => 'nullable|string',
+            'title'        => 'required|string|max:255',
+            'client_name'  => 'required|string|max:255',
+            'client_email' => 'nullable|email|max:255',
+            'client_phone' => 'nullable|string|max:50',
+            'amount'       => 'required|numeric|min:0',
+            'sale_date'    => 'required|date',
+            'sale_type'    => 'required|in:' . implode(',', Sale::SALE_TYPES),
+            'notes'        => 'nullable|string',
         ]);
 
         $user = Auth::user();
@@ -244,6 +247,7 @@ class SaleController extends Controller
         ]));
 
         SaleNotificationDispatcher::dispatchSaleCreated($sale);
+        $trelloResult = TrelloSaleDispatcher::dispatch($sale);
 
         ActivityLogger::log($user, UserActivityLog::TYPE_SALE_CREATED,
             "Created sale \"{$sale->title}\" (#{$sale->id})",
@@ -251,7 +255,8 @@ class SaleController extends Controller
         );
 
         return redirect()->route('admin.sales.index')
-            ->with('success', 'Sale submitted and pending approval.');
+            ->with('success', 'Sale submitted and pending approval.')
+            ->with('trello_diagnostics', $trelloResult);
     }
 
     public function show(Sale $sale): View
@@ -276,12 +281,14 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         $rules = [
-            'title'       => 'required|string|max:255',
-            'client_name' => 'required|string|max:255',
-            'amount'      => 'required|numeric|min:0',
-            'sale_date'   => 'required|date',
-            'sale_type'   => 'required|in:' . implode(',', Sale::SALE_TYPES),
-            'notes'       => 'nullable|string',
+            'title'        => 'required|string|max:255',
+            'client_name'  => 'required|string|max:255',
+            'client_email' => 'nullable|email|max:255',
+            'client_phone' => 'nullable|string|max:50',
+            'amount'       => 'required|numeric|min:0',
+            'sale_date'    => 'required|date',
+            'sale_type'    => 'required|in:' . implode(',', Sale::SALE_TYPES),
+            'notes'        => 'nullable|string',
         ];
 
         $validated = $request->validate($rules);
@@ -435,8 +442,8 @@ class SaleController extends Controller
     private function authorizeView(Sale $sale): void
     {
         $user = Auth::user();
-        if ($user->hasRole('Admin')) return;
-        if ($sale->user_id === $user->id) return;
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) return;
+        if ((int) $sale->user_id === (int) $user->id) return;
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return;
         
         // Check if user is a sub-team head and the sale belongs to their sub-team member
@@ -455,7 +462,7 @@ class SaleController extends Controller
     {
         $user = Auth::user();
         if ($user->hasRole('Admin')) return;
-        if ($sale->user_id === $user->id && $sale->isPendingApproval()) return;
+        if ((int) $sale->user_id === (int) $user->id && $sale->isPendingApproval()) return;
         abort(403);
     }
 

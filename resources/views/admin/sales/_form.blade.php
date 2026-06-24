@@ -14,6 +14,18 @@
     </div>
 
     <div class="col-md-6 mb-3">
+        <label for="client_email" class="form-label">Client Email</label>
+        <input type="email" id="client_email" name="client_email" class="form-control"
+            value="{{ old('client_email', $sale->client_email ?? '') }}">
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label for="client_phone" class="form-label">Client Phone</label>
+        <input type="text" id="client_phone" name="client_phone" class="form-control"
+            value="{{ old('client_phone', $sale->client_phone ?? '') }}">
+    </div>
+
+    <div class="col-md-6 mb-3">
         <label for="amount" class="form-label">Amount ($) <span class="text-danger">*</span></label>
         <div class="input-group">
             <span class="input-group-text">$</span>

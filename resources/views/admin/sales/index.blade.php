@@ -121,6 +121,17 @@
 <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 <script>
+@if(session()->has('trello_diagnostics'))
+const crmDiagnostics = @json(session('trello_diagnostics'));
+const crmConsoleMethod = crmDiagnostics.status === 'connection_error'
+    ? 'error'
+    : (crmDiagnostics.status === 'failed' ? 'warn' : 'info');
+
+console.group('CRM sender');
+console[crmConsoleMethod](crmDiagnostics.message ?? 'CRM request completed.', crmDiagnostics);
+console.groupEnd();
+@endif
+
 $(function () {
     var table = $('#sales-table').DataTable({
         processing: true,

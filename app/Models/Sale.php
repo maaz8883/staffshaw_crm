@@ -29,6 +29,8 @@ class Sale extends Model
     protected $fillable = [
         'title',
         'client_name',
+        'client_email',
+        'client_phone',
         'amount',
         'sale_date',
         'user_id',
@@ -50,6 +52,9 @@ class Sale extends Model
     protected $casts = [
         'sale_date'    => 'date',
         'amount'       => 'decimal:2',
+        'user_id'      => 'integer',
+        'team_id'      => 'integer',
+        'company_id'   => 'integer',
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',

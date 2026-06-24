@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\LeadController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\TeamController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -8,8 +12,39 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-// Lead API — protected by Sanctum
+// Public API - no token required
+Route::prefix('v1')->group(function () {
+    // Teams - read only
+    Route::get('teams', [TeamController::class, 'index']);
+    Route::get('teams/{team}', [TeamController::class, 'show']);
+
+    // Roles - dropdown
+    Route::get('roles', [RoleController::class, 'index']);
+
+    // Companies - dropdown
+    Route::get('companies', [CompanyController::class, 'index']);
+
+    // User registration - public
+    Route::post('users', [UserController::class, 'store']);
+});
+
+// Protected API - token required
 Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+
+    // Teams CRUD
+    Route::post('teams', [TeamController::class, 'store']);
+    Route::put('teams/{team}', [TeamController::class, 'update']);
+    Route::patch('teams/{team}', [TeamController::class, 'update']);
+    Route::delete('teams/{team}', [TeamController::class, 'destroy']);
+
+    // Users CRUD
+    Route::get('users', [UserController::class, 'index']);
+    Route::get('users/{user}', [UserController::class, 'show']);
+    Route::put('users/{user}', [UserController::class, 'update']);
+    Route::patch('users/{user}', [UserController::class, 'update']);
+    Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+    // Leads CRUD
     Route::get('leads', [LeadController::class, 'index']);
     Route::post('leads', [LeadController::class, 'store']);
     Route::get('leads/{lead}', [LeadController::class, 'show']);
