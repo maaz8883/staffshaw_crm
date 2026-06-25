@@ -202,6 +202,11 @@ class AuthController extends Controller
     {
         $target = $request->query('redirect', $default);
         $hrm = rtrim(env('HRM_APP_URL', ''), '/');
+        $trello = rtrim(env('TRELLO_APP_URL', ''), '/');
+
+        if ($trello && str_starts_with($target, $trello)) {
+            return $target;
+        }
 
         if ($hrm && str_starts_with($target, $hrm)) {
             return $target;
