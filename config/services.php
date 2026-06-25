@@ -31,4 +31,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'trello' => [
+        'sale_webhook_url' => env('TRELLO_SALE_WEBHOOK_URL'),
+        'sale_webhook_token' => env('TRELLO_SALE_WEBHOOK_TOKEN'),
+    ],
+
 ];

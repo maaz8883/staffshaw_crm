@@ -55,6 +55,23 @@
                 <small class="text-muted d-block">Client Name</small>
                 {{ $sale->client_name }}
             </div>
+
+
+
+            <!-- for email -->
+            <div class="col-md-6">
+                <small class="text-muted d-block">Client Email</small>
+           {{ $sale->client_email }}
+
+            </div>
+            <!-- for phone -->
+            <div class="col-md-6">
+                <small class="text-muted d-block">Client Phone</small>
+             {{ $sale->client_phone }}
+            </div>
+
+
+            
             <div class="col-md-6">
                 <small class="text-muted d-block">Amount</small>
                 <span class="fw-bold fs-5 {{ $sale->is_refunded ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
