@@ -76,7 +76,10 @@ class SaleController extends Controller
         $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
         if ($subTeamHead) {
             $saleUser = \App\Models\User::find($sale->user_id);
-            if ($saleUser && $saleUser->sub_team_head_id === $subTeamHead->id) {
+            if (
+                (int) $sale->user_id === (int) $user->id
+                || ($saleUser && (int) $saleUser->sub_team_head_id === (int) $subTeamHead->id)
+            ) {
                 return true;
             }
         }
