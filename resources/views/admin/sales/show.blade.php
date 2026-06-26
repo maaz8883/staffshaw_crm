@@ -52,6 +52,10 @@
                 <span class="badge bg-{{ $tc[$sale->sale_type ?? 'front'] ?? 'secondary' }}">{{ $sale->saleTypeLabel() }}</span>
             </div>
             <div class="col-md-6">
+                <small class="text-muted d-block">Brand</small>
+                {{ $sale->brand?->name ?? '-' }}
+            </div>
+            <div class="col-md-6">
                 <small class="text-muted d-block">Client Name</small>
                 {{ $sale->client_name }}
             </div>
@@ -73,7 +77,7 @@
 
             
             <div class="col-md-6">
-                <small class="text-muted d-block">Amount</small>
+                <small class="text-muted d-block">Amount (Total)</small>
                 <span class="fw-bold fs-5 {{ $sale->is_refunded ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
                 @if($sale->is_refunded)
                     <span class="badge bg-danger ms-2">Refunded</span>
@@ -84,6 +88,15 @@
                         <span class="text-muted small">· {{ $sale->refundedBy->name }}</span>
                     @endif
                 @endif
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Received Amount</small>
+                <span class="fw-bold">${{ number_format($sale->received_amount, 2) }}</span>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Remaining Amount</small>
+                @php $remaining = $sale->remainingAmount(); @endphp
+                <span class="fw-bold {{ $remaining > 0 ? 'text-warning' : 'text-success' }}">${{ number_format($remaining, 2) }}</span>
             </div>
             @if($canToggleRefund ?? false)
             <div class="col-12">
@@ -118,10 +131,32 @@
             <div class="col-md-6">
                 <small class="text-muted d-block">Created</small>
                 {{ $sale->created_at->format('d M Y, h:i A') }}
+                <!-- @if(!empty($briefFormUrl) && ($hasBriefDocument ?? false))
+                    <div class="mt-2">
+                        <a href="{{ $briefDownloadUrl }}" class="btn btn-sm btn-success">Download Brief Document</a>
+                    </div>
+                @endif -->
             </div>
             <div class="col-12">
                 <small class="text-muted d-block">Notes</small>
                 {{ $sale->notes ?: '-' }}
+            </div>
+            @if(!empty($briefFormUrl))
+            <div class="col-12">
+                <small class="text-muted d-block">Brief Form Link</small>
+                <a href="{{ $briefFormUrl }}" target="_blank" rel="noopener">{{ $briefFormUrl }}</a>
+                @if(!($hasBriefDocument ?? false))
+                    <div class="text-warning small mt-1">No brief document on file for this brand.</div>
+                @endif
+            </div>
+            @endif
+            <div class="col-12">
+                <small class="text-muted d-block">Brief Form Document</small>
+            @if(!empty($briefFormUrl) && ($hasBriefDocument ?? false))
+                    <div class="mt-2">
+                        <a href="{{ $briefDownloadUrl }}" class="btn btn-sm btn-success">Download Brief Document</a>
+                    </div>
+                @endif
             </div>
         </div>
     </div>

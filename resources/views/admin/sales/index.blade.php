@@ -55,10 +55,30 @@
         <option value="upsell">Upsell</option>
     </select>
 
+    <select id="filter-brand" class="form-select form-select-sm" style="width:auto">
+        <option value="">All Brands</option>
+        @foreach($brands as $brand)
+            <option value="{{ $brand->id }}">{{ $brand->name }}</option>
+        @endforeach
+    </select>
+
     <select id="filter-refunded" class="form-select form-select-sm" style="width:auto">
         <option value="">All (refund)</option>
         <option value="0">Not refunded</option>
         <option value="1">Refunded</option>
+    </select>
+
+    <select id="filter-received" class="form-select form-select-sm" style="width:auto">
+        <option value="">All Received</option>
+        <option value="none">No payment ($0)</option>
+        <option value="partial">Partially received</option>
+        <option value="full">Fully received</option>
+    </select>
+
+    <select id="filter-remaining" class="form-select form-select-sm" style="width:auto">
+        <option value="">All Remaining</option>
+        <option value="zero">Fully paid ($0 remaining)</option>
+        <option value="outstanding">Has outstanding balance</option>
     </select>
 
     <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>
@@ -66,23 +86,28 @@
 
 <div class="card">
     <div class="card-body">
-        <table id="sales-table" class="table table-striped w-100">
-            <thead>
-            <tr>
-                <th>Title</th>
-                <th>Client</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>Date</th>
-                <th>Agent</th>
-                <th>Team</th>
-                <th>Status</th>
-                <th>Approval</th>
-                <th class="text-center">Refund</th>
-                <th class="text-end">Actions</th>
-            </tr>
-            </thead>
-        </table>
+        <div class="table-responsive">
+            <table id="sales-table" class="table table-striped w-100">
+                <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Client</th>
+                    <th>Brand</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Received</th>
+                    <th>Remaining</th>
+                    <th>Date</th>
+                    <th>Agent</th>
+                    <th>Team</th>
+                    <th>Status</th>
+                    <th>Approval</th>
+                    <th class="text-center">Refund</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+                </thead>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -114,6 +139,13 @@
 
 @push('styles')
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+    <style>
+        #sales-table th:last-child,
+        #sales-table td:last-child {
+            white-space: nowrap;
+            min-width: 220px;
+        }
+    </style>
 @endpush
 
 @section('scripts')
@@ -136,6 +168,8 @@ $(function () {
     var table = $('#sales-table').DataTable({
         processing: true,
         serverSide: true,
+        scrollX: true,
+        autoWidth: false,
         ajax: {
             url: @json(route('admin.sales.datatable')),
             data: function (d) {
@@ -145,13 +179,19 @@ $(function () {
                 d.approval_status = $('#filter-approval').val();
                 d.sale_type       = $('#filter-sale-type').val();
                 d.refunded        = $('#filter-refunded').val();
+                d.received_filter  = $('#filter-received').val();
+                d.remaining_filter = $('#filter-remaining').val();
+                d.brand_id         = $('#filter-brand').val();
             }
         },
         columns: [
             {data: 'title',          name: 'title'},
             {data: 'client_name',    name: 'client_name'},
+            {data: 'brand_name',     name: 'brand.name', searchable: false},
             {data: 'sale_type_badge', name: 'sale_type', orderable: true, searchable: false},
             {data: 'amount',         name: 'amount'},
+            {data: 'received_amount', name: 'received_amount'},
+            {data: 'remaining_amount', name: 'remaining_amount', orderable: true, searchable: false},
             {data: 'sale_date',      name: 'sale_date'},
             {data: 'agent_name',     name: 'user.name',    searchable: false},
             {data: 'team_name',      name: 'team.name',    searchable: false},
@@ -162,12 +202,12 @@ $(function () {
         ]
     });
 
-    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-refunded').on('change', function () {
+    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').on('change', function () {
         table.draw();
     });
 
     $('#btn-reset').on('click', function () {
-        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-refunded').val('');
+        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').val('');
         table.draw();
     });
 

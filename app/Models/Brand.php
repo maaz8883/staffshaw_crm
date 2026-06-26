@@ -4,32 +4,22 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Brand extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'company_id',
         'name',
-        'industry',
         'website',
-        'email',
-        'phone',
-        'address',
-        'status',
-        'notes',
-        'assigned_user_id',
+        'image',
+        'brief_document',
+        'brief_document_name',
     ];
 
-    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function sales(): HasMany
     {
-        return $this->belongsTo(\App\Models\Company::class);
-    }
-
-    public function assignedUser(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'assigned_user_id');
+        return $this->hasMany(Sale::class);
     }
 }

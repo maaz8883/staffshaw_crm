@@ -7,7 +7,7 @@
 @section('content')
     <div class="card">
         <div class="card-body">
-            <form action="{{ route('admin.brands.store') }}" method="POST">
+            <form action="{{ route('admin.brands.store') }}" method="POST" enctype="multipart/form-data">
                 @include('admin.brands._form', ['brand' => null])
                 <button type="submit" class="btn btn-primary">Save</button>
                 <a href="{{ route('admin.brands.index') }}" class="btn btn-outline-secondary">Cancel</a>

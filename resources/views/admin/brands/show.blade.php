@@ -13,51 +13,33 @@
     <div class="card">
         <div class="card-body">
             <div class="row g-3">
+                @if($brand->image)
+                <div class="col-12">
+                    <small class="text-muted d-block">Image</small>
+                    <img src="{{ asset('storage/' . $brand->image) }}"
+                         alt="{{ $brand->name }}"
+                         style="height:120px;width:120px;object-fit:cover;border-radius:8px;border:1px solid #dee2e6;">
+                </div>
+                @endif
                 <div class="col-md-6">
                     <small class="text-muted d-block">Brand Name</small>
                     <strong>{{ $brand->name }}</strong>
                 </div>
                 <div class="col-md-6">
-                    <small class="text-muted d-block">Industry</small>
-                    {{ $brand->industry ?: '-' }}
+                    <small class="text-muted d-block">URL</small>
+                    <a href="{{ $brand->website }}" target="_blank" rel="noopener">{{ $brand->website }}</a>
                 </div>
+                @if($brand->brief_document)
                 <div class="col-md-6">
-                    <small class="text-muted d-block">Email</small>
-                    {{ $brand->email ?: '-' }}
+                    <small class="text-muted d-block">Brief Document</small>
+                    <a href="{{ asset('storage/' . $brand->brief_document) }}" target="_blank" rel="noopener">
+                        {{ $brand->brief_document_name ?? basename($brand->brief_document) }}
+                    </a>
                 </div>
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Phone</small>
-                    {{ $brand->phone ?: '-' }}
-                </div>
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Website</small>
-                    @if($brand->website)
-                        <a href="{{ $brand->website }}" target="_blank">{{ $brand->website }}</a>
-                    @else
-                        -
-                    @endif
-                </div>
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Assigned To</small>
-                    {{ $brand->assignedUser?->name ?? '-' }}
-                </div>
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Status</small>
-                    <span class="badge bg-{{ $brand->status === 'active' ? 'success' : 'secondary' }}">
-                        {{ ucfirst($brand->status) }}
-                    </span>
-                </div>
+                @endif
                 <div class="col-md-6">
                     <small class="text-muted d-block">Created</small>
                     {{ $brand->created_at->format('d M Y, h:i A') }}
-                </div>
-                <div class="col-12">
-                    <small class="text-muted d-block">Address</small>
-                    {{ $brand->address ?: '-' }}
-                </div>
-                <div class="col-12">
-                    <small class="text-muted d-block">Notes</small>
-                    {{ $brand->notes ?: '-' }}
                 </div>
             </div>
         </div>

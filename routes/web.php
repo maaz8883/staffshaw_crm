@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
 use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -79,6 +80,17 @@ Route::prefix('admin')->group(function () {
                 'update'=> 'admin.companies.update','destroy'=> 'admin.companies.destroy',
             ])->except(['show']);
 
+            Route::get('brands/datatable', [BrandController::class, 'datatable'])->name('admin.brands.datatable');
+            Route::resource('brands', BrandController::class)->names([
+                'index'   => 'admin.brands.index',
+                'create'  => 'admin.brands.create',
+                'store'   => 'admin.brands.store',
+                'show'    => 'admin.brands.show',
+                'edit'    => 'admin.brands.edit',
+                'update'  => 'admin.brands.update',
+                'destroy' => 'admin.brands.destroy',
+            ]);
+
             Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
             Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');
 
@@ -122,6 +134,7 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
 
             Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
+            Route::get('sales/{sale}/brief-document', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
             Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');

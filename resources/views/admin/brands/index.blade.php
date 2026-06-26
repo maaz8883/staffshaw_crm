@@ -6,26 +6,23 @@
 
 @section('content')
     <div class="mb-3">
-        @if(!auth()->user()->hasRole('Agent'))
         <a href="{{ route('admin.brands.create') }}" class="btn btn-primary">Add Brand</a>
-        @endif
     </div>
 
     <div class="card">
         <div class="card-body">
-            <table id="brands-table" class="table table-striped w-100">
-                <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Industry</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Assigned To</th>
-                    <th>Status</th>
-                    <th class="text-end">Actions</th>
-                </tr>
-                </thead>
-            </table>
+            <div class="table-responsive">
+                <table id="brands-table" class="table table-striped w-100">
+                    <thead>
+                    <tr>
+                        <th>Image</th>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                    </thead>
+                </table>
+            </div>
         </div>
     </div>
 @endsection
@@ -43,14 +40,13 @@
             $('#brands-table').DataTable({
                 processing: true,
                 serverSide: true,
+                scrollX: true,
+                autoWidth: false,
                 ajax: @json(route('admin.brands.datatable')),
                 columns: [
+                    {data: 'image_thumb', name: 'image', orderable: false, searchable: false},
                     {data: 'name', name: 'name'},
-                    {data: 'industry', name: 'industry'},
-                    {data: 'email', name: 'email'},
-                    {data: 'phone', name: 'phone'},
-                    {data: 'assigned_to', name: 'assignedUser.name', searchable: false},
-                    {data: 'status', name: 'status'},
+                    {data: 'website', name: 'website'},
                     {data: 'actions', name: 'actions', orderable: false, searchable: false, className: 'text-end'}
                 ]
             });

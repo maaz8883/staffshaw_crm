@@ -32,10 +32,12 @@ class Sale extends Model
         'client_email',
         'client_phone',
         'amount',
+        'received_amount',
         'sale_date',
         'user_id',
         'team_id',
         'company_id',
+        'brand_id',
         'status',
         'status_before_refund',
         'sale_type',
@@ -44,6 +46,7 @@ class Sale extends Model
         'refunded_by',
         'notes',
         'approval_status',
+        'is_draft',
         'approval_note',
         'approved_by',
         'approved_at',
@@ -51,13 +54,16 @@ class Sale extends Model
 
     protected $casts = [
         'sale_date'    => 'date',
-        'amount'       => 'decimal:2',
+        'amount'          => 'decimal:2',
+        'received_amount' => 'decimal:2',
         'user_id'      => 'integer',
         'team_id'      => 'integer',
         'company_id'   => 'integer',
+        'brand_id'     => 'integer',
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',
+        'is_draft'     => 'boolean',
     ];
 
     public function user(): BelongsTo
@@ -73,6 +79,11 @@ class Sale extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
     }
 
     public function approvedBy(): BelongsTo
@@ -116,5 +127,10 @@ class Sale extends Model
         }
 
         return ucfirst($this->status);
+    }
+
+    public function remainingAmount(): float
+    {
+        return max(0, (float) $this->amount - (float) $this->received_amount);
     }
 }

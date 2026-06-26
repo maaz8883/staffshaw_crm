@@ -81,6 +81,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.brands.*') ? 'active' : '' }}" href="{{ route('admin.brands.index') }}" title="Brands">
+                    <i class="bi bi-building"></i> <span class="nav-label">Brands</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.teams.*') ? 'active' : '' }}" href="{{ route('admin.teams.index') }}" title="Teams">
                     <i class="bi bi-people"></i> <span class="nav-label">Teams</span>
                 </a>

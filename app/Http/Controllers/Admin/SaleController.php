@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Brand;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
@@ -11,6 +12,7 @@ use App\Services\ActivityLogger;
 use App\Services\SaleNotificationDispatcher;
 use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
+use App\Support\BrandBriefForm;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,7 +37,8 @@ class SaleController extends Controller
     private function baseQuery(): \Illuminate\Database\Eloquent\Builder
     {
         $user  = Auth::user();
-        $query = Sale::query()->with(['user', 'team', 'company'])->select('sales.*');
+        $query = Sale::query()->with(['user', 'team', 'company', 'brand'])->select('sales.*')
+            ->where('is_draft', false);
 
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             // Admin and Manager: all sales
@@ -96,9 +99,10 @@ class SaleController extends Controller
 
         $teams            = AuthScope::teamsForDropdown();
         $users            = $isAgent ? collect() : AuthScope::usersForDropdown();
+        $brands           = $this->brandsForDropdown();
         $pendingCount     = $this->baseQuery()->where('approval_status', Sale::APPROVAL_PENDING)->count();
 
-        return view('admin.sales.index', compact('teams', 'users', 'isAgent', 'pendingCount'));
+        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount'));
     }
 
     public function datatable(Request $request): JsonResponse
@@ -127,6 +131,25 @@ class SaleController extends Controller
                 $query->where('is_refunded', false);
             }
         }
+        if ($request->filled('received_filter')) {
+            match ($request->received_filter) {
+                'none'    => $query->where('received_amount', 0),
+                'partial' => $query->where('received_amount', '>', 0)
+                    ->whereColumn('received_amount', '<', 'amount'),
+                'full'    => $query->whereColumn('received_amount', '>=', 'amount'),
+                default   => null,
+            };
+        }
+        if ($request->filled('remaining_filter')) {
+            match ($request->remaining_filter) {
+                'zero'        => $query->whereRaw('(amount - received_amount) <= 0'),
+                'outstanding' => $query->whereRaw('(amount - received_amount) > 0'),
+                default       => null,
+            };
+        }
+        if ($request->filled('brand_id')) {
+            $query->where('brand_id', $request->brand_id);
+        }
 
         return DataTables::eloquent($query)
             ->editColumn('amount', function (Sale $s) {
@@ -136,6 +159,16 @@ class SaleController extends Controller
                 }
 
                 return $fmt;
+            })
+            ->editColumn('received_amount', fn (Sale $s) => '$' . number_format($s->received_amount, 2))
+            ->addColumn('remaining_amount', function (Sale $s) {
+                $remaining = $s->remainingAmount();
+                $class = $remaining > 0 ? 'text-warning' : 'text-success';
+
+                return '<span class="' . $class . '">$' . number_format($remaining, 2) . '</span>';
+            })
+            ->orderColumn('remaining_amount', function ($query, $direction) {
+                $query->orderByRaw('(amount - received_amount) ' . ($direction === 'desc' ? 'desc' : 'asc'));
             })
             ->editColumn('sale_date', fn (Sale $s) => $s->sale_date->format('d M Y'))
             ->addColumn('sale_type_badge', fn (Sale $s) =>
@@ -164,6 +197,7 @@ class SaleController extends Controller
                 '<span class="badge bg-' . self::approvalColor($s->approval_status) . '">' . self::approvalLabel($s->approval_status) . '</span>')
             ->addColumn('agent_name', fn (Sale $s) => e($s->user?->name ?? '-'))
             ->addColumn('team_name', fn (Sale $s) => e($s->team?->name ?? '-'))
+            ->addColumn('brand_name', fn (Sale $s) => e($s->brand?->name ?? '-'))
             ->addColumn('actions', function (Sale $sale) {
                 $user      = Auth::user();
                 $canEdit   = ($user->hasRole('Admin') || (int) $sale->user_id === (int) $user->id)
@@ -207,7 +241,7 @@ class SaleController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'actions'])
+            ->rawColumns(['amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'actions'])
             ->toJson();
     }
 
@@ -219,7 +253,27 @@ class SaleController extends Controller
             abort(403);
         }
 
-        return view('admin.sales.create');
+        return view('admin.sales.create', ['brands' => $this->brandsForDropdown()]);
+    }
+
+    public function downloadBriefDocument(Sale $sale)
+    {
+        $this->authorizeView($sale);
+
+        $sale->loadMissing('brand');
+        $brand = $sale->brand;
+
+        if (! $brand) {
+            abort(404, 'Brand not found for this sale.');
+        }
+
+        $document = BrandBriefForm::resolveDocumentPath($brand);
+
+        if (! $document) {
+            abort(404, 'Brief document not found for this brand.');
+        }
+
+        return response()->download($document['path'], $document['filename']);
     }
 
     public function store(Request $request): RedirectResponse
@@ -228,16 +282,7 @@ class SaleController extends Controller
             abort(403);
         }
 
-        $validated = $request->validate([
-            'title'        => 'required|string|max:255',
-            'client_name'  => 'required|string|max:255',
-            'client_email' => 'nullable|email|max:255',
-            'client_phone' => 'nullable|string|max:50',
-            'amount'       => 'required|numeric|min:0',
-            'sale_date'    => 'required|date',
-            'sale_type'    => 'required|in:' . implode(',', Sale::SALE_TYPES),
-            'notes'        => 'nullable|string',
-        ]);
+        $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
 
         $user = Auth::user();
 
@@ -247,6 +292,7 @@ class SaleController extends Controller
             'company_id'      => $user->company_id,
             'status'          => 'completed',
             'approval_status' => Sale::APPROVAL_PENDING,
+            'is_draft'        => false,
         ]));
 
         SaleNotificationDispatcher::dispatchSaleCreated($sale);
@@ -265,36 +311,28 @@ class SaleController extends Controller
     public function show(Sale $sale): View
     {
         $this->authorizeView($sale);
-        $sale->load(['user', 'team', 'company', 'approvedBy', 'refundedBy']);
+        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy']);
 
         $canToggleRefund = $this->canApprove($sale);
 
-        return view('admin.sales.show', compact('sale', 'canToggleRefund'));
+        return view('admin.sales.show', compact('sale', 'canToggleRefund') + $this->briefShowViewData($sale));
     }
 
     public function edit(Sale $sale): View
     {
         $this->authorizeEdit($sale);
 
-        return view('admin.sales.edit', compact('sale'));
+        return view('admin.sales.edit', [
+            'sale'   => $sale,
+            'brands' => $this->brandsForDropdown(),
+        ]);
     }
 
     public function update(Request $request, Sale $sale): RedirectResponse
     {
         $this->authorizeEdit($sale);
 
-        $rules = [
-            'title'        => 'required|string|max:255',
-            'client_name'  => 'required|string|max:255',
-            'client_email' => 'nullable|email|max:255',
-            'client_phone' => 'nullable|string|max:50',
-            'amount'       => 'required|numeric|min:0',
-            'sale_date'    => 'required|date',
-            'sale_type'    => 'required|in:' . implode(',', Sale::SALE_TYPES),
-            'notes'        => 'nullable|string',
-        ];
-
-        $validated = $request->validate($rules);
+        $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
 
         if ($sale->is_refunded) {
             unset($validated['status']);
@@ -504,5 +542,63 @@ class SaleController extends Controller
             Sale::TYPE_UPSELL => 'info',
             default           => 'primary',
         };
+    }
+
+    /** @return array<string, mixed> */
+    private function briefShowViewData(Sale $sale): array
+    {
+        if ($sale->is_draft || ! $sale->brand) {
+            return [
+                'briefFormUrl'   => null,
+                'briefDownloadUrl' => null,
+                'hasBriefDocument' => false,
+            ];
+        }
+
+        return [
+            'briefFormUrl'     => BrandBriefForm::briefFormUrl($sale->brand, $sale->id),
+            'briefDownloadUrl' => route('admin.sales.brief-document', $sale),
+            'hasBriefDocument' => BrandBriefForm::hasDocument($sale->brand),
+        ];
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Brand> */
+    private function brandsForDropdown()
+    {
+        return Brand::query()->orderBy('name')->get(['id', 'name']);
+    }
+
+    /** @param array<string, mixed> $validated */
+    private function normalizeSaleInput(array $validated): array
+    {
+        $validated['received_amount'] = $validated['received_amount'] ?? 0;
+
+        return $validated;
+    }
+
+    /** @return array<string, mixed> */
+    private function saleFormRules(Request $request): array
+    {
+        return [
+            'title'            => 'required|string|max:255',
+            'brand_id'         => 'required|exists:brands,id',
+            'client_name'      => 'required|string|max:255',
+            'client_email'     => 'nullable|email|max:255',
+            'client_phone'     => 'nullable|string|max:50',
+            'amount'           => 'required|numeric|min:0',
+            'received_amount'  => [
+                'nullable',
+                'numeric',
+                'min:0',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if ($value !== null && (float) $value > (float) $request->input('amount', 0)) {
+                        $fail('Received amount cannot exceed total amount.');
+                    }
+                },
+            ],
+            'sale_date'        => 'required|date',
+            'sale_type'        => 'required|in:' . implode(',', Sale::SALE_TYPES),
+            'notes'            => 'nullable|string',
+        ];
     }
 }
