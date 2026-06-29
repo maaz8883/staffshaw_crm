@@ -37,9 +37,7 @@ return [
     ],
 
     'orbit_brief' => [
-        'url'     => env('ORBIT_BRIEF_API_URL', 'http://localhost/orbit/api/v1'),
         'api_key' => env('ORBIT_BRIEF_API_KEY'),
-        'timeout' => (int) env('ORBIT_BRIEF_API_TIMEOUT', 10),
     ],
 
 ];

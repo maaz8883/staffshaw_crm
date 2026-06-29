@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandBriefForm;
-use App\Services\OrbitBriefSubmissionClient;
+use App\Models\BriefSubmission;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
@@ -555,7 +555,10 @@ class SaleController extends Controller
 
         $sale->brand->loadMissing(['briefForms.briefFormType']);
 
-        $submissions = app(OrbitBriefSubmissionClient::class)->forSale($sale->id);
+        $submissions = BriefSubmission::query()
+            ->where('sale_id', $sale->id)
+            ->get()
+            ->keyBy('brief_type');
 
         $briefForms = BriefFormSupport::activeFormsForBrand($sale->brand)
             ->map(function (BrandBriefForm $form) use ($sale, $submissions) {

@@ -66,5 +66,6 @@ class Kernel extends HttpKernel
         'role' => \App\Http\Middleware\RoleMiddleware::class,
         'active.account' => \App\Http\Middleware\EnsureAccountIsActive::class,
         'single.session' => \App\Http\Middleware\SingleSession::class,
+        'orbit.brief.api' => \App\Http\Middleware\VerifyOrbitBriefApiKey::class,
     ];
 }

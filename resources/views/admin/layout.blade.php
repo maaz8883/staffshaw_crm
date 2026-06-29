@@ -81,6 +81,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.brief-form-types.*') ? 'active' : '' }}" href="{{ route('admin.brief-form-types.index') }}" title="Brief Form Types">
+                    <i class="bi bi-ui-checks"></i> <span class="nav-label">Brief Form Types</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.brands.*') ? 'active' : '' }}" href="{{ route('admin.brands.index') }}" title="Brands">
                     <i class="bi bi-building"></i> <span class="nav-label">Brands</span>
                 </a>

@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\BrandController;
+use App\Http\Controllers\Admin\BriefFormTypeController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -90,6 +91,17 @@ Route::prefix('admin')->group(function () {
                 'update'  => 'admin.brands.update',
                 'destroy' => 'admin.brands.destroy',
             ]);
+
+            Route::get('brief-form-types/datatable', [BriefFormTypeController::class, 'datatable'])
+                ->name('admin.brief-form-types.datatable');
+            Route::resource('brief-form-types', BriefFormTypeController::class)->names([
+                'index'   => 'admin.brief-form-types.index',
+                'create'  => 'admin.brief-form-types.create',
+                'store'   => 'admin.brief-form-types.store',
+                'edit'    => 'admin.brief-form-types.edit',
+                'update'  => 'admin.brief-form-types.update',
+                'destroy' => 'admin.brief-form-types.destroy',
+            ])->except(['show']);
 
             Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
             Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');

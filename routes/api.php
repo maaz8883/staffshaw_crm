@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\BriefSubmissionController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\RoleController;
@@ -10,6 +11,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
+});
+
+// Orbit brief form submissions (Bearer / X-Orbit-Api-Key)
+Route::middleware('orbit.brief.api')->prefix('v1')->group(function () {
+    Route::get('sales/{sale}/brief-submissions/{briefType}', [BriefSubmissionController::class, 'show'])
+        ->where('briefType', '[a-z0-9_-]+');
+    Route::post('sales/{sale}/brief-submissions', [BriefSubmissionController::class, 'store']);
 });
 
 // Public API - no token required
