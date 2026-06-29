@@ -14,12 +14,15 @@ class Brand extends Model
         'name',
         'website',
         'image',
-        'brief_document',
-        'brief_document_name',
     ];
 
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    public function briefForms(): HasMany
+    {
+        return $this->hasMany(BrandBriefForm::class)->orderBy('sort_order')->orderBy('name');
     }
 }

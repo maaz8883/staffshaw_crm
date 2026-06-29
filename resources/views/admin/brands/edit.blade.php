@@ -9,7 +9,7 @@
         <div class="card-body">
             <form action="{{ route('admin.brands.update', $brand) }}" method="POST" enctype="multipart/form-data">
                 @method('PUT')
-                @include('admin.brands._form')
+                @include('admin.brands._form', ['briefFormTypes' => $briefFormTypes])
                 <button type="submit" class="btn btn-primary">Update</button>
                 <a href="{{ route('admin.brands.index') }}" class="btn btn-outline-secondary">Cancel</a>
             </form>

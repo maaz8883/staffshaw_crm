@@ -134,7 +134,7 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
 
             Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
-            Route::get('sales/{sale}/brief-document', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
+            Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
             Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');

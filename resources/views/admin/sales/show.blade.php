@@ -131,33 +131,117 @@
             <div class="col-md-6">
                 <small class="text-muted d-block">Created</small>
                 {{ $sale->created_at->format('d M Y, h:i A') }}
-                <!-- @if(!empty($briefFormUrl) && ($hasBriefDocument ?? false))
-                    <div class="mt-2">
-                        <a href="{{ $briefDownloadUrl }}" class="btn btn-sm btn-success">Download Brief Document</a>
-                    </div>
-                @endif -->
             </div>
             <div class="col-12">
                 <small class="text-muted d-block">Notes</small>
                 {{ $sale->notes ?: '-' }}
             </div>
-            @if(!empty($briefFormUrl))
+            @if(($briefForms ?? collect())->isNotEmpty())
             <div class="col-12">
-                <small class="text-muted d-block">Brief Form Link</small>
-                <a href="{{ $briefFormUrl }}" target="_blank" rel="noopener">{{ $briefFormUrl }}</a>
-                @if(!($hasBriefDocument ?? false))
-                    <div class="text-warning small mt-1">No brief document on file for this brand.</div>
+                <small class="text-muted d-block mb-2">Brief Forms</small>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Brief Form</th>
+                                <th>Link</th>
+                                <th style="width:160px">Document</th>
+                                <th style="width:120px">Status</th>
+                                <th style="width:120px">Answers</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($briefForms as $index => $form)
+                            <tr>
+                                <td>{{ $form['name'] }}</td>
+                                <td>
+                                    <a href="{{ $form['url'] }}" target="_blank" rel="noopener">{{ $form['url'] }}</a>
+                                </td>
+                                <td>
+                                    @if($form['downloadUrl'])
+                                        <a href="{{ $form['downloadUrl'] }}" class="btn btn-sm btn-success">Download</a>
+                                    @else
+                                        <span class="text-muted small">No document</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if(($form['submissionStatus'] ?? 'pending') === 'submitted')
+                                        <span class="badge bg-success">Submitted</span>
+                                        @if(!empty($form['submittedAt']))
+                                            <div class="small text-muted mt-1">{{ $form['submittedAt']->format('d M Y, h:i A') }}</div>
+                                        @endif
+                                    @else
+                                        <span class="badge bg-secondary">Pending</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if(!empty($form['submission']))
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#briefAnswersModal{{ $index }}">
+                                            View
+                                        </button>
+                                    @else
+                                        <span class="text-muted small">—</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @foreach($briefForms as $index => $form)
+                @if(!empty($form['submission']))
+                <div class="modal fade" id="briefAnswersModal{{ $index }}" tabindex="-1" aria-labelledby="briefAnswersModalLabel{{ $index }}" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="briefAnswersModalLabel{{ $index }}">{{ $form['name'] }} — Brief Answers</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <dl class="row mb-0">
+                                    @foreach(($form['submission']->data ?? []) as $key => $value)
+                                        <dt class="col-sm-4">{{ $form['fieldLabels'][$key] ?? ucfirst(str_replace('_', ' ', $key)) }}</dt>
+                                        <dd class="col-sm-8">
+                                            @if(is_array($value))
+                                                {{ implode(', ', $value) }}
+                                            @else
+                                                {!! nl2br(e((string) $value)) ?: '—' !!}
+                                            @endif
+                                        </dd>
+                                    @endforeach
+                                </dl>
+
+                                @if(!empty($form['submission']->attachments))
+                                    <hr>
+                                    <h6 class="mb-2">Attachments</h6>
+                                    <ul class="mb-0">
+                                        @foreach($form['submission']->attachments as $attachment)
+                                            <li>
+                                                @if(!empty($attachment['public_url']))
+                                                    <a href="{{ $attachment['public_url'] }}" target="_blank" rel="noopener">
+                                                        {{ $attachment['original_name'] ?? 'Download file' }}
+                                                    </a>
+                                                @else
+                                                    {{ $attachment['original_name'] ?? 'File' }}
+                                                @endif
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 @endif
+            @endforeach
+            @elseif($sale->brand)
+            <div class="col-12">
+                <small class="text-muted d-block">Brief Forms</small>
+                <span class="text-muted">No brief forms configured for this brand.</span>
             </div>
             @endif
-            <div class="col-12">
-                <small class="text-muted d-block">Brief Form Document</small>
-            @if(!empty($briefFormUrl) && ($hasBriefDocument ?? false))
-                    <div class="mt-2">
-                        <a href="{{ $briefDownloadUrl }}" class="btn btn-sm btn-success">Download Brief Document</a>
-                    </div>
-                @endif
-            </div>
         </div>
     </div>
 </div>

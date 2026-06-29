@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
+use App\Models\BrandBriefForm;
+use App\Models\BriefSubmission;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
@@ -12,7 +14,8 @@ use App\Services\ActivityLogger;
 use App\Services\SaleNotificationDispatcher;
 use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
-use App\Support\BrandBriefForm;
+use App\Support\BriefFormSupport;
+use App\Support\BriefSubmissionLabels;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -256,21 +259,20 @@ class SaleController extends Controller
         return view('admin.sales.create', ['brands' => $this->brandsForDropdown()]);
     }
 
-    public function downloadBriefDocument(Sale $sale)
+    public function downloadBriefDocument(Sale $sale, BrandBriefForm $brandBriefForm)
     {
         $this->authorizeView($sale);
 
         $sale->loadMissing('brand');
-        $brand = $sale->brand;
 
-        if (! $brand) {
-            abort(404, 'Brand not found for this sale.');
+        if (! $sale->brand || (int) $brandBriefForm->brand_id !== (int) $sale->brand_id) {
+            abort(404, 'Brief form not found for this sale.');
         }
 
-        $document = BrandBriefForm::resolveDocumentPath($brand);
+        $document = BriefFormSupport::resolveDocumentPath($brandBriefForm);
 
         if (! $document) {
-            abort(404, 'Brief document not found for this brand.');
+            abort(404, 'Brief document not found for this brief form.');
         }
 
         return response()->download($document['path'], $document['filename']);
@@ -548,18 +550,50 @@ class SaleController extends Controller
     private function briefShowViewData(Sale $sale): array
     {
         if ($sale->is_draft || ! $sale->brand) {
-            return [
-                'briefFormUrl'   => null,
-                'briefDownloadUrl' => null,
-                'hasBriefDocument' => false,
-            ];
+            return ['briefForms' => collect()];
         }
 
-        return [
-            'briefFormUrl'     => BrandBriefForm::briefFormUrl($sale->brand, $sale->id),
-            'briefDownloadUrl' => route('admin.sales.brief-document', $sale),
-            'hasBriefDocument' => BrandBriefForm::hasDocument($sale->brand),
-        ];
+        $sale->brand->loadMissing(['briefForms.briefFormType']);
+
+        $submissions = BriefSubmission::query()
+            ->forSale($sale->id)
+            ->get()
+            ->keyBy('brief_type');
+
+        $briefForms = BriefFormSupport::activeFormsForBrand($sale->brand)
+            ->map(function (BrandBriefForm $form) use ($sale, $submissions) {
+                $typeSlug = $form->briefFormType?->slug ?? $this->briefTypeSlugFromForm($form);
+                $submission = $submissions->get($typeSlug);
+
+                return [
+                    'name'             => $form->name,
+                    'url'              => BriefFormSupport::briefFormUrl($form, $sale->id),
+                    'downloadUrl'      => $form->hasDocument()
+                        ? route('admin.sales.brief-document', [$sale, $form])
+                        : null,
+                    'briefType'        => $typeSlug,
+                    'submissionStatus' => $submission?->isSubmitted() ? 'submitted' : 'pending',
+                    'submittedAt'      => $submission?->submitted_at,
+                    'submission'       => $submission,
+                    'fieldLabels'      => BriefSubmissionLabels::forType($typeSlug),
+                ];
+            });
+
+        return compact('briefForms');
+    }
+
+    private function briefTypeSlugFromForm(BrandBriefForm $form): string
+    {
+        $slug = strtolower($form->form_path);
+        $slug = trim($slug, '/');
+        $slug = preg_replace('/-brief$/', '', $slug) ?: 'website';
+
+        return match (true) {
+            str_contains($slug, 'logo')   => 'logo',
+            str_contains($slug, 'ebook')  => 'ebook',
+            str_contains($slug, 'website'), str_contains($slug, 'web') => 'website',
+            default => $slug,
+        };
     }
 
     /** @return \Illuminate\Database\Eloquent\Collection<int, Brand> */
