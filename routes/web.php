@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\BriefFormTypeController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
@@ -130,15 +131,14 @@ Route::prefix('admin')->group(function () {
         });
 
         // ── Admin + Agent + Team Head (non-PPC) ──────────────────────────────
-        // Teams: Admin/Agent/Manager can view; controller handles edit/delete auth internally
         Route::middleware('role:Admin,Agent,Manager')->group(function () {
             Route::get('teams/datatable', [TeamController::class, 'datatable'])->name('admin.teams.datatable');
             Route::resource('teams', TeamController::class)->names([
                 'index' => 'admin.teams.index', 'create' => 'admin.teams.create',
-                'store' => 'admin.teams.store', 'show'   => 'admin.teams.show',
+                'store' => 'admin.teams.store',
                 'edit'  => 'admin.teams.edit',  'update' => 'admin.teams.update',
                 'destroy' => 'admin.teams.destroy',
-            ]);
+            ])->except(['show']);
 
             Route::get('targets',                      [TargetController::class, 'index'])->name('admin.targets.index');
             Route::post('targets/team/{team}',         [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
@@ -146,6 +146,7 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
 
             Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
+            Route::post('sales/{sale}/invoices',      [InvoiceController::class, 'store'])->name('admin.invoices.store');
             Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
@@ -156,6 +157,16 @@ Route::prefix('admin')->group(function () {
                 'store'  => 'admin.sales.store',  'show'   => 'admin.sales.show',
                 'edit'   => 'admin.sales.edit',   'update' => 'admin.sales.update',
             ])->except(['destroy']);
+
+            Route::get('invoices/datatable', [InvoiceController::class, 'datatable'])->name('admin.invoices.datatable');
+            Route::get('invoices',           [InvoiceController::class, 'index'])->name('admin.invoices.index');
+            Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('admin.invoices.show')->whereNumber('invoice');
+            Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])->name('admin.invoices.void')->whereNumber('invoice');
+        });
+
+        // ── Team show: PPC can add/view spending (after teams/datatable) ─────
+        Route::middleware('role:Admin,Agent,Manager,PPC')->group(function () {
+            Route::get('teams/{team}', [TeamController::class, 'show'])->name('admin.teams.show')->whereNumber('team');
         });
 
         // ── PPC + Admin ──────────────────────────────────────────────────────

@@ -108,6 +108,11 @@
                     <i class="bi bi-cash-stack"></i> <span class="nav-label">Sales</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.invoices.*') ? 'active' : '' }}" href="{{ route('admin.invoices.index') }}" title="Invoices">
+                    <i class="bi bi-receipt"></i> <span class="nav-label">Invoices</span>
+                </a>
+            </li>
             @if(auth()->user()->hasRole('Admin'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}" title="Reports">

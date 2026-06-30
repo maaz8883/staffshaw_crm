@@ -136,6 +136,98 @@
                 <small class="text-muted d-block">Notes</small>
                 {{ $sale->notes ?: '-' }}
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-receipt"></i> Invoices</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <small class="text-muted d-block">Sale Total</small>
+                <strong>${{ number_format($sale->amount, 2) }}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted d-block">Received</small>
+                <strong>${{ number_format($sale->received_amount, 2) }}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted d-block">Remaining</small>
+                <strong class="{{ $sale->remainingAmount() > 0 ? 'text-warning' : 'text-success' }}">${{ number_format($sale->remainingAmount(), 2) }}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted d-block">Billable Remaining</small>
+                <strong class="{{ $billableRemaining > 0 ? 'text-primary' : 'text-muted' }}">${{ number_format($billableRemaining, 2) }}</strong>
+            </div>
+        </div>
+
+        @if($invoices->isNotEmpty())
+        <div class="table-responsive mb-3">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Invoice #</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($invoices as $invoice)
+                    <tr>
+                        <td>{{ $invoice->invoice_number }}</td>
+                        <td>{{ $invoice->issued_at->format('d M Y') }}</td>
+                        <td>${{ number_format($invoice->amount, 2) }}</td>
+                        <td>
+                            <span class="badge bg-{{ $invoice->isVoid() ? 'secondary' : 'success' }}">{{ $invoice->statusLabel() }}</span>
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ route('admin.invoices.show', $invoice) }}" class="btn btn-sm btn-outline-info">View</a>
+                            <a href="{{ route('admin.invoices.show', $invoice) }}" target="_blank" class="btn btn-sm btn-outline-secondary">Print</a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        @else
+        <p class="text-muted mb-3">No invoices generated for this sale yet.</p>
+        @endif
+
+        @if($canGenerateInvoice)
+        <form method="POST" action="{{ route('admin.invoices.store', $sale) }}" class="row g-2 align-items-end border-top pt-3">
+            @csrf
+            <div class="col-md-4">
+                <label for="invoice_amount" class="form-label mb-1">Invoice Amount ($)</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">$</span>
+                    <input type="number" name="amount" id="invoice_amount" class="form-control"
+                        step="0.01" min="0.01" max="{{ $billableRemaining }}"
+                        value="{{ number_format($billableRemaining, 2, '.', '') }}" required>
+                </div>
+                <div class="form-text">Max billable: ${{ number_format($billableRemaining, 2) }}</div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-receipt"></i> Generate Invoice
+                </button>
+            </div>
+        </form>
+        @elseif($sale->is_refunded || $sale->status === \App\Models\Sale::STATUS_REFUNDED)
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Invoices cannot be generated for refunded sales.</p>
+        @elseif($billableRemaining <= 0)
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully invoiced.</p>
+        @endif
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row g-3">
             @if(($briefForms ?? collect())->isNotEmpty())
             <div class="col-12">
                 <small class="text-muted d-block mb-2">Brief Forms</small>

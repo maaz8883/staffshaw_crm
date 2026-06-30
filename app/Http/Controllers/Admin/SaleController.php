@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\Team;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
+use App\Services\InvoiceService;
 use App\Services\SaleNotificationDispatcher;
 use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
@@ -313,11 +314,21 @@ class SaleController extends Controller
     public function show(Sale $sale): View
     {
         $this->authorizeView($sale);
-        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy']);
+        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices']);
 
         $canToggleRefund = $this->canApprove($sale);
+        $invoiceService = app(InvoiceService::class);
+        $invoices = $sale->invoices->sortByDesc('issued_at')->values();
+        $billableRemaining = $invoiceService->billableRemaining($sale);
+        $canGenerateInvoice = $invoiceService->canGenerateForSale($sale);
 
-        return view('admin.sales.show', compact('sale', 'canToggleRefund') + $this->briefShowViewData($sale));
+        return view('admin.sales.show', compact(
+            'sale',
+            'canToggleRefund',
+            'invoices',
+            'billableRemaining',
+            'canGenerateInvoice'
+        ) + $this->briefShowViewData($sale));
     }
 
     public function edit(Sale $sale): View

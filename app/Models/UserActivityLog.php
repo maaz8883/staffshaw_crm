@@ -39,6 +39,8 @@ class UserActivityLog extends Model
     public const TYPE_OTP_UPDATED  = 'otp_updated';
     public const TYPE_BACKUP_CREATED = 'backup_created';
     public const TYPE_BACKUP_DELETED = 'backup_deleted';
+    public const TYPE_INVOICE_CREATED = 'invoice_created';
+    public const TYPE_INVOICE_VOIDED  = 'invoice_voided';
 
     public function user(): BelongsTo
     {
@@ -71,6 +73,8 @@ class UserActivityLog extends Model
             self::TYPE_OTP_UPDATED    => 'info',
             self::TYPE_BACKUP_CREATED => 'success',
             self::TYPE_BACKUP_DELETED => 'danger',
+            self::TYPE_INVOICE_CREATED => 'primary',
+            self::TYPE_INVOICE_VOIDED  => 'warning',
             default                   => 'light',
         };
     }
