@@ -11,14 +11,35 @@ use Illuminate\Validation\ValidationException;
 
 class InvoiceService
 {
-    public function billableRemaining(Sale $sale): float
+    public function invoicedTotal(Sale $sale): float
     {
-        $invoiced = (float) Invoice::query()
+        return (float) Invoice::query()
             ->where('sale_id', $sale->id)
             ->where('status', '!=', Invoice::STATUS_VOID)
             ->sum('amount');
+    }
 
-        return max(0, (float) $sale->amount - $invoiced);
+    /** Align legacy sales where invoices exist but received_amount was not updated. */
+    public function syncReceivedAmount(Sale $sale): Sale
+    {
+        $invoiced = $this->invoicedTotal($sale);
+
+        if ((float) $sale->received_amount < $invoiced) {
+            $sale->update(['received_amount' => $invoiced]);
+            $sale->refresh();
+        }
+
+        return $sale;
+    }
+
+    public function maxReceivableAmount(Sale $sale): float
+    {
+        return max(0, min($sale->remainingAmount(), $this->billableRemaining($sale)));
+    }
+
+    public function billableRemaining(Sale $sale): float
+    {
+        return max(0, (float) $sale->amount - $this->invoicedTotal($sale));
     }
 
     public function generateNumber(): string
@@ -50,34 +71,42 @@ class InvoiceService
             return false;
         }
 
-        return $this->billableRemaining($sale) > 0;
+        return $sale->remainingAmount() > 0 && $this->billableRemaining($sale) > 0;
     }
 
     public function createFromSale(Sale $sale, float $amount, User $creator): Invoice
     {
+        $sale = $this->syncReceivedAmount($sale->fresh());
+
         if (! $this->canGenerateForSale($sale)) {
             throw ValidationException::withMessages([
                 'amount' => 'Cannot generate an invoice for this sale.',
             ]);
         }
 
+        $remaining = $sale->remainingAmount();
         $billable = $this->billableRemaining($sale);
+        $maxAmount = $this->maxReceivableAmount($sale);
 
         if ($amount <= 0) {
             throw ValidationException::withMessages([
-                'amount' => 'Invoice amount must be greater than zero.',
+                'amount' => 'Received amount must be greater than zero.',
             ]);
         }
 
-        if ($amount > $billable) {
+        if ($amount > $maxAmount) {
             throw ValidationException::withMessages([
-                'amount' => 'Invoice amount cannot exceed billable remaining ($' . number_format($billable, 2) . ').',
+                'amount' => 'Received amount cannot exceed $' . number_format($maxAmount, 2) . '.',
             ]);
         }
-
-        $sale->loadMissing(['user', 'team', 'company', 'brand']);
 
         return DB::transaction(function () use ($sale, $amount, $creator) {
+            $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
+            $sale->loadMissing(['user', 'team', 'company', 'brand']);
+
+            $newReceived = (float) $sale->received_amount + $amount;
+            $newBalance = max(0, (float) $sale->amount - $newReceived);
+
             $invoice = Invoice::query()->create([
                 'sale_id'         => $sale->id,
                 'invoice_number'  => $this->generateNumber(),
@@ -95,14 +124,16 @@ class InvoiceService
                 'team_name'       => $sale->team?->name,
                 'company_name'    => $sale->company?->name,
                 'sale_total'      => $sale->amount,
-                'sale_received'   => $sale->received_amount,
-                'sale_balance'    => $sale->remainingAmount(),
+                'sale_received'   => $newReceived,
+                'sale_balance'    => $newBalance,
                 'status'          => Invoice::STATUS_ISSUED,
                 'created_by'      => $creator->id,
             ]);
 
+            $sale->update(['received_amount' => $newReceived]);
+
             ActivityLogger::log($creator, UserActivityLog::TYPE_INVOICE_CREATED,
-                "Created invoice {$invoice->invoice_number} for sale #{$sale->id} (\${$amount})",
+                "Created invoice {$invoice->invoice_number} for sale #{$sale->id} (received \${$amount})",
                 ['invoice_id' => $invoice->id, 'sale_id' => $sale->id, 'amount' => $amount]
             );
 
@@ -118,13 +149,22 @@ class InvoiceService
             ]);
         }
 
-        $invoice->update(['status' => Invoice::STATUS_VOID]);
+        return DB::transaction(function () use ($invoice, $user) {
+            $invoice->update(['status' => Invoice::STATUS_VOID]);
 
-        ActivityLogger::log($user, UserActivityLog::TYPE_INVOICE_VOIDED,
-            "Voided invoice {$invoice->invoice_number} (sale #{$invoice->sale_id})",
-            ['invoice_id' => $invoice->id, 'sale_id' => $invoice->sale_id, 'amount' => $invoice->amount]
-        );
+            $sale = Sale::query()->lockForUpdate()->find($invoice->sale_id);
 
-        return $invoice->fresh();
+            if ($sale !== null) {
+                $newReceived = max(0, (float) $sale->received_amount - (float) $invoice->amount);
+                $sale->update(['received_amount' => $newReceived]);
+            }
+
+            ActivityLogger::log($user, UserActivityLog::TYPE_INVOICE_VOIDED,
+                "Voided invoice {$invoice->invoice_number} (sale #{$invoice->sale_id})",
+                ['invoice_id' => $invoice->id, 'sale_id' => $invoice->sale_id, 'amount' => $invoice->amount]
+            );
+
+            return $invoice->fresh();
+        });
     }
 }

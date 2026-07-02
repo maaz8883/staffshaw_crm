@@ -12,7 +12,9 @@ use App\Services\InvoiceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -54,7 +56,6 @@ class InvoiceController extends Controller
             ->addColumn('actions', function (Invoice $invoice) {
                 $showUrl = route('admin.invoices.show', $invoice);
                 $html = '<a href="' . $showUrl . '" class="btn btn-sm btn-outline-info">View</a>';
-                $html .= ' <a href="' . $showUrl . '" target="_blank" class="btn btn-sm btn-outline-secondary" onclick="window.open(\'' . $showUrl . '\'); return false;">Print</a>';
 
                 if ($this->canVoid() && ! $invoice->isVoid()) {
                     $voidUrl = route('admin.invoices.void', $invoice);
@@ -80,6 +81,18 @@ class InvoiceController extends Controller
         $canVoid = $this->canVoid() && ! $invoice->isVoid();
 
         return view('admin.invoices.show', compact('invoice', 'canVoid'));
+    }
+
+    public function downloadPdf(Invoice $invoice): Response
+    {
+        $invoice->load(['sale', 'brand', 'creator']);
+        $this->authorizeSaleAccess($invoice->sale);
+
+        $filename = Str::slug($invoice->invoice_number, '-') . '.pdf';
+
+        return app('dompdf.wrapper')
+            ->loadView('admin.invoices.pdf', compact('invoice'))
+            ->download($filename);
     }
 
     public function store(Request $request, Sale $sale): RedirectResponse

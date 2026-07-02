@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\BriefFormSchemaService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class BrandBriefForm extends Model
@@ -16,6 +18,9 @@ class BrandBriefForm extends Model
         'brief_form_type_id',
         'name',
         'form_path',
+        'slug',
+        'schema',
+        'schema_version',
         'document',
         'document_name',
         'sort_order',
@@ -25,6 +30,8 @@ class BrandBriefForm extends Model
     protected $casts = [
         'brand_id'           => 'integer',
         'brief_form_type_id' => 'integer',
+        'schema'             => 'array',
+        'schema_version'     => 'integer',
         'sort_order'         => 'integer',
         'is_active'          => 'boolean',
     ];
@@ -39,12 +46,38 @@ class BrandBriefForm extends Model
         return $this->belongsTo(BriefFormType::class);
     }
 
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(BriefSubmission::class);
+    }
+
+    public function hasSchema(): bool
+    {
+        return is_array($this->schema) && ! empty($this->schema['sections']);
+    }
+
+    /** @return array<string, string> */
+    public function fieldLabels(): array
+    {
+        return app(BriefFormSchemaService::class)->labelsFromSchema($this->schema);
+    }
+
+    public function resolveSlug(): string
+    {
+        return app(BriefFormSchemaService::class)->resolveSlugForForm($this);
+    }
+
+    public function fieldCount(): int
+    {
+        return count($this->fieldLabels());
+    }
+
     public function urlForSale(Sale $sale): string
     {
         $website = rtrim($this->brand->website, '/');
         $path    = '/' . ltrim($this->form_path, '/');
 
-        return $website . $path . '?sale_id=' . $sale->id;
+        return $website . $path . '?sale_id=' . $sale->id . '&form_id=' . $this->id;
     }
 
     public function hasDocument(): bool

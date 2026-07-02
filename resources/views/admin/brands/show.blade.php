@@ -39,8 +39,12 @@
                                 <tr>
                                     <th>Name</th>
                                     <th>Form Path</th>
+                                    <th>Fields</th>
                                     <th>Document</th>
                                     <th>Status</th>
+                                    @if(config('brief.builder_enabled'))
+                                    <th>Builder</th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody>
@@ -48,6 +52,7 @@
                                 <tr>
                                     <td>{{ $form->name }}</td>
                                     <td><code>{{ $form->form_path }}</code></td>
+                                    <td>{{ $form->fieldCount() }} fields</td>
                                     <td>
                                         @if($form->document)
                                             <a href="{{ asset('storage/' . $form->document) }}" target="_blank" rel="noopener">
@@ -64,6 +69,11 @@
                                             <span class="badge bg-secondary">Inactive</span>
                                         @endif
                                     </td>
+                                    @if(config('brief.builder_enabled'))
+                                    <td>
+                                        <a href="{{ route('admin.brands.brief-forms.builder', [$brand, $form]) }}" class="btn btn-sm btn-outline-primary">Build Form</a>
+                                    </td>
+                                    @endif
                                 </tr>
                                 @endforeach
                             </tbody>

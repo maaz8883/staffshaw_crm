@@ -23,6 +23,6 @@ class Brand extends Model
 
     public function briefForms(): HasMany
     {
-        return $this->hasMany(BrandBriefForm::class)->orderBy('sort_order')->orderBy('name');
+        return $this->hasMany(BrandBriefForm::class)->orderBy('sort_order')->orderBy('id');
     }
 }

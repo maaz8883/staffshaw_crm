@@ -17,7 +17,7 @@ class BriefFormSupport
         $website = rtrim($form->brand->website, '/');
         $path    = '/' . ltrim($form->form_path, '/');
 
-        return $website . $path . '?sale_id=' . $saleId;
+        return $website . $path . '?sale_id=' . $saleId . '&form_id=' . $form->id;
     }
 
     /**
@@ -27,7 +27,7 @@ class BriefFormSupport
     {
         return $brand->briefForms()
             ->where('is_active', true)
-            ->with(['brand', 'briefFormType'])
+            ->with('brand')
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();

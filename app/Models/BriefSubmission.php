@@ -13,10 +13,12 @@ class BriefSubmission extends Model
 
     protected $fillable = [
         'sale_id',
+        'brand_brief_form_id',
         'brief_type',
         'form_path',
         'data',
         'attachments',
+        'meta',
         'status',
         'submitted_at',
         'client_name',
@@ -25,15 +27,22 @@ class BriefSubmission extends Model
     ];
 
     protected $casts = [
-        'data'         => 'array',
-        'attachments'  => 'array',
-        'submitted_at' => 'datetime',
+        'data'                => 'array',
+        'attachments'         => 'array',
+        'meta'                => 'array',
+        'submitted_at'        => 'datetime',
+        'brand_brief_form_id' => 'integer',
     ];
 
     /** @return BelongsTo<Sale, BriefSubmission> */
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class);
+    }
+
+    public function brandBriefForm(): BelongsTo
+    {
+        return $this->belongsTo(BrandBriefForm::class);
     }
 
     public function isSubmitted(): bool

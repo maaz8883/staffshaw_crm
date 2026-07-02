@@ -9,7 +9,7 @@ use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\BrandController;
-use App\Http\Controllers\Admin\BriefFormTypeController;
+use App\Http\Controllers\Admin\BriefFormBuilderController;
 use App\Http\Controllers\Admin\CompanyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\InvoiceController;
@@ -93,16 +93,12 @@ Route::prefix('admin')->group(function () {
                 'destroy' => 'admin.brands.destroy',
             ]);
 
-            Route::get('brief-form-types/datatable', [BriefFormTypeController::class, 'datatable'])
-                ->name('admin.brief-form-types.datatable');
-            Route::resource('brief-form-types', BriefFormTypeController::class)->names([
-                'index'   => 'admin.brief-form-types.index',
-                'create'  => 'admin.brief-form-types.create',
-                'store'   => 'admin.brief-form-types.store',
-                'edit'    => 'admin.brief-form-types.edit',
-                'update'  => 'admin.brief-form-types.update',
-                'destroy' => 'admin.brief-form-types.destroy',
-            ])->except(['show']);
+            Route::get('brands/{brand}/brief-forms/{form}/builder', [BriefFormBuilderController::class, 'show'])
+                ->name('admin.brands.brief-forms.builder');
+            Route::put('brands/{brand}/brief-forms/{form}/builder', [BriefFormBuilderController::class, 'update'])
+                ->name('admin.brands.brief-forms.builder.update');
+            Route::get('brands/{brand}/brief-forms/{form}/builder/preview', [BriefFormBuilderController::class, 'preview'])
+                ->name('admin.brands.brief-forms.builder.preview');
 
             Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
             Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');
@@ -161,6 +157,7 @@ Route::prefix('admin')->group(function () {
             Route::get('invoices/datatable', [InvoiceController::class, 'datatable'])->name('admin.invoices.datatable');
             Route::get('invoices',           [InvoiceController::class, 'index'])->name('admin.invoices.index');
             Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('admin.invoices.show')->whereNumber('invoice');
+            Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'downloadPdf'])->name('admin.invoices.pdf')->whereNumber('invoice');
             Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])->name('admin.invoices.void')->whereNumber('invoice');
         });
 

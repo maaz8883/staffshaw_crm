@@ -15,6 +15,7 @@ use App\Services\InvoiceService;
 use App\Services\SaleNotificationDispatcher;
 use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
+use App\Services\BriefFormSchemaService;
 use App\Support\BriefFormSupport;
 use App\Support\BriefSubmissionLabels;
 use Illuminate\Http\JsonResponse;
@@ -318,8 +319,10 @@ class SaleController extends Controller
 
         $canToggleRefund = $this->canApprove($sale);
         $invoiceService = app(InvoiceService::class);
+        $sale = $invoiceService->syncReceivedAmount($sale);
         $invoices = $sale->invoices->sortByDesc('issued_at')->values();
         $billableRemaining = $invoiceService->billableRemaining($sale);
+        $invoiceMaxAmount = $invoiceService->maxReceivableAmount($sale);
         $canGenerateInvoice = $invoiceService->canGenerateForSale($sale);
 
         return view('admin.sales.show', compact(
@@ -327,6 +330,7 @@ class SaleController extends Controller
             'canToggleRefund',
             'invoices',
             'billableRemaining',
+            'invoiceMaxAmount',
             'canGenerateInvoice'
         ) + $this->briefShowViewData($sale));
     }
@@ -568,13 +572,44 @@ class SaleController extends Controller
 
         $submissions = BriefSubmission::query()
             ->where('sale_id', $sale->id)
-            ->get()
-            ->keyBy('brief_type');
+            ->with('brandBriefForm')
+            ->get();
+
+        $submissionsByFormId = $submissions
+            ->filter(fn (BriefSubmission $s) => $s->brand_brief_form_id !== null)
+            ->keyBy('brand_brief_form_id');
+        $submissionsByBriefType = $submissions->keyBy('brief_type');
+
+        $schemaService = app(BriefFormSchemaService::class);
 
         $briefForms = BriefFormSupport::activeFormsForBrand($sale->brand)
-            ->map(function (BrandBriefForm $form) use ($sale, $submissions) {
-                $typeSlug = $form->briefFormType?->slug ?? $this->briefTypeSlugFromForm($form);
-                $submission = $submissions->get($typeSlug);
+            ->map(function (BrandBriefForm $form) use ($sale, $submissionsByFormId, $submissionsByBriefType, $schemaService) {
+                $typeSlug = $form->resolveSlug();
+                $submission = $submissionsByFormId->get($form->id)
+                    ?? $submissionsByBriefType->get($typeSlug);
+
+                $fieldLabels = $form->hasSchema()
+                    ? $form->fieldLabels()
+                    : ($submission?->brandBriefForm?->hasSchema()
+                        ? $submission->brandBriefForm->fieldLabels()
+                        : BriefSubmissionLabels::forType($typeSlug));
+
+                if ($submission !== null && is_array($submission->meta['field_labels'] ?? null) && $submission->meta['field_labels'] !== []) {
+                    $fieldLabels = array_merge($fieldLabels, $submission->meta['field_labels']);
+                }
+
+                $orderedFieldIds = $form->hasSchema()
+                    ? $schemaService->fieldIdsFromSchema($form->schema)
+                    : ($submission?->brandBriefForm?->hasSchema()
+                        ? $schemaService->fieldIdsFromSchema($submission->brandBriefForm->schema)
+                        : null);
+
+                if ($submission !== null && is_array($submission->data)) {
+                    $orderedFieldIds = array_values(array_unique(array_merge(
+                        $orderedFieldIds ?? [],
+                        array_keys($submission->data)
+                    )));
+                }
 
                 return [
                     'name'             => $form->name,
@@ -586,7 +621,8 @@ class SaleController extends Controller
                     'submissionStatus' => $submission?->isSubmitted() ? 'submitted' : 'pending',
                     'submittedAt'      => $submission?->submitted_at,
                     'submission'       => $submission,
-                    'fieldLabels'      => BriefSubmissionLabels::forType($typeSlug),
+                    'fieldLabels'      => $fieldLabels,
+                    'orderedFieldIds'  => $orderedFieldIds,
                 ];
             });
 

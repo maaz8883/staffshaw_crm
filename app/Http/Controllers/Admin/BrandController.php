@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandBriefForm;
-use App\Models\BriefFormType;
+use App\Services\BriefFormSchemaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,9 +56,7 @@ class BrandController extends Controller
 
     public function create(): View
     {
-        return view('admin.brands.create', [
-            'briefFormTypes' => $this->briefFormTypesForForm(),
-        ]);
+        return view('admin.brands.create');
     }
 
     public function store(Request $request): RedirectResponse
@@ -83,18 +81,17 @@ class BrandController extends Controller
 
     public function show(Brand $brand): View
     {
-        $brand->load(['briefForms.briefFormType']);
+        $brand->load(['briefForms']);
 
         return view('admin.brands.show', compact('brand'));
     }
 
     public function edit(Brand $brand): View
     {
-        $brand->load(['briefForms.briefFormType']);
+        $brand->load(['briefForms']);
 
         return view('admin.brands.edit', [
-            'brand'          => $brand,
-            'briefFormTypes' => $this->briefFormTypesForForm(),
+            'brand' => $brand,
         ]);
     }
 
@@ -159,23 +156,12 @@ class BrandController extends Controller
         return [
             'brief_forms'                         => ['nullable', 'array'],
             'brief_forms.*.id'                    => ['nullable', 'integer', 'exists:brand_brief_forms,id'],
-            'brief_forms.*.brief_form_type_id'    => ['nullable', 'integer', 'exists:brief_form_types,id'],
             'brief_forms.*.name'                  => ['required', 'string', 'max:255'],
-            'brief_forms.*.form_path'               => ['required', 'string', 'max:255'],
+            'brief_forms.*.form_path'             => ['nullable', 'string', 'max:255'],
             'brief_forms.*.document'              => ['nullable', 'file', 'max:10240', 'extensions:pdf,doc,docx'],
             'brief_forms.*.is_active'             => ['nullable', 'boolean'],
             'brief_forms.*._delete'               => ['nullable', 'boolean'],
         ];
-    }
-
-    /** @return \Illuminate\Database\Eloquent\Collection<int, BriefFormType> */
-    private function briefFormTypesForForm()
-    {
-        return BriefFormType::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get(['id', 'name', 'slug', 'default_form_path']);
     }
 
     private function syncBriefForms(Brand $brand, Request $request): void
@@ -185,6 +171,8 @@ class BrandController extends Controller
         if (! is_array($rows)) {
             return;
         }
+
+        $sortOrder = 0;
 
         foreach ($rows as $index => $row) {
             if (! is_array($row)) {
@@ -207,12 +195,13 @@ class BrandController extends Controller
             }
 
             $attributes = [
-                'brief_form_type_id' => $row['brief_form_type_id'] ?? null,
-                'name'               => $row['name'],
-                'form_path'          => $this->normalizeFormPath($row['form_path']),
-                'sort_order'         => (int) $index,
-                'is_active'          => filter_var($row['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'name'       => $row['name'],
+                'form_path'  => '/brief-form',
+                'sort_order' => $sortOrder,
+                'is_active'  => filter_var($row['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN),
             ];
+
+            $sortOrder++;
 
             if (! empty($row['id'])) {
                 $briefForm = BrandBriefForm::query()
@@ -220,7 +209,9 @@ class BrandController extends Controller
                     ->findOrFail($row['id']);
                 $briefForm->update($attributes);
             } else {
+                $attributes['slug'] = $this->uniqueSlugForBrand($brand, (string) $row['name']);
                 $briefForm = $brand->briefForms()->create($attributes);
+                $this->applyDefaultBriefFormSchema($briefForm);
             }
 
             $file = $request->file("brief_forms.{$index}.document");
@@ -233,11 +224,40 @@ class BrandController extends Controller
         }
     }
 
-    private function normalizeFormPath(string $path): string
+    private function uniqueSlugForBrand(Brand $brand, string $name, ?int $exceptFormId = null): string
     {
-        $path = trim($path);
+        $base = Str::slug($name) ?: 'brief-form';
+        $slug = $base;
+        $counter = 2;
 
-        return str_starts_with($path, '/') ? $path : '/' . $path;
+        while (BrandBriefForm::query()
+            ->where('brand_id', $brand->id)
+            ->when($exceptFormId !== null, fn ($query) => $query->where('id', '!=', $exceptFormId))
+            ->where('slug', $slug)
+            ->exists()) {
+            $slug = $base . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
+    }
+
+    private function applyDefaultBriefFormSchema(BrandBriefForm $form): void
+    {
+        if ($form->schema) {
+            return;
+        }
+
+        $schema = app(BriefFormSchemaService::class)->defaultSchemaForType('custom');
+
+        if ($schema === null) {
+            return;
+        }
+
+        $form->update([
+            'schema'         => $schema,
+            'schema_version' => (int) ($schema['version'] ?? 1),
+        ]);
     }
 
     /** @return array{document: string, document_name: string} */

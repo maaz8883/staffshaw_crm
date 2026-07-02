@@ -146,21 +146,17 @@
     </div>
     <div class="card-body">
         <div class="row g-3 mb-3">
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <small class="text-muted d-block">Sale Total</small>
                 <strong>${{ number_format($sale->amount, 2) }}</strong>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <small class="text-muted d-block">Received</small>
                 <strong>${{ number_format($sale->received_amount, 2) }}</strong>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <small class="text-muted d-block">Remaining</small>
                 <strong class="{{ $sale->remainingAmount() > 0 ? 'text-warning' : 'text-success' }}">${{ number_format($sale->remainingAmount(), 2) }}</strong>
-            </div>
-            <div class="col-md-3">
-                <small class="text-muted d-block">Billable Remaining</small>
-                <strong class="{{ $billableRemaining > 0 ? 'text-primary' : 'text-muted' }}">${{ number_format($billableRemaining, 2) }}</strong>
             </div>
         </div>
 
@@ -187,7 +183,6 @@
                         </td>
                         <td class="text-end">
                             <a href="{{ route('admin.invoices.show', $invoice) }}" class="btn btn-sm btn-outline-info">View</a>
-                            <a href="{{ route('admin.invoices.show', $invoice) }}" target="_blank" class="btn btn-sm btn-outline-secondary">Print</a>
                         </td>
                     </tr>
                     @endforeach
@@ -202,14 +197,14 @@
         <form method="POST" action="{{ route('admin.invoices.store', $sale) }}" class="row g-2 align-items-end border-top pt-3">
             @csrf
             <div class="col-md-4">
-                <label for="invoice_amount" class="form-label mb-1">Invoice Amount ($)</label>
+                <label for="invoice_amount" class="form-label mb-1">Received Amount ($)</label>
                 <div class="input-group input-group-sm">
                     <span class="input-group-text">$</span>
                     <input type="number" name="amount" id="invoice_amount" class="form-control"
-                        step="0.01" min="0.01" max="{{ $billableRemaining }}"
-                        value="{{ number_format($billableRemaining, 2, '.', '') }}" required>
+                        step="0.01" min="0.01" max="{{ number_format($invoiceMaxAmount, 2, '.', '') }}"
+                        value="{{ number_format($invoiceMaxAmount, 2, '.', '') }}" required>
                 </div>
-                <div class="form-text">Max billable: ${{ number_format($billableRemaining, 2) }}</div>
+                <div class="form-text">Maximum: ${{ number_format($invoiceMaxAmount, 2) }} (sale balance remaining)</div>
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-primary btn-sm">
@@ -219,8 +214,8 @@
         </form>
         @elseif($sale->is_refunded || $sale->status === \App\Models\Sale::STATUS_REFUNDED)
         <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Invoices cannot be generated for refunded sales.</p>
-        @elseif($billableRemaining <= 0)
-        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully invoiced.</p>
+        @elseif($billableRemaining <= 0 || $sale->remainingAmount() <= 0)
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully received and invoiced.</p>
         @endif
     </div>
 </div>
@@ -292,8 +287,21 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
+                                @php
+                                    $submissionData = $form['submission']->data ?? [];
+                                    $displayKeys = ! empty($form['orderedFieldIds'])
+                                        ? array_values(array_unique(array_merge(
+                                            $form['orderedFieldIds'],
+                                            array_diff(array_keys($submissionData), $form['orderedFieldIds'])
+                                        )))
+                                        : array_keys($submissionData);
+                                @endphp
                                 <dl class="row mb-0">
-                                    @foreach(($form['submission']->data ?? []) as $key => $value)
+                                    @foreach($displayKeys as $key)
+                                        @if(! array_key_exists($key, $submissionData))
+                                            @continue
+                                        @endif
+                                        @php $value = $submissionData[$key]; @endphp
                                         <dt class="col-sm-4">{{ $form['fieldLabels'][$key] ?? ucfirst(str_replace('_', ' ', $key)) }}</dt>
                                         <dd class="col-sm-8">
                                             @if(is_array($value))
