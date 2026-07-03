@@ -15,6 +15,14 @@
             <small class="text-muted">Team Head:</small>
             <strong>{{ $team->teamHead?->name ?? 'Not assigned' }}</strong>
         </div>
+        <div class="mb-2">
+            <small class="text-muted">{{ \DateTime::createFromFormat('!m', $month)->format('F') }} {{ $year }} Team Target:</small>
+            @if($team->currentTarget)
+                <strong class="text-primary">${{ number_format($team->currentTarget->target_amount, 2) }}</strong>
+            @else
+                <span class="text-muted">Not set</span>
+            @endif
+        </div>
         <p class="mb-0">{{ $team->description ?: 'No description provided.' }}</p>
     </div>
 </div>
@@ -37,6 +45,9 @@
                     @if($team->teamHead->email)
                         <small class="text-muted"> • {{ $team->teamHead->email }}</small>
                     @endif
+                    @if($team->teamHead->current_target_amount !== null)
+                        <span class="badge bg-success ms-1">Target: ${{ number_format($team->teamHead->current_target_amount, 0) }}</span>
+                    @endif
                 </div>
             </div>
         </div>
@@ -56,6 +67,9 @@
                         <small class="text-muted">{{ $subHead->title }}</small>
                         @if($subHead->user->email)
                             <small class="text-muted"> • {{ $subHead->user->email }}</small>
+                        @endif
+                        @if($subHead->user->current_target_amount !== null)
+                            <span class="badge bg-success ms-1">Target: ${{ number_format($subHead->user->current_target_amount, 0) }}</span>
                         @endif
                     </div>
                 </div>
@@ -78,6 +92,9 @@
                             @if($user->role)
                                 <span class="badge bg-secondary">{{ $user->role->name }}</span>
                             @endif
+                            @if($user->current_target_amount !== null)
+                                <span class="badge bg-success">Target: ${{ number_format($user->current_target_amount, 0) }}</span>
+                            @endif
                         </li>
                         @endforeach
                     </ul>
@@ -85,6 +102,28 @@
                 @endif
             </div>
             @endforeach
+        </div>
+        @endif
+
+        {{-- Project Managers (approved Team_Membership) --}}
+        @if($team->approvedProjectManagers->count() > 0)
+        <div class="mt-4 ps-4 border-start border-3 border-success">
+            <h6 class="text-muted mb-3"><i class="bi bi-person-badge"></i> Project Managers</h6>
+            <ul class="list-unstyled mb-0">
+                @foreach($team->approvedProjectManagers as $pm)
+                <li class="mb-2">
+                    <i class="bi bi-person-check text-success"></i>
+                    <strong>{{ $pm->name }}</strong>
+                    @if($pm->email)
+                        <span class="text-muted small">({{ $pm->email }})</span>
+                    @endif
+                    <span class="badge bg-success">Project Manager</span>
+                    @if($pm->current_target_amount !== null)
+                        <span class="badge bg-primary">Target: ${{ number_format($pm->current_target_amount, 0) }}</span>
+                    @endif
+                </li>
+                @endforeach
+            </ul>
         </div>
         @endif
 
@@ -106,13 +145,16 @@
                     @if($user->role)
                         <span class="badge bg-secondary">{{ $user->role->name }}</span>
                     @endif
+                    @if($user->current_target_amount !== null)
+                        <span class="badge bg-success">Target: ${{ number_format($user->current_target_amount, 0) }}</span>
+                    @endif
                 </li>
                 @endforeach
             </ul>
         </div>
         @endif
 
-        @if($team->users->count() === 0)
+        @if($team->users->count() === 0 && $team->approvedProjectManagers->count() === 0)
         <div class="text-muted text-center py-3">
             <i class="bi bi-inbox"></i> No users assigned to this team yet.
         </div>

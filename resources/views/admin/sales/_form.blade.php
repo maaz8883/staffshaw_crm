@@ -20,6 +20,21 @@
         </select>
     </div>
 
+    @if(($isProjectManager ?? false) && !isset($sale))
+    <div class="col-md-6 mb-3">
+        <label for="team_id" class="form-label">Team <span class="text-danger">*</span></label>
+        <select id="team_id" name="team_id" class="form-select" required>
+            <option value="">-- Select a joined team --</option>
+            @foreach($joinedTeams as $team)
+                <option value="{{ $team->id }}" {{ old('team_id') == $team->id ? 'selected' : '' }}>
+                    {{ $team->name }}
+                </option>
+            @endforeach
+        </select>
+        <div class="form-text">You can only create sales for teams you have joined and been approved for.</div>
+    </div>
+    @endif
+
     <div class="col-md-6 mb-3">
         <label for="client_name" class="form-label">Client Name <span class="text-danger">*</span></label>
         <input type="text" id="client_name" name="client_name" class="form-control"

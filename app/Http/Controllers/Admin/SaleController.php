@@ -39,6 +39,11 @@ class SaleController extends Controller
         return Auth::user()->hasRole('Agent') && ! $this->isTeamHead();
     }
 
+    private function isProjectManager(): bool
+    {
+        return Auth::user()->hasRole(Role::PROJECT_MANAGER);
+    }
+
     private function baseQuery(): \Illuminate\Database\Eloquent\Builder
     {
         $user  = Auth::user();
@@ -47,6 +52,9 @@ class SaleController extends Controller
 
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             // Admin and Manager: all sales
+        } elseif ($this->isProjectManager()) {
+            // Requirement 6.1/6.2 — Project Manager: only sales from their approved (joined) teams
+            $query->whereIn('team_id', $user->approvedTeamIds());
         } elseif ($this->isTeamHead()) {
             // Team Head: sales from their teams
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
@@ -106,8 +114,9 @@ class SaleController extends Controller
         $users            = $isAgent ? collect() : AuthScope::usersForDropdown();
         $brands           = $this->brandsForDropdown();
         $pendingCount     = $this->baseQuery()->where('approval_status', Sale::APPROVAL_PENDING)->count();
+        $isProjectManager = $this->isProjectManager();
 
-        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount'));
+        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount', 'isProjectManager'));
     }
 
     public function datatable(Request $request): JsonResponse
@@ -254,11 +263,21 @@ class SaleController extends Controller
 
     public function create(): View
     {
-        if (Auth::user()->hasRole(Role::ADMIN)) {
+        $user = Auth::user();
+
+        if ($user->hasRole(Role::ADMIN)) {
             abort(403);
         }
 
-        return view('admin.sales.create', ['brands' => $this->brandsForDropdown()]);
+        if ($this->isProjectManager() && $user->approvedTeamIds()->isEmpty()) {
+            abort(403, 'Join a team before creating sales.');
+        }
+
+        return view('admin.sales.create', [
+            'brands'          => $this->brandsForDropdown(),
+            'isProjectManager' => $this->isProjectManager(),
+            'joinedTeams'     => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
+        ]);
     }
 
     public function downloadBriefDocument(Sale $sale, BrandBriefForm $brandBriefForm)
@@ -282,18 +301,37 @@ class SaleController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        if (Auth::user()->hasRole(Role::ADMIN)) {
+        $user = Auth::user();
+
+        if ($user->hasRole(Role::ADMIN)) {
             abort(403);
         }
 
-        $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
+        $rules = $this->saleFormRules($request);
+        $teamId = $user->team_id;
+        $companyId = $user->company_id;
 
-        $user = Auth::user();
+        if ($this->isProjectManager()) {
+            // Requirement 6.3/6.4 — must select a Team from among their Joined_Teams.
+            $rules['team_id'] = 'required|integer';
+            $validatedTeam = $request->validate(['team_id' => $rules['team_id']]);
+
+            if (! $user->approvedTeamIds()->contains((int) $validatedTeam['team_id'])) {
+                abort(403, 'You can only create sales for teams you have joined.');
+            }
+
+            $teamId = (int) $validatedTeam['team_id'];
+            $team = Team::find($teamId);
+            $companyId = $team?->company_id;
+        }
+
+        $validated = $this->normalizeSaleInput($request->validate($rules));
+        unset($validated['team_id']);
 
         $sale = Sale::query()->create(array_merge($validated, [
             'user_id'         => $user->id,
-            'team_id'         => $user->team_id,
-            'company_id'      => $user->company_id,
+            'team_id'         => $teamId,
+            'company_id'      => $companyId,
             'status'          => 'completed',
             'approval_status' => Sale::APPROVAL_PENDING,
             'is_draft'        => false,
@@ -502,6 +540,15 @@ class SaleController extends Controller
         $user = Auth::user();
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) return;
         if ((int) $sale->user_id === (int) $user->id) return;
+
+        // Requirement 6.5 — Project Manager: only sales from their approved (joined) teams
+        if ($this->isProjectManager()) {
+            if ($sale->team_id && $user->approvedTeamIds()->contains((int) $sale->team_id)) {
+                return;
+            }
+            abort(403);
+        }
+
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return;
         
         // Check if user is a sub-team head and the sale belongs to their sub-team member

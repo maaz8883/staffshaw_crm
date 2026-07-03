@@ -31,8 +31,9 @@
 
 @forelse($teams as $team)
 @php
-    // Team target: sirf admin
-    $canManageTeamTarget = $isAdmin;
+    // Team target: admin or the team's own team head
+    $canManageTeamTarget = $isAdmin ||
+        ($isTeamHead && (int)$team->team_head_id === (int)auth()->id());
 
     // Sub-team targets: admin or team head only (NOT sub-team heads)
     $canManageSubTeamTargets =
@@ -318,6 +319,25 @@
             $usersWithoutSubHead = $team->users->filter(function($u) use ($subTeamHeadUserIds) {
                 return $u->sub_team_head_id === null && !in_array($u->id, $subTeamHeadUserIds);
             });
+
+            // Team Head may not have their own team_id pointing at this team,
+            // so they can be missing from $team->users. Ensure they still show up here.
+            if ($team->teamHead && ! $usersWithoutSubHead->contains('id', $team->teamHead->id)) {
+                $team->teamHead->currentTarget = \App\Models\UserTarget::where([
+                    'user_id' => $team->teamHead->id,
+                    'team_id' => $team->id,
+                    'month'   => $month,
+                    'year'    => $year,
+                ])->first();
+                $usersWithoutSubHead = $usersWithoutSubHead->push($team->teamHead);
+            }
+
+            // Project Managers joined via Team_Membership are not linked via users.team_id either.
+            foreach ($team->approvedProjectManagers as $pm) {
+                if (! $usersWithoutSubHead->contains('id', $pm->id)) {
+                    $usersWithoutSubHead = $usersWithoutSubHead->push($pm);
+                }
+            }
         @endphp
 
         @if($usersWithoutSubHead->isNotEmpty() && !$isSubTeamHead)
@@ -336,6 +356,9 @@
                     <span class="text-muted small ms-2">{{ $member->email }}</span>
                     @if((int)$team->team_head_id === (int)$member->id)
                         <span class="badge bg-warning text-dark ms-1">Team Head</span>
+                    @endif
+                    @if($member->role?->name === 'Project Manager')
+                        <span class="badge bg-info text-dark ms-1">Project Manager</span>
                     @endif
                     @if((int)$member->id === (int)auth()->id())
                         <span class="badge bg-primary ms-1">You</span>
@@ -398,10 +421,7 @@
         @if($team->currentTarget && $canManageUserTargets && !$isSubTeamHead)
             @php
                 $totalSubTeamTargets = $team->subTeamHeads->sum(fn($sh) => $sh->currentTarget?->target_amount ?? 0);
-                $totalOtherMembersTargets = $team->users->filter(function($u) use ($team) {
-                    $subTeamHeadUserIds = $team->subTeamHeads->pluck('user_id')->toArray();
-                    return $u->sub_team_head_id === null && !in_array($u->id, $subTeamHeadUserIds);
-                })->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
+                $totalOtherMembersTargets = $usersWithoutSubHead->sum(fn($u) => $u->currentTarget?->target_amount ?? 0);
                 $totalAllocated = $totalSubTeamTargets + $totalOtherMembersTargets;
                 $teamTarget = $team->currentTarget->target_amount;
                 $pct = $teamTarget > 0 ? min(100, round(($totalAllocated / $teamTarget) * 100)) : 0;

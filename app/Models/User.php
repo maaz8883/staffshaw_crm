@@ -99,6 +99,32 @@ class User extends Authenticatable
         return $this->hasMany(\App\Models\UserActivityLog::class)->latest();
     }
 
+    /** Team_Membership records for this user (Project Manager join requests). */
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMembership::class);
+    }
+
+    /** Teams this user has an approved Team_Membership for (Project Manager). */
+    public function approvedTeams(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'team_memberships', 'user_id', 'team_id')
+            ->wherePivot('status', TeamMembership::STATUS_APPROVED);
+    }
+
+    public function isProjectManager(): bool
+    {
+        return $this->hasRole(Role::PROJECT_MANAGER);
+    }
+
+    /** Team IDs this Project Manager currently has approved access to. */
+    public function approvedTeamIds(): \Illuminate\Support\Collection
+    {
+        return $this->teamMemberships()
+            ->where('status', TeamMembership::STATUS_APPROVED)
+            ->pluck('team_id');
+    }
+
     /** Approved sign-in users only (excludes pending / rejected self-registrations). */
     public function scopeAccountActive(Builder $query): Builder
     {

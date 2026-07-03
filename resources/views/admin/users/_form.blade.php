@@ -84,6 +84,7 @@
         // Role IDs
         var ppcRoleIds   = @json($roles->where('name', 'PPC')->pluck('id')->values());
         var agentRoleIds = @json($roles->where('name', 'Agent')->pluck('id')->values());
+        var pmRoleIds    = @json($roles->where('name', 'Project Manager')->pluck('id')->values());
 
         function isPpc() {
             return ppcRoleIds.includes(parseInt(roleSelect.value));
@@ -93,16 +94,25 @@
             return agentRoleIds.includes(parseInt(roleSelect.value));
         }
 
+        function isProjectManager() {
+            return pmRoleIds.includes(parseInt(roleSelect.value));
+        }
+
         function toggleCompanyTeam() {
-            var hide = isPpc();
-            companyWrap.style.display = hide ? 'none' : '';
-            teamWrap.style.display    = hide ? 'none' : '';
-            if (hide) {
+            var hideCompany = isPpc();
+            // Project Manager joins teams dynamically via the Team Directory, no fixed team_id needed.
+            var hideTeam = isPpc() || isProjectManager();
+            companyWrap.style.display = hideCompany ? 'none' : '';
+            teamWrap.style.display    = hideTeam ? 'none' : '';
+            if (hideCompany) {
                 companySelect.value = '';
+            }
+            if (hideTeam) {
+                teamSelect.value = '';
                 teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
                 subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
                 subTeamHeadWrap.style.display = 'none';
-            } else {
+            } else if (!hideCompany) {
                 toggleSubTeamHead();
             }
         }
