@@ -17,13 +17,7 @@ class UserController extends Controller
      */
     public function index(): JsonResponse
     {
-        $users = User::with([
-            'role:id,name',
-            'team:id,name',
-            'subTeam:id,name',
-            'subTeamHead',
-            'company:id,name',
-        ])->latest()->get();
+        $users = User::with($this->userRelationNames())->latest()->get();
 
         return response()->json([
             'status' => true,
@@ -39,7 +33,7 @@ class UserController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email',
+            'email' => 'required|email|max:255',
             'password' => 'required|string|min:8',
             'role_id' => 'nullable|exists:roles,id',
             'company_id' => 'nullable|exists:companies,id',
@@ -57,6 +51,16 @@ class UserController extends Controller
             ], 422);
         }
 
+        $existing = User::query()->where('email', $request->email)->first();
+
+        if ($existing) {
+            return response()->json([
+                'status' => true,
+                'message' => 'User already exists',
+                'data' => $this->loadUserRelations($existing),
+            ], 200);
+        }
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -69,19 +73,10 @@ class UserController extends Controller
             'account_status' => $request->account_status ?? User::ACCOUNT_ACTIVE,
         ]);
 
-        // Load relationships
-        $user->load([
-            'role:id,name',
-            'team:id,name',
-            'subTeam:id,name',
-            'subTeamHead',
-            'company:id,name',
-        ]);
-
         return response()->json([
             'status' => true,
             'message' => 'User created successfully',
-            'data' => $user,
+            'data' => $this->loadUserRelations($user),
         ], 201);
     }
 
@@ -90,18 +85,10 @@ class UserController extends Controller
      */
     public function show(User $user): JsonResponse
     {
-        $user->load([
-            'role:id,name',
-            'team:id,name',
-            'subTeam:id,name',
-            'subTeamHead',
-            'company:id,name',
-        ]);
-
         return response()->json([
             'status' => true,
             'message' => 'User fetched successfully',
-            'data' => $user,
+            'data' => $this->loadUserRelations($user),
         ], 200);
     }
 
@@ -150,19 +137,10 @@ class UserController extends Controller
 
         $user->update($payload);
 
-        // Load relationships
-        $user->load([
-            'role:id,name',
-            'team:id,name',
-            'subTeam:id,name',
-            'subTeamHead',
-            'company:id,name',
-        ]);
-
         return response()->json([
             'status' => true,
             'message' => 'User updated successfully',
-            'data' => $user,
+            'data' => $this->loadUserRelations($user),
         ], 200);
     }
 
@@ -178,5 +156,22 @@ class UserController extends Controller
             'status' => true,
             'message' => "User '{$userName}' deleted successfully",
         ], 200);
+    }
+
+    /** @return list<string> */
+    private function userRelationNames(): array
+    {
+        return [
+            'role:id,name',
+            'team:id,name',
+            'subTeam:id,name',
+            'subTeamHead',
+            'company:id,name',
+        ];
+    }
+
+    private function loadUserRelations(User $user): User
+    {
+        return $user->load($this->userRelationNames());
     }
 }
