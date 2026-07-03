@@ -93,6 +93,10 @@ Route::prefix('admin')->group(function () {
                 'destroy' => 'admin.brands.destroy',
             ]);
 
+            Route::post('brands/{brand}/brief-forms', [BrandController::class, 'storeBriefForm'])
+                ->name('admin.brands.brief-forms.store');
+            Route::delete('brands/{brand}/brief-forms/{form}', [BrandController::class, 'destroyBriefForm'])
+                ->name('admin.brands.brief-forms.destroy');
             Route::get('brands/{brand}/brief-forms/{form}/builder', [BriefFormBuilderController::class, 'show'])
                 ->name('admin.brands.brief-forms.builder');
             Route::put('brands/{brand}/brief-forms/{form}/builder', [BriefFormBuilderController::class, 'update'])

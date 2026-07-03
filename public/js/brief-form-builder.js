@@ -329,7 +329,7 @@
             'Brief Form': 'custom',
         };
 
-        return byTitle[s && s.title] || 'custom';
+        return byTitle[s && s.title] || 'website';
     }
 
     function syncTemplateFromSelect() {
@@ -356,7 +356,7 @@
     var activeTemplate = resolveTemplateKey(schema);
 
     if (schemaIsEmpty(schema) && !schema.template) {
-        applyTemplate(cfg.defaultTemplate || 'custom');
+        applyTemplate(cfg.defaultTemplate || 'website');
     } else if (templateSelect) {
         templateSelect.value = activeTemplate;
         schema.template = activeTemplate;

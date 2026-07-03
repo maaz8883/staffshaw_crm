@@ -75,7 +75,7 @@ class BrandController extends Controller
         $this->syncBriefForms($brand, $request);
 
         return redirect()
-            ->route('admin.brands.index')
+            ->route('admin.brands.edit', $brand)
             ->with('success', 'Brand created successfully.');
     }
 
@@ -127,8 +127,43 @@ class BrandController extends Controller
         $this->syncBriefForms($brand, $request);
 
         return redirect()
-            ->route('admin.brands.index')
+            ->route('admin.brands.edit', $brand)
             ->with('success', 'Brand updated successfully.');
+    }
+
+    public function storeBriefForm(Request $request, Brand $brand): JsonResponse
+    {
+        if (! config('brief.builder_enabled')) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'name'      => ['required', 'string', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $briefForm = $this->createBriefFormRow($brand, [
+            'name'      => $validated['name'],
+            'is_active' => filter_var($validated['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN),
+        ]);
+
+        return response()->json([
+            'id'        => $briefForm->id,
+            'name'      => $briefForm->name,
+            'build_url' => route('admin.brands.brief-forms.builder', [$brand, $briefForm]),
+            'is_active' => $briefForm->is_active,
+        ]);
+    }
+
+    public function destroyBriefForm(Brand $brand, BrandBriefForm $form): JsonResponse
+    {
+        if ((int) $form->brand_id !== (int) $brand->id) {
+            abort(404);
+        }
+
+        $this->deleteBriefFormRow($form);
+
+        return response()->json(['success' => true]);
     }
 
     public function destroy(Brand $brand): RedirectResponse
@@ -186,8 +221,7 @@ class BrandController extends Controller
                         ->find($row['id']);
 
                     if ($existing) {
-                        $this->deleteBriefFormDocument($existing);
-                        $existing->delete();
+                        $this->deleteBriefFormRow($existing);
                     }
                 }
 
@@ -209,9 +243,11 @@ class BrandController extends Controller
                     ->findOrFail($row['id']);
                 $briefForm->update($attributes);
             } else {
-                $attributes['slug'] = $this->uniqueSlugForBrand($brand, (string) $row['name']);
-                $briefForm = $brand->briefForms()->create($attributes);
-                $this->applyDefaultBriefFormSchema($briefForm);
+                $briefForm = $this->createBriefFormRow($brand, [
+                    'name'       => $attributes['name'],
+                    'sort_order' => $attributes['sort_order'],
+                    'is_active'  => $attributes['is_active'],
+                ]);
             }
 
             $file = $request->file("brief_forms.{$index}.document");
@@ -222,6 +258,27 @@ class BrandController extends Controller
                 $briefForm->update($stored);
             }
         }
+    }
+
+    /** @param array{name?: string, sort_order?: int, is_active?: bool} $row */
+    private function createBriefFormRow(Brand $brand, array $row): BrandBriefForm
+    {
+        $name = (string) ($row['name'] ?? 'Brief Form');
+        $sortOrder = isset($row['sort_order'])
+            ? (int) $row['sort_order']
+            : ((int) ($brand->briefForms()->max('sort_order') ?? -1) + 1);
+
+        $briefForm = $brand->briefForms()->create([
+            'name'       => $name,
+            'form_path'  => '/brief-form',
+            'sort_order' => $sortOrder,
+            'is_active'  => filter_var($row['is_active'] ?? true, FILTER_VALIDATE_BOOLEAN),
+            'slug'       => $this->uniqueSlugForBrand($brand, $name),
+        ]);
+
+        $this->applyDefaultBriefFormSchema($briefForm);
+
+        return $briefForm;
     }
 
     private function uniqueSlugForBrand(Brand $brand, string $name, ?int $exceptFormId = null): string
@@ -248,7 +305,7 @@ class BrandController extends Controller
             return;
         }
 
-        $schema = app(BriefFormSchemaService::class)->defaultSchemaForType('custom');
+        $schema = app(BriefFormSchemaService::class)->defaultSchemaForType('website');
 
         if ($schema === null) {
             return;
@@ -278,6 +335,12 @@ class BrandController extends Controller
             'document'      => $file->storeAs('brands/documents', Str::uuid() . '.' . $extension, 'public'),
             'document_name' => $file->getClientOriginalName(),
         ];
+    }
+
+    private function deleteBriefFormRow(BrandBriefForm $briefForm): void
+    {
+        $this->deleteBriefFormDocument($briefForm);
+        $briefForm->delete();
     }
 
     private function deleteBriefFormDocument(BrandBriefForm $briefForm): void

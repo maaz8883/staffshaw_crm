@@ -17,8 +17,8 @@
                 <span>Fields</span>
                 <div class="d-flex gap-2 flex-wrap">
                     <select id="template-select" class="form-select form-select-sm" style="width:auto">
-                        <option value="custom">Custom Brief Form</option>
                         <option value="website">Website Brief Form</option>
+                        <option value="custom">Custom Brief Form</option>
                         <option value="logo">Logo Brief</option>
                         <option value="ebook">Ebook Brief</option>
                         <option value="book_cover">Book Cover Design Brief</option>
@@ -58,7 +58,7 @@
 window.BRIEF_FORM_BUILDER = {
     initialSchema: @json($form->schema ?? ['version' => 1, 'title' => $form->name, 'sections' => []]),
     templates: @json($templates),
-    defaultTemplate: 'custom',
+    defaultTemplate: 'website',
     fieldTypes: @json(\App\Services\BriefFormSchemaService::FIELD_TYPES),
 };
 </script>

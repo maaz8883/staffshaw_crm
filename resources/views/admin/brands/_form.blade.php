@@ -96,7 +96,12 @@
     </div>
     <div class="form-text">
         Customer link format: <code>{website}/brief-form?sale_id=&#123;sale_id&#125;&amp;form_id=&#123;form_id&#125;</code>.
-        Each brief form has its own builder and schema. Save the brand to get a Form ID for new rows.
+        Each brief form has its own builder and schema.
+        @if(isset($brand) && $brand->exists)
+            Add Brief Form creates the form immediately. Use Update to save name and document changes.
+        @else
+            Save the brand first, then you can add brief forms.
+        @endif
     </div>
 </div>
 

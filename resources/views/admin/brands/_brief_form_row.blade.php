@@ -50,21 +50,25 @@
 
     </td>
 
-    <td>
+    <td class="brief-form-id-cell">
 
         @if($rowId && ! $isTemplate)
 
             <code>#{{ $rowId }}</code>
 
+        @elseif(! isset($brand) || ! $brand)
+
+            <span class="text-muted small">Save brand first</span>
+
         @else
 
-            <span class="text-muted small">Save to assign</span>
+            <span class="text-muted small">—</span>
 
         @endif
 
     </td>
 
-    <td>
+    <td class="brief-form-document-cell">
 
         @if($rowId && ! $isTemplate)
 
@@ -110,15 +114,19 @@
 
     @if(config('brief.builder_enabled'))
 
-    <td class="text-center">
+    <td class="text-center brief-form-builder-cell">
 
         @if($rowId && ! $isTemplate && isset($brand) && $brand)
 
             <a href="{{ route('admin.brands.brief-forms.builder', [$brand, $rowId]) }}" class="btn btn-sm btn-outline-primary">Build</a>
 
+        @elseif(! isset($brand) || ! $brand)
+
+            <span class="text-muted small">Save brand first</span>
+
         @else
 
-            <span class="text-muted small">Save first</span>
+            <span class="text-muted small">—</span>
 
         @endif
 
