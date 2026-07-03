@@ -17,6 +17,7 @@ use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
 use App\Services\BriefFormSchemaService;
 use App\Support\BriefFormSupport;
+use App\Support\BriefSubmissionDisplay;
 use App\Support\BriefSubmissionLabels;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -611,6 +612,14 @@ class SaleController extends Controller
                     )));
                 }
 
+                $schema = $form->hasSchema()
+                    ? $form->schema
+                    : ($submission?->brandBriefForm?->hasSchema()
+                        ? $submission->brandBriefForm->schema
+                        : null);
+
+                $submissionData = is_array($submission?->data) ? $submission->data : [];
+
                 return [
                     'name'             => $form->name,
                     'url'              => BriefFormSupport::briefFormUrl($form, $sale->id),
@@ -623,6 +632,10 @@ class SaleController extends Controller
                     'submission'       => $submission,
                     'fieldLabels'      => $fieldLabels,
                     'orderedFieldIds'  => $orderedFieldIds,
+                    'schema'           => $schema,
+                    'displayBlocks'    => $submission !== null
+                        ? BriefSubmissionDisplay::displayBlocks($schema, $submissionData, $fieldLabels)
+                        : [],
                 ];
             });
 
