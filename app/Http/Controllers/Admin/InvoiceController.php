@@ -139,6 +139,12 @@ class InvoiceController extends Controller
             return $query;
         }
 
+        if ($user->hasRole(Role::PROJECT_MANAGER)) {
+            // Requirement 7.1/7.2 — Project Manager: only invoices from their joined teams
+            $joinedTeamIds = $user->approvedTeamIds();
+            return $query->whereHas('sale', fn ($saleQuery) => $saleQuery->whereIn('team_id', $joinedTeamIds));
+        }
+
         return $query->whereHas('sale', function ($saleQuery) use ($user) {
             if (Team::where('team_head_id', $user->id)->exists()) {
                 $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
@@ -167,6 +173,14 @@ class InvoiceController extends Controller
 
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return;
+        }
+
+        // Requirement 7.4 — Project Manager: only sales/invoices from their joined teams
+        if ($user->hasRole(Role::PROJECT_MANAGER)) {
+            if ($sale->team_id && $user->approvedTeamIds()->contains((int) $sale->team_id)) {
+                return;
+            }
+            abort(403);
         }
 
         if ((int) $sale->user_id === (int) $user->id) {

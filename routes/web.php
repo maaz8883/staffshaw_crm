@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\ClientController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SaleController;
 use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\Admin\TeamController;
+use App\Http\Controllers\Admin\TeamMembershipController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Artisan;
 
@@ -62,6 +64,30 @@ Route::prefix('admin')->group(function () {
         Route::get('/profile',          [ProfileController::class, 'show'])->name('admin.profile.show');
         Route::put('/profile',          [ProfileController::class, 'updateProfile'])->name('admin.profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password');
+
+        // ── Clients: any authenticated role (Admin, Manager, Team Head, Agent, Project Manager) ──
+        Route::middleware('role:Admin,Manager,Agent,Project Manager')->group(function () {
+            Route::get('clients/datatable',      [ClientController::class, 'datatable'])->name('admin.clients.datatable');
+            Route::get('clients/{client}/lookup', [ClientController::class, 'lookup'])->name('admin.clients.lookup');
+            Route::resource('clients', ClientController::class)->names([
+                'index'  => 'admin.clients.index',  'create' => 'admin.clients.create',
+                'store'  => 'admin.clients.store',   'show'   => 'admin.clients.show',
+                'edit'   => 'admin.clients.edit',    'update' => 'admin.clients.update',
+                'destroy'=> 'admin.clients.destroy',
+            ]);
+        });
+
+        // ── Project Manager: team directory + join/leave (Requirements 2, 3, 5) ──
+        Route::middleware('role:Project Manager')->group(function () {
+            Route::get('team-memberships',              [TeamMembershipController::class, 'index'])->name('admin.team-memberships.index');
+            Route::post('team-memberships/{team}/join', [TeamMembershipController::class, 'join'])->name('admin.team-memberships.join');
+            Route::delete('team-memberships/{team}/leave', [TeamMembershipController::class, 'leave'])->name('admin.team-memberships.leave');
+        });
+
+        // ── Team Head (+ Admin/Manager fallback): approve/reject join requests (Requirement 4) ──
+        Route::get('team-join-requests',                    [TeamMembershipController::class, 'requestsIndex'])->name('admin.teams.join-requests.index');
+        Route::post('team-join-requests/{membership}/approve', [TeamMembershipController::class, 'approve'])->name('admin.teams.join-requests.approve');
+        Route::post('team-join-requests/{membership}/reject',  [TeamMembershipController::class, 'reject'])->name('admin.teams.join-requests.reject');
 
         // ── Admin only ───────────────────────────────────────────────────────
         Route::middleware('role:Admin')->group(function () {
@@ -144,7 +170,11 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/team/{team}',         [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
             Route::post('targets/sub-team/{team}',     [TargetController::class, 'setSubTeamHeadTarget'])->name('admin.targets.sub-team');
             Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
+        });
 
+        // ── Admin + Agent + Team Head + Project Manager: sales & invoices ────
+        // (Requirements 6, 7 — Project Manager gets scoped access via TeamMembership)
+        Route::middleware('role:Admin,Agent,Manager,Project Manager')->group(function () {
             Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
             Route::post('sales/{sale}/invoices',      [InvoiceController::class, 'store'])->name('admin.invoices.store');
             Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
@@ -165,8 +195,8 @@ Route::prefix('admin')->group(function () {
             Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])->name('admin.invoices.void')->whereNumber('invoice');
         });
 
-        // ── Team show: PPC can add/view spending (after teams/datatable) ─────
-        Route::middleware('role:Admin,Agent,Manager,PPC')->group(function () {
+        // ── Team show: PPC + Project Manager can view (scoped) ───────────────
+        Route::middleware('role:Admin,Agent,Manager,PPC,Project Manager')->group(function () {
             Route::get('teams/{team}', [TeamController::class, 'show'])->name('admin.teams.show')->whereNumber('team');
         });
 

@@ -30,6 +30,18 @@
             @php
                 $isAgent = auth()->user()?->hasRole('Agent');
                 $isPpc   = auth()->user()?->hasRole('PPC');
+                $isProjectManager = auth()->user()?->hasRole('Project Manager');
+                $isTeamHeadUser = \App\Models\Team::where('team_head_id', (int)auth()->id())->exists();
+                $canReviewJoinRequests = !$isProjectManager && (auth()->user()?->hasRole('Admin') || $isTeamHeadUser);
+                $pendingJoinRequestCount = 0;
+                if ($canReviewJoinRequests) {
+                    $jrQuery = \App\Models\TeamMembership::where('status', \App\Models\TeamMembership::STATUS_PENDING);
+                    if (!auth()->user()->hasRole('Admin')) {
+                        $headedTeamIds = \App\Models\Team::where('team_head_id', (int)auth()->id())->pluck('id');
+                        $jrQuery->whereIn('team_id', $headedTeamIds);
+                    }
+                    $pendingJoinRequestCount = $jrQuery->count();
+                }
                 $canReviewSignups = !$isPpc && (auth()->user()?->hasRole('Admin')
                     || \App\Models\Team::where('team_head_id', (int)auth()->id())->exists());
                 $pendingSignupCount = 0;
@@ -93,11 +105,13 @@
             @endif
 
             @if(!$isPpc)
+            @if(!$isProjectManager)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}" title="Targets">
                     <i class="bi bi-bullseye"></i> <span class="nav-label">Targets</span>
                 </a>
             </li>
+            @endif
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.sales.*') ? 'active' : '' }}" href="{{ route('admin.sales.index') }}" title="Sales">
                     <i class="bi bi-cash-stack"></i> <span class="nav-label">Sales</span>
@@ -126,6 +140,33 @@
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.ppc.*') ? 'active' : '' }}" href="{{ route('admin.ppc.index') }}" title="PPC Spending">
                     <i class="bi bi-graph-up"></i> <span class="nav-label">PPC Spending</span>
+                </a>
+            </li>
+            @endif
+
+            @if($isProjectManager)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.team-memberships.*') ? 'active' : '' }}" href="{{ route('admin.team-memberships.index') }}" title="Team Directory">
+                    <i class="bi bi-diagram-3"></i> <span class="nav-label">Team Directory</span>
+                </a>
+            </li>
+            @endif
+
+            @if(!$isPpc)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Clients">
+                    <i class="bi bi-person-lines-fill"></i> <span class="nav-label">Clients</span>
+                </a>
+            </li>
+            @endif
+
+            @if($canReviewJoinRequests)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.teams.join-requests.*') ? 'active' : '' }}" href="{{ route('admin.teams.join-requests.index') }}" title="Join Requests">
+                    <i class="bi bi-person-plus"></i> <span class="nav-label">Join Requests</span>
+                    @if($pendingJoinRequestCount > 0)
+                        <span class="badge bg-danger ms-1">{{ $pendingJoinRequestCount }}</span>
+                    @endif
                 </a>
             </li>
             @endif

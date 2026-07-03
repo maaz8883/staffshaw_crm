@@ -40,6 +40,11 @@ class SaleController extends Controller
         return Auth::user()->hasRole('Agent') && ! $this->isTeamHead();
     }
 
+    private function isProjectManager(): bool
+    {
+        return Auth::user()->hasRole(Role::PROJECT_MANAGER);
+    }
+
     private function baseQuery(): \Illuminate\Database\Eloquent\Builder
     {
         $user  = Auth::user();
@@ -48,6 +53,9 @@ class SaleController extends Controller
 
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             // Admin and Manager: all sales
+        } elseif ($this->isProjectManager()) {
+            // Requirement 6.1/6.2 — Project Manager: only sales from their approved (joined) teams
+            $query->whereIn('team_id', $user->approvedTeamIds());
         } elseif ($this->isTeamHead()) {
             // Team Head: sales from their teams
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
@@ -107,8 +115,9 @@ class SaleController extends Controller
         $users            = $isAgent ? collect() : AuthScope::usersForDropdown();
         $brands           = $this->brandsForDropdown();
         $pendingCount     = $this->baseQuery()->where('approval_status', Sale::APPROVAL_PENDING)->count();
+        $isProjectManager = $this->isProjectManager();
 
-        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount'));
+        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount', 'isProjectManager'));
     }
 
     public function datatable(Request $request): JsonResponse
@@ -255,11 +264,22 @@ class SaleController extends Controller
 
     public function create(): View
     {
-        if (Auth::user()->hasRole(Role::ADMIN)) {
+        $user = Auth::user();
+
+        if ($user->hasRole(Role::ADMIN)) {
             abort(403);
         }
 
-        return view('admin.sales.create', ['brands' => $this->brandsForDropdown()]);
+        if ($this->isProjectManager() && $user->approvedTeamIds()->isEmpty()) {
+            abort(403, 'Join a team before creating sales.');
+        }
+
+        return view('admin.sales.create', [
+            'brands'          => $this->brandsForDropdown(),
+            'clients'         => \App\Http\Controllers\Admin\ClientController::forDropdown(),
+            'isProjectManager' => $this->isProjectManager(),
+            'joinedTeams'     => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
+        ]);
     }
 
     public function downloadBriefDocument(Sale $sale, BrandBriefForm $brandBriefForm)
@@ -283,18 +303,41 @@ class SaleController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        if (Auth::user()->hasRole(Role::ADMIN)) {
+        $user = Auth::user();
+
+        if ($user->hasRole(Role::ADMIN)) {
             abort(403);
         }
 
-        $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
+        $rules = $this->saleFormRules($request);
+        $teamId = $user->team_id;
+        $companyId = $user->company_id;
 
-        $user = Auth::user();
+        if ($this->isProjectManager()) {
+            // Requirement 6.3/6.4 — must select a Team from among their Joined_Teams.
+            $rules['team_id'] = 'required|integer';
+            $validatedTeam = $request->validate(['team_id' => $rules['team_id']]);
+
+            if (! $user->approvedTeamIds()->contains((int) $validatedTeam['team_id'])) {
+                abort(403, 'You can only create sales for teams you have joined.');
+            }
+
+            $teamId = (int) $validatedTeam['team_id'];
+            $team = Team::find($teamId);
+            $companyId = $team?->company_id;
+        }
+
+        $validated = $this->normalizeSaleInput($request->validate($rules));
+        unset($validated['team_id']);
+
+        // Two ways to attach a client: pick an existing one from the dropdown (client_id),
+        // or type a new client's details — in which case we save it as a new Client record too.
+        $validated['client_id'] = $this->resolveOrCreateClient($validated, $teamId, $user->id);
 
         $sale = Sale::query()->create(array_merge($validated, [
             'user_id'         => $user->id,
-            'team_id'         => $user->team_id,
-            'company_id'      => $user->company_id,
+            'team_id'         => $teamId,
+            'company_id'      => $companyId,
             'status'          => 'completed',
             'approval_status' => Sale::APPROVAL_PENDING,
             'is_draft'        => false,
@@ -341,8 +384,9 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         return view('admin.sales.edit', [
-            'sale'   => $sale,
-            'brands' => $this->brandsForDropdown(),
+            'sale'    => $sale,
+            'brands'  => $this->brandsForDropdown(),
+            'clients' => \App\Http\Controllers\Admin\ClientController::forDropdown(),
         ]);
     }
 
@@ -351,6 +395,7 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
+        $validated['client_id'] = $this->resolveOrCreateClient($validated, $sale->team_id, Auth::id());
 
         if ($sale->is_refunded) {
             unset($validated['status']);
@@ -503,6 +548,15 @@ class SaleController extends Controller
         $user = Auth::user();
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) return;
         if ((int) $sale->user_id === (int) $user->id) return;
+
+        // Requirement 6.5 — Project Manager: only sales from their approved (joined) teams
+        if ($this->isProjectManager()) {
+            if ($sale->team_id && $user->approvedTeamIds()->contains((int) $sale->team_id)) {
+                return;
+            }
+            abort(403);
+        }
+
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return;
         
         // Check if user is a sub-team head and the sale belongs to their sub-team member
@@ -670,12 +724,65 @@ class SaleController extends Controller
         return $validated;
     }
 
+    /**
+     * Two ways to attach a client to a sale:
+     * 1. An existing client was picked from the dropdown (client_id already set) — reuse it,
+     *    but keep it up to date if the agent edited the name/email/phone on the sale form.
+     * 2. No client_id was picked — a brand new client typed on the sale form is saved as a
+     *    new Client record (scoped to the sale's team) and linked automatically.
+     *
+     * @param array<string, mixed> $validated
+     */
+    private function resolveOrCreateClient(array $validated, ?int $teamId, int $creatorId): ?int
+    {
+        $clientId = $validated['client_id'] ?? null;
+
+        if ($clientId) {
+            $client = \App\Models\Client::find($clientId);
+            if ($client) {
+                $client->update(array_filter([
+                    'name'  => $validated['client_name'] ?? $client->name,
+                    'email' => $validated['client_email'] ?? $client->email,
+                    'phone' => $validated['client_phone'] ?? $client->phone,
+                ], fn ($v) => $v !== null && $v !== ''));
+
+                return $client->id;
+            }
+        }
+
+        if (empty($validated['client_name'])) {
+            return null;
+        }
+
+        // No existing client selected — try to match an existing client in the same team
+        // by name (case-insensitive) to avoid creating duplicates, otherwise create new.
+        $existing = \App\Models\Client::query()
+            ->where('team_id', $teamId)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($validated['client_name'])])
+            ->first();
+
+        if ($existing) {
+            return $existing->id;
+        }
+
+        $client = \App\Models\Client::query()->create([
+            'name'       => $validated['client_name'],
+            'email'      => $validated['client_email'] ?? null,
+            'phone'      => $validated['client_phone'] ?? null,
+            'team_id'    => $teamId,
+            'created_by' => $creatorId,
+        ]);
+
+        return $client->id;
+    }
+
     /** @return array<string, mixed> */
     private function saleFormRules(Request $request): array
     {
         return [
             'title'            => 'required|string|max:255',
             'brand_id'         => 'required|exists:brands,id',
+            'client_id'        => 'nullable|exists:clients,id',
             'client_name'      => 'required|string|max:255',
             'client_email'     => 'nullable|email|max:255',
             'client_phone'     => 'nullable|string|max:50',

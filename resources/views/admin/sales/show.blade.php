@@ -57,7 +57,11 @@
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Client Name</small>
-                {{ $sale->client_name }}
+                @if($sale->client_id)
+                    <a href="{{ route('admin.clients.show', $sale->client_id) }}">{{ $sale->client_name }}</a>
+                @else
+                    {{ $sale->client_name }}
+                @endif
             </div>
 
 

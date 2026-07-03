@@ -14,6 +14,7 @@ class Role extends Model
     public const MANAGER = 'Manager';
     public const AGENT   = 'Agent';
     public const PPC     = 'PPC';
+    public const PROJECT_MANAGER = 'Project Manager';
 
     protected $fillable = [
         'name',
