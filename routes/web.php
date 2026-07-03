@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\ClientController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\PendingRegistrationController;
 use App\Http\Controllers\Admin\PpcController;
@@ -63,6 +64,18 @@ Route::prefix('admin')->group(function () {
         Route::get('/profile',          [ProfileController::class, 'show'])->name('admin.profile.show');
         Route::put('/profile',          [ProfileController::class, 'updateProfile'])->name('admin.profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password');
+
+        // ── Clients: any authenticated role (Admin, Manager, Team Head, Agent, Project Manager) ──
+        Route::middleware('role:Admin,Manager,Agent,Project Manager')->group(function () {
+            Route::get('clients/datatable',      [ClientController::class, 'datatable'])->name('admin.clients.datatable');
+            Route::get('clients/{client}/lookup', [ClientController::class, 'lookup'])->name('admin.clients.lookup');
+            Route::resource('clients', ClientController::class)->names([
+                'index'  => 'admin.clients.index',  'create' => 'admin.clients.create',
+                'store'  => 'admin.clients.store',   'show'   => 'admin.clients.show',
+                'edit'   => 'admin.clients.edit',    'update' => 'admin.clients.update',
+                'destroy'=> 'admin.clients.destroy',
+            ]);
+        });
 
         // ── Project Manager: team directory + join/leave (Requirements 2, 3, 5) ──
         Route::middleware('role:Project Manager')->group(function () {

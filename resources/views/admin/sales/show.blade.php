@@ -57,7 +57,11 @@
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Client Name</small>
-                {{ $sale->client_name }}
+                @if($sale->client_id)
+                    <a href="{{ route('admin.clients.show', $sale->client_id) }}">{{ $sale->client_name }}</a>
+                @else
+                    {{ $sale->client_name }}
+                @endif
             </div>
 
 
@@ -287,31 +291,9 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
-                                @php
-                                    $submissionData = $form['submission']->data ?? [];
-                                    $displayKeys = ! empty($form['orderedFieldIds'])
-                                        ? array_values(array_unique(array_merge(
-                                            $form['orderedFieldIds'],
-                                            array_diff(array_keys($submissionData), $form['orderedFieldIds'])
-                                        )))
-                                        : array_keys($submissionData);
-                                @endphp
-                                <dl class="row mb-0">
-                                    @foreach($displayKeys as $key)
-                                        @if(! array_key_exists($key, $submissionData))
-                                            @continue
-                                        @endif
-                                        @php $value = $submissionData[$key]; @endphp
-                                        <dt class="col-sm-4">{{ $form['fieldLabels'][$key] ?? ucfirst(str_replace('_', ' ', $key)) }}</dt>
-                                        <dd class="col-sm-8">
-                                            @if(is_array($value))
-                                                {{ implode(', ', $value) }}
-                                            @else
-                                                {!! nl2br(e((string) $value)) ?: '—' !!}
-                                            @endif
-                                        </dd>
-                                    @endforeach
-                                </dl>
+                                @include('admin.sales._brief_submission_display', [
+                                    'displayBlocks' => $form['displayBlocks'] ?? [],
+                                ])
 
                                 @if(!empty($form['submission']->attachments))
                                     <hr>

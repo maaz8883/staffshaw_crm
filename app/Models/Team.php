@@ -82,4 +82,9 @@ class Team extends Model
     {
         return $this->hasMany(TeamMembership::class)->where('status', TeamMembership::STATUS_PENDING);
     }
+
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
 }

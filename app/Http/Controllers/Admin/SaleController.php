@@ -17,6 +17,7 @@ use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
 use App\Services\BriefFormSchemaService;
 use App\Support\BriefFormSupport;
+use App\Support\BriefSubmissionDisplay;
 use App\Support\BriefSubmissionLabels;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -275,6 +276,7 @@ class SaleController extends Controller
 
         return view('admin.sales.create', [
             'brands'          => $this->brandsForDropdown(),
+            'clients'         => \App\Http\Controllers\Admin\ClientController::forDropdown(),
             'isProjectManager' => $this->isProjectManager(),
             'joinedTeams'     => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
         ]);
@@ -328,6 +330,10 @@ class SaleController extends Controller
         $validated = $this->normalizeSaleInput($request->validate($rules));
         unset($validated['team_id']);
 
+        // Two ways to attach a client: pick an existing one from the dropdown (client_id),
+        // or type a new client's details — in which case we save it as a new Client record too.
+        $validated['client_id'] = $this->resolveOrCreateClient($validated, $teamId, $user->id);
+
         $sale = Sale::query()->create(array_merge($validated, [
             'user_id'         => $user->id,
             'team_id'         => $teamId,
@@ -378,8 +384,9 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         return view('admin.sales.edit', [
-            'sale'   => $sale,
-            'brands' => $this->brandsForDropdown(),
+            'sale'    => $sale,
+            'brands'  => $this->brandsForDropdown(),
+            'clients' => \App\Http\Controllers\Admin\ClientController::forDropdown(),
         ]);
     }
 
@@ -388,6 +395,7 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
+        $validated['client_id'] = $this->resolveOrCreateClient($validated, $sale->team_id, Auth::id());
 
         if ($sale->is_refunded) {
             unset($validated['status']);
@@ -658,6 +666,14 @@ class SaleController extends Controller
                     )));
                 }
 
+                $schema = $form->hasSchema()
+                    ? $form->schema
+                    : ($submission?->brandBriefForm?->hasSchema()
+                        ? $submission->brandBriefForm->schema
+                        : null);
+
+                $submissionData = is_array($submission?->data) ? $submission->data : [];
+
                 return [
                     'name'             => $form->name,
                     'url'              => BriefFormSupport::briefFormUrl($form, $sale->id),
@@ -670,6 +686,10 @@ class SaleController extends Controller
                     'submission'       => $submission,
                     'fieldLabels'      => $fieldLabels,
                     'orderedFieldIds'  => $orderedFieldIds,
+                    'schema'           => $schema,
+                    'displayBlocks'    => $submission !== null
+                        ? BriefSubmissionDisplay::displayBlocks($schema, $submissionData, $fieldLabels)
+                        : [],
                 ];
             });
 
@@ -704,12 +724,65 @@ class SaleController extends Controller
         return $validated;
     }
 
+    /**
+     * Two ways to attach a client to a sale:
+     * 1. An existing client was picked from the dropdown (client_id already set) — reuse it,
+     *    but keep it up to date if the agent edited the name/email/phone on the sale form.
+     * 2. No client_id was picked — a brand new client typed on the sale form is saved as a
+     *    new Client record (scoped to the sale's team) and linked automatically.
+     *
+     * @param array<string, mixed> $validated
+     */
+    private function resolveOrCreateClient(array $validated, ?int $teamId, int $creatorId): ?int
+    {
+        $clientId = $validated['client_id'] ?? null;
+
+        if ($clientId) {
+            $client = \App\Models\Client::find($clientId);
+            if ($client) {
+                $client->update(array_filter([
+                    'name'  => $validated['client_name'] ?? $client->name,
+                    'email' => $validated['client_email'] ?? $client->email,
+                    'phone' => $validated['client_phone'] ?? $client->phone,
+                ], fn ($v) => $v !== null && $v !== ''));
+
+                return $client->id;
+            }
+        }
+
+        if (empty($validated['client_name'])) {
+            return null;
+        }
+
+        // No existing client selected — try to match an existing client in the same team
+        // by name (case-insensitive) to avoid creating duplicates, otherwise create new.
+        $existing = \App\Models\Client::query()
+            ->where('team_id', $teamId)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($validated['client_name'])])
+            ->first();
+
+        if ($existing) {
+            return $existing->id;
+        }
+
+        $client = \App\Models\Client::query()->create([
+            'name'       => $validated['client_name'],
+            'email'      => $validated['client_email'] ?? null,
+            'phone'      => $validated['client_phone'] ?? null,
+            'team_id'    => $teamId,
+            'created_by' => $creatorId,
+        ]);
+
+        return $client->id;
+    }
+
     /** @return array<string, mixed> */
     private function saleFormRules(Request $request): array
     {
         return [
             'title'            => 'required|string|max:255',
             'brand_id'         => 'required|exists:brands,id',
+            'client_id'        => 'nullable|exists:clients,id',
             'client_name'      => 'required|string|max:255',
             'client_email'     => 'nullable|email|max:255',
             'client_phone'     => 'nullable|string|max:50',

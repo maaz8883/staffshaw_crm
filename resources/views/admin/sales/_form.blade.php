@@ -36,6 +36,21 @@
     @endif
 
     <div class="col-md-6 mb-3">
+        <label for="client_id" class="form-label">Existing Client</label>
+        <select id="client_id" name="client_id" class="form-select">
+            <option value="">-- New client (fill in below) --</option>
+            @foreach($clients ?? [] as $c)
+                <option value="{{ $c->id }}"
+                    data-name="{{ $c->name }}" data-email="{{ $c->email }}" data-phone="{{ $c->phone }}"
+                    {{ old('client_id', $sale->client_id ?? '') == $c->id ? 'selected' : '' }}>
+                    {{ $c->name }}
+                </option>
+            @endforeach
+        </select>
+        <div class="form-text">Select a saved client to auto-fill their details, or leave blank and type a new client below.</div>
+    </div>
+
+    <div class="col-md-6 mb-3">
         <label for="client_name" class="form-label">Client Name <span class="text-danger">*</span></label>
         <input type="text" id="client_name" name="client_name" class="form-control"
             value="{{ old('client_name', $sale->client_name ?? '') }}" required>
@@ -107,6 +122,24 @@
 </div>
 
 <script>
+(function () {
+    const clientSelect = document.getElementById('client_id');
+    const clientNameInput = document.getElementById('client_name');
+    const clientEmailInput = document.getElementById('client_email');
+    const clientPhoneInput = document.getElementById('client_phone');
+
+    if (clientSelect) {
+        clientSelect.addEventListener('change', function () {
+            const opt = clientSelect.options[clientSelect.selectedIndex];
+            if (!opt || !opt.value) return;
+
+            clientNameInput.value = opt.dataset.name || '';
+            clientEmailInput.value = opt.dataset.email || '';
+            clientPhoneInput.value = opt.dataset.phone || '';
+        });
+    }
+})();
+
 (function () {
     const amountInput = document.getElementById('amount');
     const receivedInput = document.getElementById('received_amount');

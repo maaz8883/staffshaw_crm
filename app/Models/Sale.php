@@ -29,6 +29,7 @@ class Sale extends Model
 
     protected $fillable = [
         'title',
+        'client_id',
         'client_name',
         'client_email',
         'client_phone',
@@ -61,6 +62,7 @@ class Sale extends Model
         'team_id'      => 'integer',
         'company_id'   => 'integer',
         'brand_id'     => 'integer',
+        'client_id'    => 'integer',
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',
@@ -85,6 +87,11 @@ class Sale extends Model
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function approvedBy(): BelongsTo

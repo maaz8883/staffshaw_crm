@@ -152,6 +152,14 @@
             </li>
             @endif
 
+            @if(!$isPpc)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Clients">
+                    <i class="bi bi-person-lines-fill"></i> <span class="nav-label">Clients</span>
+                </a>
+            </li>
+            @endif
+
             @if($canReviewJoinRequests)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.teams.join-requests.*') ? 'active' : '' }}" href="{{ route('admin.teams.join-requests.index') }}" title="Join Requests">
