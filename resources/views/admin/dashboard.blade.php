@@ -16,9 +16,133 @@
     $isAgent    = auth()->user()->hasRole('Agent') && !isset($isTeamHeadView) && !isset($isSubTeamHeadView);
     $isTeamHead = isset($isTeamHeadView) && $isTeamHeadView;
     $isSubTeamHead = isset($isSubTeamHeadView) && $isSubTeamHeadView;
+    $isProjectManagerDash = isset($isProjectManagerView) && $isProjectManagerView;
 @endphp
 
-@if($isSubTeamHead)
+@if($isProjectManagerDash)
+{{-- ═══════════════════════════════════════════════════════════════
+     PROJECT MANAGER DASHBOARD
+═══════════════════════════════════════════════════════════════ --}}
+
+@if(! $hasJoinedTeams)
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-diagram-3 fs-1 text-muted"></i>
+        <h5 class="mt-3">No teams joined yet</h5>
+        <p class="text-muted">Browse the Team Directory and request to join a team. Once a Team Head approves your request, that team's data will show up here.</p>
+        <a href="{{ route('admin.team-memberships.index') }}" class="btn btn-primary">Browse Teams</a>
+    </div>
+</div>
+@else
+
+{{-- Joined team cards with members --}}
+@forelse($teamDashboardCards as $card)
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <strong>{{ $card['name'] }}</strong>
+            <span class="text-muted ms-2 small">{{ $card['company_name'] }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary">{{ $card['members_count'] }} members</span>
+            @if($card['achievement_percent'] !== null)
+                <span class="badge bg-success">{{ $card['achievement_percent'] }}% achieved</span>
+            @endif
+        </div>
+    </div>
+    <div class="card-body">
+        @if($card['target'] > 0)
+        <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+                <span class="text-muted">{{ $card['month_label'] }} — Team Target</span>
+                <span class="fw-semibold">${{ number_format($card['monthly_revenue'], 0) }} / ${{ number_format($card['target'], 0) }}</span>
+            </div>
+            <div class="progress rounded-pill" style="height:10px">
+                <div class="progress-bar rounded-pill" style="width:{{ min(100, $card['achievement_percent'] ?? 0) }}%"></div>
+            </div>
+        </div>
+        @endif
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Member</th>
+                        <th>Role</th>
+                        <th class="text-center">Sales</th>
+                        <th class="text-end">Revenue</th>
+                        <th class="text-end">{{ $card['month_label'] }} Target</th>
+                        <th class="text-center">Achieve</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($card['members'] as $member)
+                    <tr>
+                        <td>
+                            {{ $member['name'] }}
+                            @if($member['is_head'])
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
+                            @endif
+                        </td>
+                        <td class="text-muted small">{{ $member['role_name'] }}</td>
+                        <td class="text-center">{{ $member['sales_count'] }}</td>
+                        <td class="text-end text-success">${{ number_format($member['sale_amount'], 0) }}</td>
+                        <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
+                        <td class="text-center">
+                            @if($member['target_achievement_pct'] !== null)
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $member['target_achievement_pct'] }}%</span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                    </tr>
+                    @empty
+                    <tr><td colspan="6" class="text-muted text-center py-3">No members.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@empty
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-4 text-muted">No data available for your joined teams yet.</div>
+</div>
+@endforelse
+
+{{-- My recent sales --}}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+        <span><i class="bi bi-cash-stack text-primary"></i> My Recent Sales</span>
+        <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>Title</th><th>Client</th><th>Team</th><th>Status</th><th class="text-end">Amount</th></tr>
+                </thead>
+                <tbody>
+                    @forelse($myRecentSales as $sale)
+                    @php $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
+                    <tr>
+                        <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
+                        <td class="text-muted small">{{ $sale->client_name }}</td>
+                        <td class="text-muted small">{{ $sale->team?->name }}</td>
+                        <td><span class="badge bg-{{ $sc2[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span></td>
+                        <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
+                    </tr>
+                    @empty
+                    <tr><td colspan="5" class="text-muted text-center py-3">No sales yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@endif
+
+@elseif($isSubTeamHead)
 {{-- ═══════════════════════════════════════════════════════════════
      SUB-TEAM HEAD DASHBOARD
 ═══════════════════════════════════════════════════════════════ --}}

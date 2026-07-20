@@ -64,4 +64,27 @@ class Team extends Model
     {
         return $this->hasMany(SubTeamHead::class);
     }
+
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMembership::class);
+    }
+
+    /** Project Managers with an approved Team_Membership on this team. */
+    public function approvedProjectManagers(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_memberships', 'team_id', 'user_id')
+            ->wherePivot('status', TeamMembership::STATUS_APPROVED);
+    }
+
+    /** Pending Project Manager join requests for this team. */
+    public function pendingTeamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMembership::class)->where('status', TeamMembership::STATUS_PENDING);
+    }
+
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
 }

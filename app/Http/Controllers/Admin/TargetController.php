@@ -59,18 +59,20 @@ class TargetController extends Controller
         $isTeamHead = Team::where('team_head_id', $authUser->id)->exists();
         $isSubTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)->exists();
 
+        $withRelations = ['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members', 'approvedProjectManagers.role'];
+
         if ($isAdmin) {
             // Admin: all teams
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])->orderBy('name')->get();
+            $teams = Team::with($withRelations)->orderBy('name')->get();
         } elseif ($isTeamHead) {
             // Team head: only their teams
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])
+            $teams = Team::with($withRelations)
                 ->where('team_head_id', $authUser->id)
                 ->orderBy('name')
                 ->get();
         } else {
             // Regular agent or Sub-Team Head: apni team dikhao
-            $teams = Team::with(['company', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members'])
+            $teams = Team::with($withRelations)
                 ->where('id', $authUser->team_id)
                 ->get();
         }
@@ -119,6 +121,16 @@ class TargetController extends Controller
                     'year'    => $year,
                 ])->first();
             });
+
+            // Project Managers (approved Team_Membership) — not linked via users.team_id.
+            $team->approvedProjectManagers->each(function ($pm) use ($team, $month, $year) {
+                $pm->currentTarget = UserTarget::where([
+                    'user_id' => $pm->id,
+                    'team_id' => $team->id,
+                    'month'   => $month,
+                    'year'    => $year,
+                ])->first();
+            });
         });
 
         return view('admin.targets.index', compact('teams', 'month', 'year', 'isAdmin', 'isTeamHead', 'isSubTeamHead'));
@@ -128,8 +140,10 @@ class TargetController extends Controller
 
     public function setTeamTarget(Request $request, Team $team): RedirectResponse
     {
-        if (! Auth::user()->hasRole('Admin')) {
-            abort(403, 'Only admins can set team targets.');
+        $authUser = Auth::user();
+
+        if (! $authUser->hasRole('Admin') && (int) $team->team_head_id !== (int) $authUser->id) {
+            abort(403, 'Only admins and the team head can set team targets.');
         }
 
         $validated = $request->validate([
@@ -256,9 +270,15 @@ class TargetController extends Controller
             'notes'         => 'nullable|string',
         ]);
 
-        // Make sure the user actually belongs to this team
-        $team->load('users');
-        if (! $team->users->contains('id', $validated['user_id'])) {
+        // Make sure the user actually belongs to this team — either via users.team_id,
+        // as the team head (whose own team_id need not point at the team they head),
+        // or as an approved Project Manager (joined via Team_Membership).
+        $team->load(['users', 'approvedProjectManagers']);
+        $belongsToTeam = $team->users->contains('id', $validated['user_id'])
+            || (int) $team->team_head_id === (int) $validated['user_id']
+            || $team->approvedProjectManagers->contains('id', $validated['user_id']);
+
+        if (! $belongsToTeam) {
             return back()->withErrors(['user_id' => 'This user does not belong to the selected team.']);
         }
 
@@ -280,7 +300,8 @@ class TargetController extends Controller
         );
 
         // Log activity
-        $targetUser = $team->users->firstWhere('id', $validated['user_id']);
+        $targetUser = $team->users->firstWhere('id', $validated['user_id'])
+            ?? \App\Models\User::find($validated['user_id']);
         $monthName = \DateTime::createFromFormat('!m', $validated['month'])->format('F');
         $action = $existing ? 'Updated' : 'Set';
         ActivityLogger::log(

@@ -13,9 +13,14 @@ class RoleController extends Controller
      */
     public function index(): JsonResponse
     {
+        // $roles = Role::select('id', 'name')
+        //     ->orderBy('name')
+        //     ->get();
+
         $roles = Role::select('id', 'name')
-            ->orderBy('name')
-            ->get();
+        ->whereNotIn('name', ['Admin', 'Manager'])
+        ->orderBy('name')
+        ->get();
 
         return response()->json([
             'status' => true,

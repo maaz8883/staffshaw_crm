@@ -25,8 +25,13 @@ class DashboardController extends Controller
         $month = now()->month;
         $year = now()->year;
 
-        if ($user->hasRole('Admin')) {
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return $this->adminDashboard($month, $year);
+        }
+
+        // Project Manager: scoped to their approved (joined) teams
+        if ($user->hasRole(Role::PROJECT_MANAGER)) {
+            return $this->projectManagerDashboard($user, $month, $year);
         }
 
         // Team Head check
@@ -328,6 +333,30 @@ class DashboardController extends Controller
                     'members'            => $members,
                 ];
             });
+    }
+
+    // ── Project Manager Dashboard ────────────────────────────────────────────────
+
+    /**
+     * Requirement 9 — Dashboard scoped strictly to the Project Manager's
+     * currently approved Team_Memberships (Joined_Teams).
+     */
+    private function projectManagerDashboard(User $user, int $month, int $year): View
+    {
+        $joinedTeamIds = $user->approvedTeamIds();
+
+        $teamDashboardCards = $this->buildTeamDashboardCards($month, $year)
+            ->filter(fn ($card) => $joinedTeamIds->contains($card['id']))
+            ->values();
+
+        $myRecentSales = Sale::where('user_id', $user->id)
+            ->with(['team'])->latest()->limit(6)->get();
+
+        return view('admin.dashboard', compact('month', 'year', 'teamDashboardCards', 'myRecentSales'))
+            ->with([
+                'isProjectManagerView' => true,
+                'hasJoinedTeams'       => $joinedTeamIds->isNotEmpty(),
+            ]);
     }
 
     // ── Team Head Dashboard ──────────────────────────────────────────────────────

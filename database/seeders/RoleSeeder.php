@@ -12,7 +12,7 @@ class RoleSeeder extends Seeder
      */
     public function run(): void
     {
-        foreach ([Role::ADMIN, Role::MANAGER, Role::AGENT, Role::PPC] as $roleName) {
+        foreach ([Role::ADMIN, Role::MANAGER, Role::AGENT, Role::PPC, Role::PROJECT_MANAGER] as $roleName) {
             Role::query()->updateOrCreate(
                 ['name' => $roleName],
                 ['name' => $roleName]

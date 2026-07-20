@@ -117,17 +117,47 @@ class TeamController extends Controller
 
     public function show(Team $team): View
     {
+        $user = Auth::user();
+
+        // Requirement 10.1/10.4 — Project Manager can only view teams they have an approved membership for.
+        if ($user->hasRole(\App\Models\Role::PROJECT_MANAGER) && ! $user->approvedTeamIds()->contains($team->id)) {
+            abort(403);
+        }
+
         $team->load([
             'company', 
             'teamHead', 
             'users' => function($query) {
                 $query->with(['role', 'subTeamHead.user'])->orderBy('name');
             },
-            'subTeamHeads.user'
+            'subTeamHeads.user',
+            'approvedProjectManagers.role',
         ]);
 
         $month = (int) request()->get('month', now()->month);
         $year  = (int) request()->get('year', now()->year);
+
+        // Current month's target for the team, its team head, every member, and each Project Manager.
+        $team->currentTarget = \App\Models\TeamTarget::where('team_id', $team->id)
+            ->where('month', $month)->where('year', $year)
+            ->first();
+
+        $targetLookup = function (int $userId) use ($team, $month, $year) {
+            return \App\Models\UserTarget::where('user_id', $userId)
+                ->where('team_id', $team->id)
+                ->where('month', $month)->where('year', $year)
+                ->value('target_amount');
+        };
+
+        if ($team->teamHead) {
+            $team->teamHead->current_target_amount = $targetLookup($team->teamHead->id);
+        }
+        $team->users->each(function ($member) use ($targetLookup) {
+            $member->current_target_amount = $targetLookup($member->id);
+        });
+        $team->approvedProjectManagers->each(function ($pm) use ($targetLookup) {
+            $pm->current_target_amount = $targetLookup($pm->id);
+        });
 
         $isPpc = auth()->user()->hasRole('PPC');
 
