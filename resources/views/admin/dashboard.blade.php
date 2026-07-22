@@ -177,7 +177,7 @@
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
                         <div class="small"><i class="bi bi-flag-fill"></i> Sub-Team Target</div>
-                        <div class="fw-semibold">{{ $curMonth }} · {{ $subTeamHead->title }}</div>
+                        <div class="fw-semibold">{{ $currentMonthLabel }} · {{ $subTeamHead->title }}</div>
                     </div>
                     @if($subTeamTargetAchievement['percent'] !== null)
                         <span class="badge rounded-pill bg-white text-dark px-3 py-2">{{ $subTeamTargetAchievement['percent'] }}%</span>
@@ -204,7 +204,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <h5 class="fw-semibold mb-1"><i class="bi bi-people-fill text-success"></i> {{ $subTeamHead->title }} Team Members</h5>
-                <p class="text-muted small mb-0">{{ $curMonth }} · Target vs Achievement</p>
+                <p class="text-muted small mb-0">{{ $currentMonthLabel }} · Target vs Achievement</p>
             </div>
             <span class="badge bg-info">{{ $subTeamMembers->count() }} members</span>
         </div>
@@ -218,8 +218,8 @@
                         <th>Role</th>
                         <th class="text-center">Sales (All Time)</th>
                         <th class="text-end">Revenue (All Time)</th>
-                        <th class="text-end">{{ $curMonth }} Target</th>
-                        <th class="text-end">{{ $curMonth }} Revenue</th>
+                        <th class="text-end">{{ $currentMonthLabel }} Target</th>
+                        <th class="text-end">{{ $currentMonthLabel }} Revenue</th>
                         <th class="text-center">Achievement</th>
                     </tr>
                 </thead>
