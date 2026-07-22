@@ -7,6 +7,7 @@ use App\Models\UserActivityLog;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ActivityLogger
 {
@@ -38,16 +39,26 @@ class ActivityLogger
             }
         }
 
-        UserActivityLog::create([
-            'user_id'     => $user->id,
-            'type'        => $type,
-            'description' => $description,
-            'ip_address'  => $ip,
-            'country'     => $country,
-            'city'        => $city,
-            'user_agent'  => $request->userAgent(),
-            'meta'        => $meta ?: null,
-        ]);
+        try {
+            UserActivityLog::create([
+                'user_id'     => $user->id,
+                'type'        => $type,
+                'description' => $description,
+                'ip_address'  => $ip,
+                'country'     => $country,
+                'city'        => $city,
+                'user_agent'  => $request->userAgent(),
+                'meta'        => $meta ?: null,
+            ]);
+        } catch (\Throwable $exception) {
+            // Audit logging must never prevent the action being audited.
+            Log::warning('Unable to write user activity log.', [
+                'user_id' => $user->id,
+                'type' => $type,
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private static function isPrivateIp(string $ip): bool
