@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\BrandBriefFormController;
 use App\Http\Controllers\Api\BriefSubmissionController;
+use App\Http\Controllers\Api\ClientBriefController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\RoleController;
@@ -16,6 +17,18 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // Orbit brief form submissions (Bearer / X-Orbit-Api-Key)
 Route::middleware('orbit.brief.api')->prefix('v1')->group(function () {
+    Route::get('clients/{client}/brief-forms', [ClientBriefController::class, 'index'])
+        ->whereNumber('client')
+        ->name('api.clients.brief-forms.index');
+    Route::get('sales/{sale}/client-brief-forms', [ClientBriefController::class, 'indexForLegacySale'])
+        ->whereNumber('sale')
+        ->name('api.sales.client-brief-forms.index');
+    Route::get('clients/{client}/brief-submissions/{submission}/files/{file}', [ClientBriefController::class, 'downloadAttachment'])
+        ->whereNumber(['client', 'submission', 'file'])
+        ->name('api.clients.brief-files.download');
+    Route::get('clients/{client}/brief-forms/{form}/document', [ClientBriefController::class, 'downloadDocument'])
+        ->whereNumber(['client', 'form'])
+        ->name('api.clients.brief-documents.download');
     Route::get('brand-brief-forms/resolve', [BrandBriefFormController::class, 'resolve']);
     Route::get('brand-brief-forms/{form}/schema', [BrandBriefFormController::class, 'schema'])
         ->whereNumber('form');

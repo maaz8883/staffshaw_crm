@@ -29,14 +29,26 @@ class TrelloSaleDispatcher
             ];
         }
 
-        $sale->loadMissing(['user', 'team', 'company']);
+        $sale->loadMissing(['user', 'team', 'company', 'client']);
+
+        if (! $sale->client_id || ! $sale->client) {
+            return [
+                'status' => 'skipped',
+                'message' => 'The sale is not linked to a CRM client.',
+                'url' => $url,
+                'payload' => null,
+                'http_status' => null,
+                'response' => null,
+            ];
+        }
 
         $payload = [
-            'crm_client_id' => (string) $sale->id,
+            'crm_client_id' => (string) $sale->client_id,
+            'crm_sale_id' => (string) $sale->id,
             'crm_source' => self::crmSourceForSale($sale),
-            'name' => $sale->client_name,
-            'email' => $sale->client_email,
-            'phone' => $sale->client_phone,
+            'name' => $sale->client->name ?: $sale->client_name,
+            'email' => $sale->client->email ?: $sale->client_email,
+            'phone' => $sale->client->phone ?: $sale->client_phone,
             'sale' => [
                 'id' => $sale->id,
                 'title' => $sale->title,

@@ -400,9 +400,11 @@ class SaleController extends Controller
         if ($sale->is_refunded) {
             unset($validated['status']);
             $sale->update($validated);
+            $trelloResult = TrelloSaleDispatcher::dispatch($sale->fresh());
 
             return redirect()->route('admin.sales.index')
-                ->with('success', 'Sale updated.');
+                ->with('success', 'Sale updated.')
+                ->with('trello_diagnostics', $trelloResult);
         }
 
         $sale->update(array_merge($validated, [
@@ -413,6 +415,7 @@ class SaleController extends Controller
         ]));
 
         SaleNotificationDispatcher::dispatchSaleUpdated($sale, Auth::user());
+        $trelloResult = TrelloSaleDispatcher::dispatch($sale->fresh());
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_UPDATED,
             "Updated sale \"{$sale->title}\" (#{$sale->id})",
@@ -420,7 +423,8 @@ class SaleController extends Controller
         );
 
         return redirect()->route('admin.sales.index')
-            ->with('success', 'Sale updated and re-submitted for approval.');
+            ->with('success', 'Sale updated and re-submitted for approval.')
+            ->with('trello_diagnostics', $trelloResult);
     }
 
     public function destroy(Sale $sale): RedirectResponse

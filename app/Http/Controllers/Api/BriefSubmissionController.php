@@ -81,6 +81,12 @@ class BriefSubmissionController extends Controller
                 throw ValidationException::withMessages(['brand_brief_form_id' => 'Invalid brief form.']);
             }
 
+            if (! $brandBriefForm->is_active || (int) $brandBriefForm->brand_id !== (int) $sale->brand_id) {
+                throw ValidationException::withMessages([
+                    'brand_brief_form_id' => 'This brief form does not belong to the sale brand.',
+                ]);
+            }
+
             $validated['brief_type'] = $this->schemaService->resolveSlugForForm($brandBriefForm);
             $this->validateDataAgainstSchema($brandBriefForm, $validated['data']);
         }

@@ -109,6 +109,11 @@ class Sale extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function briefSubmissions(): HasMany
+    {
+        return $this->hasMany(BriefSubmission::class);
+    }
+
     public function isPendingApproval(): bool
     {
         return $this->approval_status === self::APPROVAL_PENDING;

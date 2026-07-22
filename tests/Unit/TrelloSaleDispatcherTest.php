@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\Company;
+use App\Models\Client;
 use App\Models\Sale;
 use App\Services\TrelloSaleDispatcher;
 use Illuminate\Support\Facades\Http;
@@ -29,14 +30,21 @@ class TrelloSaleDispatcherTest extends TestCase
             'status' => 'completed',
         ]);
         $sale->id = 42;
+        $sale->client_id = 1042;
         $sale->setRelation('company', new Company(['name' => 'DSS']));
+        $sale->setRelation('client', new Client([
+            'name' => 'Acme',
+            'email' => 'client@example.com',
+            'phone' => '+1 555 0100',
+        ]));
 
         $result = TrelloSaleDispatcher::dispatch($sale);
 
         Http::assertSent(fn ($request) =>
             $request->url() === 'https://example.test/trello'
             && $request->hasHeader('Authorization', 'Bearer secret-token')
-            && $request['crm_client_id'] === '42'
+            && $request['crm_client_id'] === '1042'
+            && $request['crm_sale_id'] === '42'
             && $request['crm_source'] === 'dss'
             && $request['name'] === 'Acme'
             && $request['email'] === 'client@example.com'
@@ -77,6 +85,8 @@ class TrelloSaleDispatcherTest extends TestCase
 
         $sale = new Sale(['client_name' => 'Acme']);
         $sale->id = 43;
+        $sale->client_id = 1043;
+        $sale->setRelation('client', new Client(['name' => 'Acme']));
 
         $result = TrelloSaleDispatcher::dispatch($sale);
 
