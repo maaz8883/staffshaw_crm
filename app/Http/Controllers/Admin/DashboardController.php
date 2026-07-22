@@ -494,6 +494,14 @@ class DashboardController extends Controller
     {
         $team = $subTeamHead->team;
         $company = $user->company;
+        $teamTarget = $team
+            ? TeamTarget::where('team_id', $team->id)
+                ->where('month', $month)
+                ->where('year', $year)
+                ->first()
+            : null;
+        $teamTargetAmt = (float) ($teamTarget?->target_amount ?? 0);
+        $currentMonthLabel = Carbon::createFromDate($year, $month, 1)->format('F Y');
 
         // Get sub-team members (including the sub-team head themselves)
         $subTeamMembers = User::where('sub_team_head_id', $subTeamHead->id)
@@ -634,7 +642,8 @@ class DashboardController extends Controller
             'subTeamSales', 'subTeamTarget', 'subTeamTargetAchievement',
             'mySales', 'myTarget', 'recentSales',
             'month', 'year',
-            'revenueTrendLabels', 'revenueTrendValues'
+            'revenueTrendLabels', 'revenueTrendValues',
+            'teamTarget', 'teamTargetAmt', 'currentMonthLabel'
         ))->with([
             'isSubTeamHeadView' => true,
             'teamMembers' => collect(),

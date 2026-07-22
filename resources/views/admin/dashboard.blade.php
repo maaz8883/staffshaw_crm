@@ -148,14 +148,6 @@
 ═══════════════════════════════════════════════════════════════ --}}
 
 {{-- Team Target + Sub-Team Target --}}
-@php
-    $teamTargetObj = \App\Models\TeamTarget::where('team_id', $team->id)
-        ->where('month', $month)
-        ->where('year', $year)
-        ->first();
-    $teamTargetAmt = (float) ($teamTargetObj?->target_amount ?? 0);
-    $curMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y');
-@endphp
 
 <div class="row g-3 mb-4">
     {{-- Team Target (Read-only) --}}
@@ -165,7 +157,9 @@
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
                         <div class="text-muted small"><i class="bi bi-flag"></i> Team Target</div>
-                        <div class="fw-semibold">{{ $curMonth }} · {{ $team->name }}</div>
+                        <div class="fw-semibold">
+                            {{ $currentMonthLabel }} · {{ $team?->name ?? 'Team not assigned' }}
+                        </div>
                     </div>
                 </div>
                 <div class="display-6 fw-bold text-primary">${{ number_format($teamTargetAmt, 0) }}</div>
