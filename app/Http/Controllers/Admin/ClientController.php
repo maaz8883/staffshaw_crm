@@ -10,6 +10,7 @@ use App\Models\Sale;
 use App\Models\SubTeamHead;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\TrelloClientDispatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -152,6 +153,8 @@ class ClientController extends Controller
             'created_by' => Auth::id(),
         ]));
 
+        TrelloClientDispatcher::dispatch($client);
+
         return redirect()
             ->route('admin.clients.show', $client)
             ->with('success', 'Client added successfully.');
@@ -208,6 +211,8 @@ class ClientController extends Controller
         ]);
 
         $client->update($validated);
+
+        TrelloClientDispatcher::dispatch($client->fresh());
 
         return redirect()
             ->route('admin.clients.show', $client)
