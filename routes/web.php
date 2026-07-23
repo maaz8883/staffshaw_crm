@@ -170,6 +170,7 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/team/{team}',         [TargetController::class, 'setTeamTarget'])->name('admin.targets.team');
             Route::post('targets/sub-team/{team}',     [TargetController::class, 'setSubTeamHeadTarget'])->name('admin.targets.sub-team');
             Route::post('targets/user/{team}',         [TargetController::class, 'setUserTarget'])->name('admin.targets.user');
+            Route::post('targets/user/{team}/bulk',    [TargetController::class, 'bulkSetUserTargets'])->name('admin.targets.user.bulk');
         });
 
         // ── Admin + Agent + Team Head + Project Manager: sales & invoices ────

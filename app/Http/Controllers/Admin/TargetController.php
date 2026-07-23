@@ -142,8 +142,8 @@ class TargetController extends Controller
     {
         $authUser = Auth::user();
 
-        if (! $authUser->hasRole('Admin') && (int) $team->team_head_id !== (int) $authUser->id) {
-            abort(403, 'Only admins and the team head can set team targets.');
+        if ((int) $team->team_head_id !== (int) $authUser->id) {
+            abort(403, 'Only the assigned team head can set this team target.');
         }
 
         $validated = $request->validate([
@@ -311,5 +311,103 @@ class TargetController extends Controller
         );
 
         return back()->with('success', 'User target updated.');
+    }
+
+    // ─── Bulk User Targets (one button updates all members at once) ────────────
+
+    public function bulkSetUserTargets(Request $request, Team $team): RedirectResponse
+    {
+        $authUser = Auth::user();
+
+        $isAdmin    = $authUser->hasRole('Admin');
+        $isTeamHead = (int) $team->team_head_id === (int) $authUser->id;
+        $subTeamHead = null;
+
+        if (! $isAdmin && ! $isTeamHead) {
+            $subTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)
+                ->where('team_id', $team->id)
+                ->first();
+
+            if (! $subTeamHead) {
+                abort(403, 'You can only manage targets for your team.');
+            }
+        }
+
+        $validated = $request->validate([
+            'month'                    => 'required|integer|min:1|max:12',
+            'year'                     => 'required|integer|min:2020|max:2100',
+            'targets'                  => 'required|array',
+            'targets.*.target_amount' => 'nullable|numeric|min:0',
+            'targets.*.notes'         => 'nullable|string',
+        ]);
+
+        $team->load(['users', 'approvedProjectManagers']);
+
+        $updated = 0;
+        $skipped = 0;
+
+        foreach ($validated['targets'] as $userId => $row) {
+            // Skip rows the user left blank — bulk save should only touch filled-in fields.
+            if (! isset($row['target_amount']) || $row['target_amount'] === '' || $row['target_amount'] === null) {
+                continue;
+            }
+
+            $targetUser = \App\Models\User::find($userId);
+            if (! $targetUser) {
+                continue;
+            }
+
+            // Sub-team heads may only bulk-update members of their own sub-team.
+            if ($subTeamHead) {
+                $isInMySubTeam = (int) $targetUser->sub_team_head_id === (int) $subTeamHead->id
+                    || (int) $targetUser->id === (int) $subTeamHead->user_id;
+
+                if (! $isInMySubTeam) {
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            // Must actually belong to this team (member, team head, or approved Project Manager).
+            $belongsToTeam = $team->users->contains('id', $targetUser->id)
+                || (int) $team->team_head_id === (int) $targetUser->id
+                || $team->approvedProjectManagers->contains('id', $targetUser->id);
+
+            if (! $belongsToTeam) {
+                $skipped++;
+                continue;
+            }
+
+            UserTarget::updateOrCreate(
+                [
+                    'user_id' => $targetUser->id,
+                    'team_id' => $team->id,
+                    'month'   => $validated['month'],
+                    'year'    => $validated['year'],
+                ],
+                [
+                    'target_amount' => $row['target_amount'],
+                    'notes'         => $row['notes'] ?? null,
+                ]
+            );
+
+            $updated++;
+        }
+
+        if ($updated > 0) {
+            $monthName = \DateTime::createFromFormat('!m', $validated['month'])->format('F');
+            ActivityLogger::log(
+                Auth::user(),
+                UserActivityLog::TYPE_USER_TARGET_SET,
+                "Bulk updated {$updated} user target(s) for {$team->name} ({$monthName} {$validated['year']})"
+            );
+        }
+
+        $message = "{$updated} target(s) updated.";
+        if ($skipped > 0) {
+            $message .= " {$skipped} skipped (not in your team/sub-team).";
+        }
+
+        return back()->with('success', $message);
     }
 }

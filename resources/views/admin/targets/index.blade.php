@@ -31,9 +31,9 @@
 
 @forelse($teams as $team)
 @php
-    // Team target: admin or the team's own team head
-    $canManageTeamTarget = $isAdmin ||
-        ($isTeamHead && (int)$team->team_head_id === (int)auth()->id());
+    // Team target: only the team's assigned team head
+    $canManageTeamTarget =
+        $isTeamHead && (int)$team->team_head_id === (int)auth()->id();
 
     // Sub-team targets: admin or team head only (NOT sub-team heads)
     $canManageSubTeamTargets =
@@ -69,7 +69,7 @@
             </h6>
 
             @if($canManageTeamTarget)
-            {{-- Admin only: editable form --}}
+            {{-- Assigned team head: editable form --}}
             <form method="POST" action="{{ route('admin.targets.team', $team) }}" class="row g-2 align-items-end">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
@@ -123,6 +123,16 @@
             @endif
             @endif
         </div>
+
+        {{-- ── Hidden bulk form: all member target inputs below point here via form="" attribute,
+             so one button can save every member's target in a single request. ── --}}
+        @if($canManageUserTargets)
+        <form id="bulk-targets-{{ $team->id }}" method="POST" action="{{ route('admin.targets.user.bulk', $team) }}">
+            @csrf
+            <input type="hidden" name="month" value="{{ $month }}">
+            <input type="hidden" name="year" value="{{ $year }}">
+        </form>
+        @endif
 
         {{-- ── Sub-Team Heads with their Users ── --}}
         @if($team->subTeamHeads->isNotEmpty())
@@ -247,35 +257,25 @@
                     </div>
 
                     @if($canManageUserTargets)
-                    {{-- Admin / Team Head: editable --}}
-                    <form method="POST" action="{{ route('admin.targets.user', $team) }}" class="row g-2 align-items-end">
-                        @csrf
-                        <input type="hidden" name="user_id" value="{{ $member->id }}">
-                        <input type="hidden" name="month" value="{{ $month }}">
-                        <input type="hidden" name="year" value="{{ $year }}">
-
+                    {{-- Admin / Team Head: editable, submits via the shared bulk form below --}}
+                    <div class="row g-2 align-items-end">
                         <div class="col-md-4">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">$</span>
-                                <input type="number" name="target_amount" step="0.01" min="0"
-                                    class="form-control"
+                                <input type="number" name="targets[{{ $member->id }}][target_amount]" step="0.01" min="0"
+                                    class="form-control" form="bulk-targets-{{ $team->id }}"
                                     value="{{ $member->currentTarget?->target_amount ?? '' }}"
-                                    placeholder="0.00" required>
+                                    placeholder="0.00">
                             </div>
                         </div>
 
-                        <div class="col-md-5">
-                            <input type="text" name="notes" class="form-control form-control-sm"
+                        <div class="col-md-8">
+                            <input type="text" name="targets[{{ $member->id }}][notes]" class="form-control form-control-sm"
+                                form="bulk-targets-{{ $team->id }}"
                                 value="{{ $member->currentTarget?->notes ?? '' }}"
                                 placeholder="Notes (optional)">
                         </div>
-
-                        <div class="col-md-3">
-                            <button type="submit" class="btn btn-outline-primary btn-sm w-100">
-                                {{ $member->currentTarget ? 'Update' : 'Set Target' }}
-                            </button>
-                        </div>
-                    </form>
+                    </div>
 
                     @else
                     {{-- Team Head & Agent: read-only --}}
@@ -372,35 +372,25 @@
             </div>
 
             @if($canManageUserTargets)
-            {{-- Admin / Team Head: editable --}}
-            <form method="POST" action="{{ route('admin.targets.user', $team) }}" class="row g-2 align-items-end">
-                @csrf
-                <input type="hidden" name="user_id" value="{{ $member->id }}">
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year" value="{{ $year }}">
-
+            {{-- Admin / Team Head: editable, submits via the shared bulk form above --}}
+            <div class="row g-2 align-items-end">
                 <div class="col-md-4">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">$</span>
-                        <input type="number" name="target_amount" step="0.01" min="0"
-                            class="form-control"
+                        <input type="number" name="targets[{{ $member->id }}][target_amount]" step="0.01" min="0"
+                            class="form-control" form="bulk-targets-{{ $team->id }}"
                             value="{{ $member->currentTarget?->target_amount ?? '' }}"
-                            placeholder="0.00" required>
+                            placeholder="0.00">
                     </div>
                 </div>
 
-                <div class="col-md-5">
-                    <input type="text" name="notes" class="form-control form-control-sm"
+                <div class="col-md-8">
+                    <input type="text" name="targets[{{ $member->id }}][notes]" class="form-control form-control-sm"
+                        form="bulk-targets-{{ $team->id }}"
                         value="{{ $member->currentTarget?->notes ?? '' }}"
                         placeholder="Notes (optional)">
                 </div>
-
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
-                        {{ $member->currentTarget ? 'Update' : 'Set Target' }}
-                    </button>
-                </div>
-            </form>
+            </div>
 
             @else
             {{-- Team Head & Agent: read-only --}}
@@ -415,6 +405,15 @@
 
         @if($team->users->isEmpty())
             <p class="text-muted mb-0">No users in this team yet.</p>
+        @endif
+
+        {{-- ── Single button to save every member's target above in one request ── --}}
+        @if($canManageUserTargets)
+            <div class="d-flex justify-content-end mb-3">
+                <button type="submit" form="bulk-targets-{{ $team->id }}" class="btn btn-primary">
+                    <i class="bi bi-check2-all"></i> Update All Member Targets
+                </button>
+            </div>
         @endif
 
         {{-- Progress bar (only for Admin and Team Head, not for Sub-Team Heads) --}}
