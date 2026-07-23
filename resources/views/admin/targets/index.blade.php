@@ -33,7 +33,8 @@
 @php
     // Team target: only the team's assigned team head
     $canManageTeamTarget =
-        $isTeamHead && (int)$team->team_head_id === (int)auth()->id();
+        $isAdmin ||
+        ($isTeamHead && (int)$team->team_head_id === (int)auth()->id());
 
     // Sub-team targets: admin or team head only (NOT sub-team heads)
     $canManageSubTeamTargets =

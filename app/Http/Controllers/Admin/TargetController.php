@@ -142,8 +142,8 @@ class TargetController extends Controller
     {
         $authUser = Auth::user();
 
-        if ((int) $team->team_head_id !== (int) $authUser->id) {
-            abort(403, 'Only the assigned team head can set this team target.');
+        if (! $authUser->hasRole('Admin') && (int) $team->team_head_id !== (int) $authUser->id) {
+            abort(403, 'Only admins and the assigned team head can set this team target.');
         }
 
         $validated = $request->validate([
