@@ -149,8 +149,10 @@ class TargetController extends Controller
         $validated = $request->validate([
             'month'         => 'required|integer|min:1|max:12',
             'year'          => 'required|integer|min:2020|max:2100',
-            'target_amount' => 'required|numeric|min:0',
+            'target_amount' => 'required|numeric|min:0|max:9999999999999.99',
             'notes'         => 'nullable|string',
+        ], [
+            'target_amount.max' => 'Target amount is too large. Maximum allowed is 9,999,999,999,999.99.',
         ]);
 
         $existing = TeamTarget::where([
@@ -191,8 +193,10 @@ class TargetController extends Controller
             'sub_team_head_id' => 'required|exists:sub_team_heads,id',
             'month'            => 'required|integer|min:1|max:12',
             'year'             => 'required|integer|min:2020|max:2100',
-            'target_amount'    => 'required|numeric|min:0',
+            'target_amount'    => 'required|numeric|min:0|max:9999999999999.99',
             'notes'            => 'nullable|string',
+        ], [
+            'target_amount.max' => 'Target amount is too large. Maximum allowed is 9,999,999,999,999.99.',
         ]);
 
         // Make sure the sub-team head belongs to this team
@@ -266,8 +270,10 @@ class TargetController extends Controller
             'user_id'       => 'required|exists:users,id',
             'month'         => 'required|integer|min:1|max:12',
             'year'          => 'required|integer|min:2020|max:2100',
-            'target_amount' => 'required|numeric|min:0',
+            'target_amount' => 'required|numeric|min:0|max:9999999999999.99',
             'notes'         => 'nullable|string',
+        ], [
+            'target_amount.max' => 'Target amount is too large. Maximum allowed is 9,999,999,999,999.99.',
         ]);
 
         // Make sure the user actually belongs to this team — either via users.team_id,
@@ -337,8 +343,10 @@ class TargetController extends Controller
             'month'                    => 'required|integer|min:1|max:12',
             'year'                     => 'required|integer|min:2020|max:2100',
             'targets'                  => 'required|array',
-            'targets.*.target_amount' => 'nullable|numeric|min:0',
+            'targets.*.target_amount' => 'nullable|numeric|min:0|max:9999999999999.99',
             'targets.*.notes'         => 'nullable|string',
+        ], [
+            'targets.*.target_amount.max' => 'One of the target amounts is too large. Maximum allowed is 9,999,999,999,999.99.',
         ]);
 
         $team->load(['users', 'approvedProjectManagers']);

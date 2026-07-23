@@ -152,6 +152,8 @@
             </li>
             @endif
 
+            {{-- Clients sidebar link temporarily disabled per request --}}
+            {{--
             @if(!$isPpc)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Clients">
@@ -159,6 +161,7 @@
                 </a>
             </li>
             @endif
+            --}}
 
             @if($canReviewJoinRequests)
             <li class="nav-item">
