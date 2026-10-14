@@ -15,7 +15,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>Team</th>
-                        <th>Company</th>
+                        @unless($singleCompany)<th>Company</th>@endunless
                         <th>Status</th>
                         <th>This Month's Target</th>
                         <th class="text-end">Action</th>
@@ -25,7 +25,9 @@
                     @forelse($teams as $team)
                     <tr>
                         <td class="fw-semibold">{{ $team->name }}</td>
+                        @unless($singleCompany)
                         <td class="text-muted small">{{ $team->company?->name ?? '-' }}</td>
+                        @endunless
                         <td>
                             @switch($team->membership_status)
                                 @case('approved')

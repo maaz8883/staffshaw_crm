@@ -61,18 +61,17 @@ class SaleController extends Controller
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
             $query->whereIn('team_id', $teamIds);
         } else {
-            // Check if user is a sub-team head
-            $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
-            
-            if ($subTeamHead) {
-                // Sub-Team Head: their own sales + their sub-team members' sales
-                $subTeamMemberIds = \App\Models\User::where('sub_team_head_id', $subTeamHead->id)
+            $subTeamHeadIds = \App\Models\SubTeamHead::where('user_id', $user->id)->pluck('id');
+
+            if ($subTeamHeadIds->isNotEmpty()) {
+                // Sub-Team Head: own sales + all members under any of their seats
+                $subTeamMemberIds = \App\Models\User::whereIn('sub_team_head_id', $subTeamHeadIds)
                     ->pluck('id')
-                    ->toArray();
-                
-                // Include the sub-team head themselves
-                $subTeamMemberIds[] = $user->id;
-                
+                    ->push($user->id)
+                    ->unique()
+                    ->values()
+                    ->all();
+
                 $query->whereIn('user_id', $subTeamMemberIds);
             } else {
                 // Regular Agent: only their own sales
@@ -86,22 +85,26 @@ class SaleController extends Controller
     private function canApprove(Sale $sale): bool
     {
         $user = Auth::user();
-        if ($user->hasRole('Admin')) return true;
-        if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return true;
-        
-        // Check if user is a sub-team head and the sale belongs to their sub-team member
-        $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();
-        if ($subTeamHead) {
-            $saleUser = \App\Models\User::find($sale->user_id);
-            if (
-                (int) $sale->user_id === (int) $user->id
-                || ($saleUser && (int) $saleUser->sub_team_head_id === (int) $subTeamHead->id)
-            ) {
-                return true;
-            }
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            return true;
         }
-        
-        return false;
+        if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) {
+            return true;
+        }
+
+        // Sub-team head may approve members' sales — never their own.
+        if ((int) $sale->user_id === (int) $user->id) {
+            return false;
+        }
+
+        $subTeamHeadIds = \App\Models\SubTeamHead::where('user_id', $user->id)->pluck('id');
+        if ($subTeamHeadIds->isEmpty()) {
+            return false;
+        }
+
+        $saleUser = \App\Models\User::find($sale->user_id);
+
+        return $saleUser && $subTeamHeadIds->contains((int) $saleUser->sub_team_head_id);
     }
 
     // ── Index ────────────────────────────────────────────────────────────────────
@@ -215,11 +218,10 @@ class SaleController extends Controller
             ->addColumn('brand_name', fn (Sale $s) => e($s->brand?->name ?? '-'))
             ->addColumn('actions', function (Sale $sale) {
                 $user      = Auth::user();
-                $canEdit   = ($user->hasRole('Admin') || (int) $sale->user_id === (int) $user->id)
-                             && $sale->approval_status === Sale::APPROVAL_PENDING;
+                $canEdit   = $this->userCanEditSale($sale);
                 $canDelete = $user->hasRole('Admin');
                 $canApprove = $this->canApprove($sale) && $sale->isPendingApproval();
-                $canReject  = $this->canApprove($sale) && $sale->approval_status !== Sale::APPROVAL_REJECTED;
+                $canReject  = $this->canApprove($sale) && $sale->isPendingApproval();
 
                 $showUrl    = route('admin.sales.show', $sale);
                 $editUrl    = route('admin.sales.edit', $sale);
@@ -262,7 +264,7 @@ class SaleController extends Controller
 
     // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-    public function create(): View
+    public function create(Request $request): View
     {
         $user = Auth::user();
 
@@ -274,11 +276,34 @@ class SaleController extends Controller
             abort(403, 'Join a team before creating sales.');
         }
 
+        $lead = null;
+        $prefill = [];
+        if ($request->filled('lead_id')) {
+            $lead = \App\Models\Lead::query()->find((int) $request->lead_id);
+            if ($lead && AuthScope::canAccessLead($lead)) {
+                $prefill = [
+                    'lead_id' => $lead->id,
+                    'client_id' => $lead->client_id ?: $request->get('client_id'),
+                    'client_name' => $lead->company ?: $lead->name,
+                    'client_email' => $lead->email,
+                    'client_phone' => $lead->phone,
+                    'brand_id' => $lead->brand_id,
+                    'amount' => $lead->lead_value,
+                    'title' => 'Sale — ' . ($lead->company ?: $lead->name),
+                ];
+            } else {
+                $lead = null;
+            }
+        }
+
         return view('admin.sales.create', [
-            'brands'          => $this->brandsForDropdown(),
-            'clients'         => \App\Http\Controllers\Admin\ClientController::forDropdown(),
+            'brands'           => $this->brandsForDropdown(),
+            'clients'          => \App\Http\Controllers\Admin\ClientController::forDropdown(),
             'isProjectManager' => $this->isProjectManager(),
-            'joinedTeams'     => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
+            'joinedTeams'      => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
+            'suggestedSaleType'=> $this->suggestedSaleType($user),
+            'leadPrefill'      => $prefill,
+            'fromLead'         => $lead,
         ]);
     }
 
@@ -330,6 +355,18 @@ class SaleController extends Controller
         $validated = $this->normalizeSaleInput($request->validate($rules));
         unset($validated['team_id']);
 
+        $leadId = null;
+        if (! empty($validated['lead_id'])) {
+            $lead = \App\Models\Lead::query()->find((int) $validated['lead_id']);
+            if ($lead && AuthScope::canAccessLead($lead)) {
+                $leadId = $lead->id;
+                if ($lead->status !== 'customer') {
+                    $lead->update(['status' => 'customer']);
+                }
+            }
+        }
+        unset($validated['lead_id']);
+
         // Two ways to attach a client: pick an existing one from the dropdown (client_id),
         // or type a new client's details — in which case we save it as a new Client record too.
         $validated['client_id'] = $this->resolveOrCreateClient($validated, $teamId, $user->id);
@@ -338,10 +375,18 @@ class SaleController extends Controller
             'user_id'         => $user->id,
             'team_id'         => $teamId,
             'company_id'      => $companyId,
-            'status'          => 'completed',
+            'lead_id'         => $leadId,
+            'status'          => 'pending',
             'approval_status' => Sale::APPROVAL_PENDING,
             'is_draft'        => false,
         ]));
+
+        if ($leadId && $sale->client_id) {
+            \App\Models\Lead::whereKey($leadId)->whereNull('client_id')->update([
+                'client_id' => $sale->client_id,
+                'status' => 'customer',
+            ]);
+        }
 
         SaleNotificationDispatcher::dispatchSaleCreated($sale);
         $trelloResult = TrelloSaleDispatcher::dispatch($sale);
@@ -362,6 +407,7 @@ class SaleController extends Controller
         $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices']);
 
         $canToggleRefund = $this->canApprove($sale);
+        $canEdit = $this->userCanEditSale($sale);
         $invoiceService = app(InvoiceService::class);
         $sale = $invoiceService->syncReceivedAmount($sale);
         $invoices = $sale->invoices->sortByDesc('issued_at')->values();
@@ -372,6 +418,7 @@ class SaleController extends Controller
         return view('admin.sales.show', compact(
             'sale',
             'canToggleRefund',
+            'canEdit',
             'invoices',
             'billableRemaining',
             'invoiceMaxAmount',
@@ -408,6 +455,7 @@ class SaleController extends Controller
         }
 
         $sale->update(array_merge($validated, [
+            'status'          => 'pending',
             'approval_status' => Sale::APPROVAL_PENDING,
             'approval_note'   => null,
             'approved_by'     => null,
@@ -447,12 +495,19 @@ class SaleController extends Controller
     {
         if (! $this->canApprove($sale)) abort(403);
 
-        $sale->update([
+        $payload = [
             'approval_status' => Sale::APPROVAL_APPROVED,
             'approved_by'     => Auth::id(),
             'approved_at'     => now(),
             'approval_note'   => null,
-        ]);
+        ];
+
+        // Pending sales become completed on approval so targets/charts count them.
+        if ($sale->status === 'pending') {
+            $payload['status'] = 'completed';
+        }
+
+        $sale->update($payload);
 
         SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), true);
 
@@ -468,7 +523,9 @@ class SaleController extends Controller
 
     public function reject(Request $request, Sale $sale): RedirectResponse
     {
-        if (! $this->canApprove($sale)) abort(403);
+        if (! $this->canApprove($sale) || ! $sale->isPendingApproval()) {
+            abort(403);
+        }
 
         $request->validate([
             'approval_note' => 'required|string|max:500',
@@ -476,6 +533,7 @@ class SaleController extends Controller
 
         $sale->update([
             'approval_status' => Sale::APPROVAL_REJECTED,
+            'status'          => 'pending',
             'approved_by'     => Auth::id(),
             'approved_at'     => now(),
             'approval_note'   => $request->approval_note,
@@ -577,10 +635,24 @@ class SaleController extends Controller
 
     private function authorizeEdit(Sale $sale): void
     {
+        if (! $this->userCanEditSale($sale)) {
+            abort(403);
+        }
+    }
+
+    private function userCanEditSale(Sale $sale): bool
+    {
         $user = Auth::user();
-        if ($user->hasRole('Admin')) return;
-        if ((int) $sale->user_id === (int) $user->id && $sale->isPendingApproval()) return;
-        abort(403);
+
+        if ($user->hasRole(Role::ADMIN)) {
+            return true;
+        }
+
+        if ((int) $sale->user_id !== (int) $user->id) {
+            return false;
+        }
+
+        return $sale->isEditableByOwner();
     }
 
     private static function statusColor(string $status): string
@@ -714,10 +786,10 @@ class SaleController extends Controller
         };
     }
 
-    /** @return \Illuminate\Database\Eloquent\Collection<int, Brand> */
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Brand>|\Illuminate\Support\Collection<int, Brand> */
     private function brandsForDropdown()
     {
-        return Brand::query()->orderBy('name')->get(['id', 'name']);
+        return AuthScope::brandsForDropdown();
     }
 
     /** @param array<string, mixed> $validated */
@@ -742,13 +814,29 @@ class SaleController extends Controller
         $clientId = $validated['client_id'] ?? null;
 
         if ($clientId) {
+            $allowedIds = \App\Http\Controllers\Admin\ClientController::accessibleClientIds()
+                ->map(fn ($id) => (int) $id);
+            if (! $allowedIds->contains((int) $clientId)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'client_id' => 'You cannot attach this customer to the sale.',
+                ]);
+            }
+
             $client = \App\Models\Client::find($clientId);
             if ($client) {
-                $client->update(array_filter([
+                $updates = array_filter([
                     'name'  => $validated['client_name'] ?? $client->name,
                     'email' => $validated['client_email'] ?? $client->email,
                     'phone' => $validated['client_phone'] ?? $client->phone,
-                ], fn ($v) => $v !== null && $v !== ''));
+                ], fn ($v) => $v !== null && $v !== '');
+
+                if (! $client->brand_id && ! empty($validated['brand_id'])) {
+                    $updates['brand_id'] = $validated['brand_id'];
+                }
+
+                if ($updates !== []) {
+                    $client->update($updates);
+                }
 
                 return $client->id;
             }
@@ -773,8 +861,11 @@ class SaleController extends Controller
             'name'       => $validated['client_name'],
             'email'      => $validated['client_email'] ?? null,
             'phone'      => $validated['client_phone'] ?? null,
+            'brand_id'   => $validated['brand_id'] ?? null,
             'team_id'    => $teamId,
             'created_by' => $creatorId,
+            'is_active'  => true,
+            'currency'   => 'USD',
         ]);
 
         return $client->id;
@@ -785,8 +876,18 @@ class SaleController extends Controller
     {
         return [
             'title'            => 'required|string|max:255',
-            'brand_id'         => 'required|exists:brands,id',
-            'client_id'        => 'nullable|exists:clients,id',
+            'brand_id'         => AuthScope::brandIdRule(required: true),
+            'client_id'        => [
+                'nullable',
+                \Illuminate\Validation\Rule::in(
+                    \App\Http\Controllers\Admin\ClientController::accessibleClientIds()
+                        ->flatMap(fn ($id) => [(int) $id, (string) $id])
+                        ->unique()
+                        ->values()
+                        ->all()
+                ),
+            ],
+            'lead_id'          => 'nullable|exists:leads,id',
             'client_name'      => 'required|string|max:255',
             'client_email'     => 'nullable|email|max:255',
             'client_phone'     => 'nullable|string|max:50',
@@ -805,5 +906,23 @@ class SaleController extends Controller
             'sale_type'        => 'required|in:' . implode(',', Sale::SALE_TYPES),
             'notes'            => 'nullable|string',
         ];
+    }
+
+    /** Default Front/Upsell from the agent's sub-team seat title. */
+    private function suggestedSaleType(\App\Models\User $user): string
+    {
+        $user->loadMissing('subTeamHead');
+        $title = strtolower((string) ($user->subTeamHead?->title ?? ''));
+
+        if ($title === '') {
+            $asHead = \App\Models\SubTeamHead::where('user_id', $user->id)->value('title');
+            $title = strtolower((string) ($asHead ?? ''));
+        }
+
+        if (str_contains($title, 'upsell')) {
+            return Sale::TYPE_UPSELL;
+        }
+
+        return Sale::TYPE_FRONT;
     }
 }

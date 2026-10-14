@@ -30,6 +30,7 @@ class Sale extends Model
     protected $fillable = [
         'title',
         'client_id',
+        'lead_id',
         'client_name',
         'client_email',
         'client_phone',
@@ -63,6 +64,7 @@ class Sale extends Model
         'company_id'   => 'integer',
         'brand_id'     => 'integer',
         'client_id'    => 'integer',
+        'lead_id'      => 'integer',
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',
@@ -92,6 +94,11 @@ class Sale extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
     }
 
     public function approvedBy(): BelongsTo
@@ -144,11 +151,29 @@ class Sale extends Model
             return 'Refunded';
         }
 
+        if ($this->isPendingApproval() && $this->status === 'pending') {
+            return 'Awaiting Approval';
+        }
+
+        if ($this->approval_status === self::APPROVAL_REJECTED && $this->status === 'pending') {
+            return 'Needs Revision';
+        }
+
         return ucfirst($this->status);
+    }
+
+    public function isEditableByOwner(): bool
+    {
+        if ($this->is_refunded || $this->status === self::STATUS_REFUNDED) {
+            return false;
+        }
+
+        return $this->isPendingApproval()
+            || $this->approval_status === self::APPROVAL_REJECTED;
     }
 
     public function remainingAmount(): float
     {
-        return max(0, (float) $this->amount - (float) $this->received_amount);
+        return round(max(0, (float) $this->amount - (float) $this->received_amount), 2);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\CompanyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -31,11 +32,17 @@ class UserController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // HRM provisions accounts server-to-server with the shared SSO secret; anyone else is a public sign-up.
+        $trusted = $this->isTrustedIntegration($request);
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
             'password' => 'required|string|min:8',
-            'role_id' => 'nullable|exists:roles,id',
+            'role_id' => [
+                'nullable',
+                Rule::exists('roles', 'id')->whereNot('name', Role::ADMIN),
+            ],
             'company_id' => 'nullable|exists:companies,id',
             'team_id' => 'nullable|exists:teams,id',
             'sub_team_id' => 'nullable|exists:teams,id',
@@ -51,26 +58,32 @@ class UserController extends Controller
             ], 422);
         }
 
-        $existing = User::query()->where('email', $request->email)->first();
-
-        if ($existing) {
+        if (User::query()->where('email', $request->email)->exists()) {
+            // HRM treats "already exists" as success when re-provisioning; it does not need the record back.
             return response()->json([
-                'status' => true,
+                'status' => $trusted,
                 'message' => 'User already exists',
-                'data' => $this->loadUserRelations($existing),
-            ], 200);
+            ], $trusted ? 200 : 422);
+        }
+
+        if ($trusted) {
+            $roleId = $request->role_id;
+            $accountStatus = $request->account_status ?? User::ACCOUNT_ACTIVE;
+        } else {
+            $roleId = Role::query()->where('name', Role::AGENT)->value('id');
+            $accountStatus = User::ACCOUNT_PENDING;
         }
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role_id' => $request->role_id,
-            'company_id' => $request->company_id,
+            'role_id' => $roleId,
+            'company_id' => CompanyContext::idForCreate($request->company_id),
             'team_id' => $request->team_id,
             'sub_team_id' => $request->sub_team_id,
             'sub_team_head_id' => $request->sub_team_head_id,
-            'account_status' => $request->account_status ?? User::ACCOUNT_ACTIVE,
+            'account_status' => $accountStatus,
         ]);
 
         return response()->json([
@@ -121,7 +134,7 @@ class UserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'role_id' => $request->role_id,
-            'company_id' => $request->company_id,
+            'company_id' => CompanyContext::idForUpdate($user->company_id, $request->company_id),
             'team_id' => $request->team_id,
             'sub_team_id' => $request->sub_team_id,
             'sub_team_head_id' => $request->sub_team_head_id,
@@ -156,6 +169,14 @@ class UserController extends Controller
             'status' => true,
             'message' => "User '{$userName}' deleted successfully",
         ], 200);
+    }
+
+    private function isTrustedIntegration(Request $request): bool
+    {
+        $secret = (string) config('services.hrm.sso_secret');
+        $provided = (string) $request->header('X-SSO-Secret', '');
+
+        return $secret !== '' && $provided !== '' && hash_equals($secret, $provided);
     }
 
     /** @return list<string> */

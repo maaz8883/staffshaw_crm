@@ -125,6 +125,29 @@ class User extends Authenticatable
             ->pluck('team_id');
     }
 
+    /**
+     * Keep users.team_id in sync with Team_Membership for Project Managers.
+     * Primary home team = most recently approved membership (or null if none).
+     */
+    public function syncHomeTeamFromMemberships(): void
+    {
+        if (! $this->isProjectManager()) {
+            return;
+        }
+
+        $primaryTeamId = $this->teamMemberships()
+            ->where('status', TeamMembership::STATUS_APPROVED)
+            ->orderByDesc('decided_at')
+            ->orderByDesc('id')
+            ->value('team_id');
+
+        if ((int) ($this->team_id ?? 0) === (int) ($primaryTeamId ?? 0)) {
+            return;
+        }
+
+        $this->update(['team_id' => $primaryTeamId]);
+    }
+
     /** Approved sign-in users only (excludes pending / rejected self-registrations). */
     public function scopeAccountActive(Builder $query): Builder
     {

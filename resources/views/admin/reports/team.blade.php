@@ -20,7 +20,7 @@
                 <input type="date" name="date_to" class="form-control form-control-sm"
                        value="{{ $filters['date_to'] ?? $dateTo->toDateString() }}">
             </div>
-            @if(!$isAgent && $companies->isNotEmpty())
+            @if(!$singleCompany && !$isAgent && $companies->isNotEmpty())
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Company</label>
                 <select name="company_id" class="form-select form-select-sm" style="min-width: 160px">

@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
+use App\Models\TeamMembership;
 use App\Models\TeamTarget;
 use App\Models\User;
 use App\Models\UserTarget;
@@ -83,7 +84,7 @@ class DashboardController extends Controller
             return null;
         }
 
-        return min(100.0, round(($achieved / $target) * 100, 1));
+        return round(($achieved / $target) * 100, 1);
     }
 
     // ── Admin Dashboard ──────────────────────────────────────────────────────────
@@ -242,28 +243,15 @@ class DashboardController extends Controller
             ->groupBy('team_id')
             ->pluck('total', 'team_id');
 
-        $userCounts = User::query()
-            ->accountActive()
-            ->whereNotNull('team_id')
-            ->select('team_id', DB::raw('COUNT(*) as c'))
-            ->groupBy('team_id')
-            ->pluck('c', 'team_id');
-
         $userTargets = UserTarget::query()
             ->where('month', $month)
             ->where('year', $year)
             ->pluck('target_amount', 'user_id');
 
-        $monthRevByUser = self::approved()
-            ->where('status', 'completed')
-            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
-            ->toBase()
-            ->select('user_id', DB::raw('SUM(amount) as total'))
-            ->groupBy('user_id')
-            ->pluck('total', 'user_id');
-
+        // Member sales/revenue use the same month as targets (not all-time).
         $salesStatsByUser = self::approved()
             ->where('status', 'completed')
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
             ->toBase()
             ->select(
                 'user_id',
@@ -280,7 +268,16 @@ class DashboardController extends Controller
             ->with('role')
             ->orderBy('name')
             ->get()
+            // PMs belong via Team_Membership, not users.team_id (avoids stale home-team).
+            ->reject(fn (User $u) => $u->hasRole(Role::PROJECT_MANAGER))
             ->groupBy('team_id');
+
+        $pmsByTeam = TeamMembership::query()
+            ->where('status', TeamMembership::STATUS_APPROVED)
+            ->with(['user.role'])
+            ->get()
+            ->groupBy('team_id')
+            ->map(fn ($rows) => $rows->map->user->filter()->unique('id')->values());
 
         return Team::query()
             ->with('company')
@@ -289,8 +286,8 @@ class DashboardController extends Controller
             ->map(function (Team $team) use (
                 $year, $month,
                 $monthlyByTeam, $targetsByTeam, $ppcByTeam,
-                $userCounts, $userTargets, $monthRevByUser,
-                $salesStatsByUser, $usersByTeam
+                $userTargets,
+                $salesStatsByUser, $usersByTeam, $pmsByTeam
             ) {
                 $tid     = $team->id;
                 $target  = (float) ($targetsByTeam[$tid] ?? 0);
@@ -298,22 +295,29 @@ class DashboardController extends Controller
                 $ppc     = (float) ($ppcByTeam[$tid] ?? 0);
                 $pct     = self::achievementPercent($revenue, $target);
 
-                $members = ($usersByTeam->get($tid) ?? collect())
-                    ->map(function (User $member) use ($userTargets, $monthRevByUser, $salesStatsByUser, $team) {
-                        $mid        = $member->id;
-                        $stats      = $salesStatsByUser->get($mid);
+                $teamUsers = ($usersByTeam->get($tid) ?? collect())
+                    ->concat($pmsByTeam->get($tid) ?? collect())
+                    ->unique('id')
+                    ->sortBy('name')
+                    ->values();
+
+                $members = $teamUsers
+                    ->map(function (User $member) use ($userTargets, $salesStatsByUser, $team) {
+                        $mid         = $member->id;
+                        $stats       = $salesStatsByUser->get($mid);
                         $monthTarget = (float) ($userTargets[$mid] ?? 0);
-                        $monthRev   = (float) ($monthRevByUser[$mid] ?? 0);
+                        $monthRev    = $stats ? (float) $stats->sale_amount : 0.0;
+                        $isHead      = (int) $team->team_head_id === (int) $mid;
 
                         return [
-                            'id'                    => $mid,
-                            'name'                  => $member->name,
-                            'role_name'             => $member->role?->name ?? '—',
-                            'is_head'               => $team->team_head_id === $mid,
-                            'sales_count'           => $stats ? (int) $stats->sales_count : 0,
-                            'sale_amount'           => $stats ? (float) $stats->sale_amount : 0.0,
-                            'month_target'          => $monthTarget,
-                            'month_revenue'         => $monthRev,
+                            'id'                     => $mid,
+                            'name'                   => $member->name,
+                            'role_name'              => $isHead ? 'Team Lead' : ($member->role?->name ?? '—'),
+                            'is_head'                => $isHead,
+                            'sales_count'            => $stats ? (int) $stats->sales_count : 0,
+                            'sale_amount'            => $monthRev,
+                            'month_target'           => $monthTarget,
+                            'month_revenue'          => $monthRev,
                             'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
                         ];
                     })
@@ -324,7 +328,7 @@ class DashboardController extends Controller
                     'id'                 => $team->id,
                     'name'               => $team->name,
                     'company_name'       => $team->company?->name,
-                    'members_count'      => (int) ($userCounts[$tid] ?? 0),
+                    'members_count'      => count($members),
                     'month_label'        => Carbon::createFromDate($year, $month, 1)->format('F Y'),
                     'target'             => $target,
                     'monthly_revenue'    => $revenue,
@@ -371,45 +375,90 @@ class DashboardController extends Controller
             ->filter(fn ($card) => $teams->pluck('id')->contains($card['id']))
             ->values();
 
-        // Team target achievement for first team
-        $firstTeam       = $teams->first();
-        $teamTargetAmt   = $firstTeam ? (float) TeamTarget::where('team_id', $firstTeam->id)->where('month', $month)->where('year', $year)->value('target_amount') : 0;
-        $teamMonthRev    = $firstTeam ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $firstTeam->id)) : 0.0;
+        $firstTeam = $teams->first();
+        $teamIds = $teams->pluck('id');
+        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $monthEnd = (clone $monthStart)->endOfMonth();
+        $monthLabel = Carbon::createFromDate($year, $month, 1)->format('F Y');
+
+        $teamTargetAmt = $firstTeam
+            ? (float) TeamTarget::where('team_id', $firstTeam->id)->where('month', $month)->where('year', $year)->value('target_amount')
+            : 0;
+        $teamMonthRev = $firstTeam
+            ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $firstTeam->id))
+            : 0.0;
+        $teamMonthSalesCount = $firstTeam
+            ? (int) self::approved()
+                ->where('status', 'completed')
+                ->where('team_id', $firstTeam->id)
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count()
+            : 0;
+
         $teamTargetAchievement = [
-            'target'   => $teamTargetAmt,
+            'target' => $teamTargetAmt,
             'achieved' => $teamMonthRev,
-            'percent'  => self::achievementPercent($teamMonthRev, $teamTargetAmt),
-            'label'    => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'percent' => self::achievementPercent($teamMonthRev, $teamTargetAmt),
+            'label' => $monthLabel,
         ];
 
-        // My own sales stats
-        $mySales = [
-            'total'     => Sale::where('user_id', $user->id)->count(),
-            'completed' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->count(),
-            'pending'   => Sale::where('user_id', $user->id)->where('status', 'pending')->count(),
-            'cancelled' => Sale::where('user_id', $user->id)->where('status', 'cancelled')->count(),
-            'revenue'   => self::approved()->where('user_id', $user->id)->where('status', 'completed')->sum('amount'),
-        ];
+        $myMonthRevenue = self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('user_id', $user->id));
+        $myMonthCompleted = (int) self::approved()
+            ->where('user_id', $user->id)
+            ->where('status', 'completed')
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->count();
+        $myMonthPending = (int) Sale::query()
+            ->where('user_id', $user->id)
+            ->where('approval_status', Sale::APPROVAL_PENDING)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->count();
+        $myMonthCancelled = (int) Sale::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'cancelled')
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->count();
 
         $myTarget = UserTarget::where('user_id', $user->id)
             ->where('month', $month)->where('year', $year)->first();
+        $myTargetAmt = (float) ($myTarget?->target_amount ?? 0);
+
+        $mySales = [
+            'total' => $myMonthCompleted + $myMonthPending + $myMonthCancelled,
+            'completed' => $myMonthCompleted,
+            'pending' => $myMonthPending,
+            'cancelled' => $myMonthCancelled,
+            'revenue' => $myMonthRevenue,
+            'month_revenue' => $myMonthRevenue,
+        ];
+
+        $userTargetAchievement = [
+            'target' => $myTargetAmt,
+            'achieved' => $myMonthRevenue,
+            'percent' => self::achievementPercent($myMonthRevenue, $myTargetAmt),
+            'label' => $monthLabel,
+        ];
 
         $company = $user->company;
         $companyStats = $company ? [
-            'teams_count'  => Team::where('company_id', $company->id)->count(),
-            'users_count'  => User::where('company_id', $company->id)->count(),
-            'sales_count'  => self::approved()->where('company_id', $company->id)->count(),
-            'revenue'      => self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount'),
+            'teams_count' => Team::where('company_id', $company->id)->count(),
+            'users_count' => User::where('company_id', $company->id)->count(),
+            'sales_count' => self::approved()->where('company_id', $company->id)->count(),
+            'revenue' => self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount'),
         ] : [];
 
-        $recentSales = Sale::where('user_id', $user->id)
-            ->with(['team'])->latest()->limit(6)->get();
+        $recentSales = Sale::query()
+            ->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds)
+            ->with(['team', 'user'])
+            ->latest('sale_date')
+            ->limit(8)
+            ->get();
 
-        // Charts: last 14 days revenue trend
+        // Team charts: last 14 days + status mix for headed teams
         $agentTrendStart = now()->subDays(13)->startOfDay();
-        $agentTrendEnd   = now()->endOfDay();
-        $agentDailyRows  = self::approved()
-            ->where('user_id', $user->id)
+        $agentTrendEnd = now()->endOfDay();
+        $teamDailyRows = self::approved()
+            ->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds)
             ->where('status', 'completed')
             ->whereBetween('sale_date', [$agentTrendStart->toDateString(), $agentTrendEnd->toDateString()])
             ->toBase()
@@ -421,41 +470,45 @@ class DashboardController extends Controller
         $agentRevenueTrendValues = [];
         foreach (CarbonPeriod::create($agentTrendStart->toDateString(), $agentTrendEnd->toDateString()) as $date) {
             $agentRevenueTrendLabels[] = $date->format('M j');
-            $agentRevenueTrendValues[] = round((float) ($agentDailyRows[$date->format('Y-m-d')] ?? 0), 2);
+            $agentRevenueTrendValues[] = round((float) ($teamDailyRows[$date->format('Y-m-d')] ?? 0), 2);
         }
 
+        $teamStatusBase = Sale::query()
+            ->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
         $agentSalesByStatus = [
             'labels' => ['Completed', 'Pending', 'Cancelled'],
-            'values' => [$mySales['completed'], $mySales['pending'], $mySales['cancelled']],
+            'values' => [
+                (int) (clone $teamStatusBase)->where('approval_status', Sale::APPROVAL_APPROVED)->where('status', 'completed')->count(),
+                (int) (clone $teamStatusBase)->where('approval_status', Sale::APPROVAL_PENDING)->count(),
+                (int) (clone $teamStatusBase)->where('status', 'cancelled')->count(),
+            ],
         ];
 
-        // Get sub-teams progress for the first team
         $subTeamsProgress = collect();
         if ($firstTeam) {
-            $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
-            $monthEnd = (clone $monthStart)->endOfMonth();
-
             $subTeamHeads = \App\Models\SubTeamHead::where('team_id', $firstTeam->id)
                 ->with('user')
                 ->get();
 
-            $subTeamsProgress = $subTeamHeads->map(function ($subHead) use ($month, $year, $monthStart, $monthEnd, $firstTeam) {
-                // Get sub-team target
+            $subTeamsProgress = $subTeamHeads->map(function ($subHead) use ($month, $year, $monthStart, $monthEnd) {
                 $subTeamTarget = \App\Models\SubTeamHeadTarget::where('sub_team_head_id', $subHead->id)
                     ->where('month', $month)
                     ->where('year', $year)
                     ->first();
 
-                // Get sub-team members
-                $subTeamMemberIds = User::where('sub_team_head_id', $subHead->id)
-                    ->orWhere('id', $subHead->user_id)
+                $subTeamMemberIds = User::query()
+                    ->where(function ($q) use ($subHead) {
+                        $q->where('sub_team_head_id', $subHead->id)
+                            ->orWhere('id', $subHead->user_id);
+                    })
                     ->pluck('id')
-                    ->toArray();
+                    ->unique()
+                    ->values();
 
-                // Get sub-team revenue
                 $subTeamRevenue = self::approved()
                     ->where('status', 'completed')
-                    ->whereIn('user_id', $subTeamMemberIds)
+                    ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
                     ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
                     ->sum('amount');
 
@@ -464,8 +517,8 @@ class DashboardController extends Controller
 
                 return [
                     'title' => $subHead->title,
-                    'head_name' => $subHead->user->name,
-                    'members_count' => count($subTeamMemberIds),
+                    'head_name' => $subHead->user?->name ?? '—',
+                    'members_count' => $subTeamMemberIds->count(),
                     'target' => $targetAmt,
                     'revenue' => $revenueAmt,
                     'percent' => self::achievementPercent($revenueAmt, $targetAmt),
@@ -478,13 +531,13 @@ class DashboardController extends Controller
             'mySales', 'myTarget', 'recentSales', 'month', 'year',
             'company', 'companyStats',
             'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus',
-            'teamTargetAchievement', 'subTeamsProgress'
+            'teamTargetAchievement', 'subTeamsProgress', 'teamMonthSalesCount'
         ))->with([
             'isTeamHeadView' => true,
-            'team'           => $teams->first(),
-            'teamTarget'     => null,
-            'teamMembers'    => collect(),
-            'userTargetAchievement' => ['target' => 0, 'achieved' => 0, 'percent' => null, 'label' => ''],
+            'team' => $teams->first(),
+            'teamTarget' => null,
+            'teamMembers' => collect(),
+            'userTargetAchievement' => $userTargetAchievement,
         ]);
     }
 
@@ -502,17 +555,22 @@ class DashboardController extends Controller
             : null;
         $teamTargetAmt = (float) ($teamTarget?->target_amount ?? 0);
         $currentMonthLabel = Carbon::createFromDate($year, $month, 1)->format('F Y');
+        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $monthEnd = (clone $monthStart)->endOfMonth();
 
-        // Get sub-team members (including the sub-team head themselves)
-        $subTeamMembers = User::where('sub_team_head_id', $subTeamHead->id)
-            ->orWhere('id', $user->id)
+        $subTeamMembers = User::query()
+            ->where(function ($q) use ($subTeamHead, $user) {
+                $q->where('sub_team_head_id', $subTeamHead->id)
+                    ->orWhere('id', $user->id);
+            })
             ->with('role')
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->unique('id')
+            ->values();
 
-        $subTeamMemberIds = $subTeamMembers->pluck('id')->toArray();
+        $subTeamMemberIds = $subTeamMembers->pluck('id')->values();
 
-        // Sub-team target
         $subTeamTarget = \App\Models\SubTeamHeadTarget::where('sub_team_head_id', $subTeamHead->id)
             ->where('month', $month)
             ->where('year', $year)
@@ -520,50 +578,56 @@ class DashboardController extends Controller
 
         $subTeamTargetAmt = (float) ($subTeamTarget?->target_amount ?? 0);
 
-        // Sub-team revenue (approved + completed sales from all sub-team members)
-        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
-        $monthEnd = (clone $monthStart)->endOfMonth();
+        $subTeamMonthRevenue = self::monthlyCompletedRevenue(
+            $year,
+            $month,
+            fn (Builder $q) => $q->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
+        );
 
-        $subTeamMonthRevenue = self::approved()
+        $teamMonthRevenue = $team
+            ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $team->id))
+            : 0.0;
+
+        $subTeamMonthSalesCount = (int) self::approved()
             ->where('status', 'completed')
-            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
             ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
-            ->sum('amount');
+            ->count();
 
-        // Sub-team sales stats
         $subTeamSales = [
-            'total' => self::approved()->whereIn('user_id', $subTeamMemberIds)->count(),
-            'completed' => self::approved()->whereIn('user_id', $subTeamMemberIds)->where('status', 'completed')->count(),
-            'pending' => Sale::whereIn('user_id', $subTeamMemberIds)->where('status', 'pending')->count(),
-            'revenue' => self::approved()->whereIn('user_id', $subTeamMemberIds)->where('status', 'completed')->sum('amount'),
+            'total' => $subTeamMonthSalesCount,
+            'completed' => $subTeamMonthSalesCount,
+            'pending' => (int) Sale::query()
+                ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
+                ->where('approval_status', Sale::APPROVAL_PENDING)
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count(),
+            'revenue' => $subTeamMonthRevenue,
         ];
 
-        // Sub-team target achievement
         $subTeamTargetAchievement = [
             'target' => $subTeamTargetAmt,
-            'achieved' => (float) $subTeamMonthRevenue,
-            'percent' => self::achievementPercent((float) $subTeamMonthRevenue, $subTeamTargetAmt),
-            'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'achieved' => $subTeamMonthRevenue,
+            'percent' => self::achievementPercent($subTeamMonthRevenue, $subTeamTargetAmt),
+            'label' => $currentMonthLabel,
         ];
 
-        // Get user targets and revenue for each member
+        $teamTargetAchievement = [
+            'target' => $teamTargetAmt,
+            'achieved' => $teamMonthRevenue,
+            'percent' => self::achievementPercent($teamMonthRevenue, $teamTargetAmt),
+            'label' => $currentMonthLabel,
+        ];
+
         $userTargets = UserTarget::whereIn('user_id', $subTeamMemberIds)
             ->where('month', $month)
             ->where('year', $year)
             ->pluck('target_amount', 'user_id');
 
-        $monthRevByUser = self::approved()
-            ->where('status', 'completed')
-            ->whereIn('user_id', $subTeamMemberIds)
-            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
-            ->toBase()
-            ->select('user_id', DB::raw('SUM(amount) as total'))
-            ->groupBy('user_id')
-            ->pluck('total', 'user_id');
-
         $salesStatsByUser = self::approved()
             ->where('status', 'completed')
-            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
             ->toBase()
             ->select(
                 'user_id',
@@ -574,35 +638,53 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('user_id');
 
-        // Build member stats
         $memberStats = $subTeamMembers->map(function (User $member) use (
-            $userTargets, $monthRevByUser, $salesStatsByUser, $user
+            $userTargets, $salesStatsByUser, $user, $subTeamHead
         ) {
             $mid = $member->id;
             $stats = $salesStatsByUser->get($mid);
             $monthTarget = (float) ($userTargets[$mid] ?? 0);
-            $monthRev = (float) ($monthRevByUser[$mid] ?? 0);
+            $monthRev = $stats ? (float) $stats->sale_amount : 0.0;
+            $isSubHead = (int) $mid === (int) $user->id;
 
             return [
                 'id' => $mid,
                 'name' => $member->name,
-                'role_name' => $member->role?->name ?? '—',
-                'is_sub_team_head' => $mid === $user->id,
+                'role_name' => $isSubHead
+                    ? ('Sub-Team Head · ' . ($subTeamHead->title ?: 'Lead'))
+                    : ($member->role?->name ?? 'Agent'),
+                'is_sub_team_head' => $isSubHead,
                 'sales_count' => $stats ? (int) $stats->sales_count : 0,
-                'sale_amount' => $stats ? (float) $stats->sale_amount : 0.0,
+                'sale_amount' => $monthRev,
                 'month_target' => $monthTarget,
                 'month_revenue' => $monthRev,
                 'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
             ];
         })->values();
 
-        // My own sales stats
+        $myMonthRevenue = self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('user_id', $user->id));
         $mySales = [
-            'total' => Sale::where('user_id', $user->id)->count(),
-            'completed' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->count(),
-            'pending' => Sale::where('user_id', $user->id)->where('status', 'pending')->count(),
-            'cancelled' => Sale::where('user_id', $user->id)->where('status', 'cancelled')->count(),
-            'revenue' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->sum('amount'),
+            'total' => (int) Sale::query()
+                ->where('user_id', $user->id)
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count(),
+            'completed' => (int) self::approved()
+                ->where('user_id', $user->id)
+                ->where('status', 'completed')
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count(),
+            'pending' => (int) Sale::query()
+                ->where('user_id', $user->id)
+                ->where('approval_status', Sale::APPROVAL_PENDING)
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count(),
+            'cancelled' => (int) Sale::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'cancelled')
+                ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+                ->count(),
+            'revenue' => $myMonthRevenue,
+            'month_revenue' => $myMonthRevenue,
         ];
 
         $myTarget = UserTarget::where('user_id', $user->id)
@@ -610,19 +692,19 @@ class DashboardController extends Controller
             ->where('year', $year)
             ->first();
 
-        // Recent sales from sub-team
-        $recentSales = Sale::whereIn('user_id', $subTeamMemberIds)
+        $recentSales = Sale::query()
+            ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
             ->with(['user', 'team'])
-            ->latest()
+            ->latest('sale_date')
+            ->latest('id')
             ->limit(8)
             ->get();
 
-        // Charts: last 14 days revenue trend for sub-team
         $trendStart = now()->subDays(13)->startOfDay();
         $trendEnd = now()->endOfDay();
         $dailyRows = self::approved()
             ->where('status', 'completed')
-            ->whereIn('user_id', $subTeamMemberIds)
+            ->whereIn('user_id', $subTeamMemberIds->isEmpty() ? [0] : $subTeamMemberIds)
             ->whereBetween('sale_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
             ->toBase()
             ->select(DB::raw('DATE(sale_date) as d'), DB::raw('SUM(amount) as total'))
@@ -643,7 +725,7 @@ class DashboardController extends Controller
             'mySales', 'myTarget', 'recentSales',
             'month', 'year',
             'revenueTrendLabels', 'revenueTrendValues',
-            'teamTarget', 'teamTargetAmt', 'currentMonthLabel'
+            'teamTarget', 'teamTargetAmt', 'currentMonthLabel', 'teamTargetAchievement'
         ))->with([
             'isSubTeamHeadView' => true,
             'teamMembers' => collect(),
@@ -659,19 +741,14 @@ class DashboardController extends Controller
             'agentSalesByStatus' => ['labels' => [], 'values' => []],
             'userTargetAchievement' => [
                 'target' => (float) ($myTarget?->target_amount ?? 0),
-                'achieved' => self::monthlyCompletedRevenue($year, $month, fn ($q) => $q->where('user_id', $user->id)),
+                'achieved' => $myMonthRevenue,
                 'percent' => self::achievementPercent(
-                    self::monthlyCompletedRevenue($year, $month, fn ($q) => $q->where('user_id', $user->id)),
+                    $myMonthRevenue,
                     (float) ($myTarget?->target_amount ?? 0)
                 ),
-                'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+                'label' => $currentMonthLabel,
             ],
-            'teamTargetAchievement' => [
-                'target' => 0,
-                'achieved' => 0,
-                'percent' => null,
-                'label' => '',
-            ],
+            'teamTargetAchievement' => $teamTargetAchievement,
         ]);
     }
 
@@ -679,28 +756,67 @@ class DashboardController extends Controller
 
     private function ppcDashboard(User $user, int $month, int $year): View
     {
-        // All teams with their current month spending
-        $teams = Team::with(['company'])
-            ->orderBy('name')
-            ->get()
-            ->map(function (Team $team) use ($month, $year) {
-                $team->month_spending = (float) \App\Models\TeamPpcSpending::where('team_id', $team->id)
-                    ->where('month', $month)
-                    ->where('year', $year)
-                    ->sum('amount');
+        $month = max(1, min(12, (int) request()->get('month', $month)));
+        $year = max(2020, min(2100, (int) request()->get('year', $year)));
+
+        $prev = Carbon::createFromDate($year, $month, 1)->subMonth();
+        $prevMonth = (int) $prev->month;
+        $prevYear = (int) $prev->year;
+        $currentMonthLabel = Carbon::createFromDate($year, $month, 1)->format('F Y');
+
+        // PPC users only see their assigned team(s); Admin/Manager see all.
+        $teamsQuery = Team::with(['company'])->orderBy('name');
+        if (! $user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            $teamIds = \App\Support\AuthScope::accessibleTeamIds();
+            $teamsQuery->whereIn('id', $teamIds->isEmpty() ? [0] : $teamIds);
+        }
+
+        // PPC employees: spend-only (no team revenue / targets / margin ratios).
+        $teams = $teamsQuery->get()
+            ->map(function (Team $team) use ($month, $year, $prevMonth, $prevYear) {
+                $tid = $team->id;
+                $spend = (float) \App\Models\TeamPpcSpending::where('team_id', $tid)
+                    ->where('month', $month)->where('year', $year)->sum('amount');
+                $prevSpend = (float) \App\Models\TeamPpcSpending::where('team_id', $tid)
+                    ->where('month', $prevMonth)->where('year', $prevYear)->sum('amount');
+                $entries = (int) \App\Models\TeamPpcSpending::where('team_id', $tid)
+                    ->where('month', $month)->where('year', $year)->count();
+
+                $team->month_spending = $spend;
+                $team->prev_month_spending = $prevSpend;
+                $team->spend_change_pct = $prevSpend > 0
+                    ? round((($spend - $prevSpend) / $prevSpend) * 100, 1)
+                    : ($spend > 0 ? null : 0.0);
+                $team->entries_count = $entries;
+
                 return $team;
             });
 
-        $totalSpending = $teams->sum('month_spending');
+        $totalSpending = (float) $teams->sum('month_spending');
+        $prevTotalSpending = (float) $teams->sum('prev_month_spending');
+        $entriesCount = (int) $teams->sum('entries_count');
+        $spendChangePct = $prevTotalSpending > 0
+            ? round((($totalSpending - $prevTotalSpending) / $prevTotalSpending) * 100, 1)
+            : ($totalSpending > 0 ? null : 0.0);
 
-        $recentSpendings = \App\Models\TeamPpcSpending::where('user_id', $user->id)
-            ->with('team')
+        $recentQuery = \App\Models\TeamPpcSpending::query()
+            ->with(['team', 'user'])
+            ->where('month', $month)
+            ->where('year', $year)
             ->latest()
-            ->limit(6)
-            ->get();
+            ->limit(10);
+
+        if (! $user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            $teamIds = \App\Support\AuthScope::accessibleTeamIds();
+            $recentQuery->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds);
+        }
+
+        $recentSpendings = $recentQuery->get();
 
         return view('admin.ppc.dashboard', compact(
-            'teams', 'totalSpending', 'recentSpendings', 'month', 'year'
+            'teams', 'totalSpending', 'prevTotalSpending',
+            'entriesCount', 'spendChangePct',
+            'recentSpendings', 'month', 'year', 'currentMonthLabel'
         ));
     }
 
@@ -710,22 +826,40 @@ class DashboardController extends Controller
     {
         $team = $user->team;
         $company = $user->company;
+        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $monthEnd = (clone $monthStart)->endOfMonth();
+        $currentMonthLabel = $monthStart->format('F Y');
 
-        // My sales stats — only approved count in revenue/completed
+        $myMonthRevenue = self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('user_id', $user->id));
+        $teamMonthRevenue = $team
+            ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $team->id))
+            : 0.0;
+
+        $monthBase = Sale::query()
+            ->where('user_id', $user->id)
+            ->whereBetween('sale_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+
         $mySales = [
-            'total' => Sale::where('user_id', $user->id)->count(),
-            'completed' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->count(),
-            'pending' => Sale::where('user_id', $user->id)->where('status', 'pending')->count(),
-            'cancelled' => Sale::where('user_id', $user->id)->where('status', 'cancelled')->count(),
-            'revenue' => self::approved()->where('user_id', $user->id)->where('status', 'completed')->sum('amount'),
+            'total' => (int) (clone $monthBase)->count(),
+            'completed' => (int) (clone $monthBase)
+                ->where('approval_status', Sale::APPROVAL_APPROVED)
+                ->where('status', 'completed')
+                ->count(),
+            'pending_approval' => (int) (clone $monthBase)
+                ->where('approval_status', Sale::APPROVAL_PENDING)
+                ->count(),
+            'pending' => (int) (clone $monthBase)
+                ->where('approval_status', Sale::APPROVAL_PENDING)
+                ->count(),
+            'cancelled' => (int) (clone $monthBase)->where('status', 'cancelled')->count(),
+            'revenue' => $myMonthRevenue,
+            'month_revenue' => $myMonthRevenue,
         ];
 
-        // My target this month
         $myTarget = UserTarget::where('user_id', $user->id)
             ->where('month', $month)->where('year', $year)
             ->first();
 
-        // Team target this month
         $teamTarget = $team ? TeamTarget::where('team_id', $team->id)
             ->where('month', $month)->where('year', $year)
             ->first() : null;
@@ -733,28 +867,21 @@ class DashboardController extends Controller
         $myTargetAmt = (float) ($myTarget?->target_amount ?? 0);
         $teamTargetAmt = (float) ($teamTarget?->target_amount ?? 0);
 
-        $myMonthRevenue = self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('user_id', $user->id));
-        $teamMonthRevenue = $team
-            ? self::monthlyCompletedRevenue($year, $month, fn (Builder $q) => $q->where('team_id', $team->id))
-            : 0.0;
-
         $userTargetAchievement = [
             'target' => $myTargetAmt,
             'achieved' => $myMonthRevenue,
             'percent' => self::achievementPercent($myMonthRevenue, $myTargetAmt),
-            'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'label' => $currentMonthLabel,
         ];
         $teamTargetAchievement = [
             'target' => $teamTargetAmt,
             'achieved' => $teamMonthRevenue,
             'percent' => self::achievementPercent($teamMonthRevenue, $teamTargetAmt),
-            'label' => Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'label' => $currentMonthLabel,
         ];
 
-        // Team members — Agent ko nahi dikhna chahiye
         $teamMembers = collect();
 
-        // Company info — only approved
         $companyStats = $company ? [
             'teams_count' => Team::where('company_id', $company->id)->count(),
             'users_count' => User::where('company_id', $company->id)->accountActive()->count(),
@@ -762,14 +889,13 @@ class DashboardController extends Controller
             'revenue' => self::approved()->where('company_id', $company->id)->where('status', 'completed')->sum('amount'),
         ] : [];
 
-        // My recent sales (all — so agent can see pending ones too)
         $recentSales = Sale::where('user_id', $user->id)
             ->with(['team'])
-            ->latest()
-            ->limit(6)
+            ->latest('sale_date')
+            ->latest('id')
+            ->limit(8)
             ->get();
 
-        // Agent charts: last 14 days completed revenue
         $agentTrendStart = now()->subDays(13)->startOfDay();
         $agentTrendEnd = now()->endOfDay();
         $agentDailyRows = self::approved()
@@ -789,10 +915,10 @@ class DashboardController extends Controller
         }
 
         $agentSalesByStatus = [
-            'labels' => ['Completed', 'Pending', 'Cancelled'],
+            'labels' => ['Approved', 'Awaiting approval', 'Cancelled'],
             'values' => [
                 $mySales['completed'],
-                $mySales['pending'],
+                $mySales['pending_approval'],
                 $mySales['cancelled'],
             ],
         ];
@@ -801,7 +927,7 @@ class DashboardController extends Controller
             'user', 'team', 'company',
             'mySales', 'myTarget', 'teamTarget',
             'teamMembers', 'companyStats', 'recentSales',
-            'month', 'year',
+            'month', 'year', 'currentMonthLabel',
             'agentRevenueTrendLabels', 'agentRevenueTrendValues', 'agentSalesByStatus',
             'userTargetAchievement', 'teamTargetAchievement'
         ))->with('teamDashboardCards', collect());

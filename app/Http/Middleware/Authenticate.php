@@ -16,7 +16,7 @@ class Authenticate extends Middleware
             return null;
         }
 
-        $hrm = rtrim(env('HRM_APP_URL', ''), '/');
+        $hrm = rtrim((string) config('services.hrm.url'), '/');
 
         return $hrm ? "{$hrm}/login" : route('admin.login');
     }

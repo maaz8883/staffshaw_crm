@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Brand;
 use App\Models\Company;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use App\Support\AuthScope;
+use App\Support\CompanyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,8 +33,7 @@ class TeamController extends Controller
             ->with(['company', 'teamHead'])
             ->withCount('users');
 
-        AuthScope::scopeByTeam($query, 'id')
-                 ->when(AuthScope::isAgent(), fn ($q) => $q->where('company_id', auth()->user()->company_id));
+        AuthScope::scopeByTeam($query, 'id');
 
         return DataTables::eloquent($query)
             ->addColumn('company_name', fn (Team $team) => e($team->company?->name ?? '-'))
@@ -44,11 +45,10 @@ class TeamController extends Controller
                 $deleteUrl = route('admin.teams.destroy', $team);
                 $csrf = csrf_field();
                 $method = method_field('DELETE');
-                $isAgent = auth()->user()?->hasRole('Agent');
-                $isPpc   = auth()->user()?->hasRole('PPC');
+                $canManage = AuthScope::isAdminOrManager();
 
                 $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>';
-                if (!$isAgent && !$isPpc) {
+                if ($canManage) {
                     $html .= '
                     <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>
                     <form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this team?">
@@ -64,41 +64,43 @@ class TeamController extends Controller
 
     public function create(): View
     {
+        $this->authorizeManage();
+
         $companies = Company::query()->orderBy('name')->get();
         $allUsers  = User::query()->orderBy('name')->get();
         $teamUsers = collect(); // Empty for create
+        $brands    = Brand::query()->orderBy('name')->get(['id', 'name']);
 
-        return view('admin.teams.create', compact('companies', 'allUsers', 'teamUsers'));
+        return view('admin.teams.create', compact('companies', 'allUsers', 'teamUsers', 'brands'));
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorizeManage();
+
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
             'team_head_id'     => 'nullable|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name',
             'description'      => 'nullable|string',
+            'brand_ids'        => 'nullable|array',
+            'brand_ids.*'      => 'integer|exists:brands,id',
             'sub_heads'        => 'nullable|array',
+            'sub_heads.*.id'   => 'nullable|integer',
             'sub_heads.*.title' => 'required|string|max:255',
             'sub_heads.*.user_id' => 'required|exists:users,id',
         ]);
 
         $team = Team::query()->create([
-            'company_id'   => $validated['company_id'] ?? null,
+            'company_id'   => CompanyContext::idForCreate($validated['company_id'] ?? null),
             'team_head_id' => $validated['team_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
         ]);
 
-        // Create sub-team heads
-        if (!empty($validated['sub_heads'])) {
-            foreach ($validated['sub_heads'] as $subHead) {
-                $team->subTeamHeads()->create([
-                    'title'   => $subHead['title'],
-                    'user_id' => $subHead['user_id'],
-                ]);
-            }
-        }
+        $team->brands()->sync($validated['brand_ids'] ?? []);
+        $this->syncSubTeamHeads($team, $validated['sub_heads'] ?? []);
+        $this->syncTeamHeadMembership($team);
 
         // Log activity
         $companyName = $team->company?->name ?? 'No company';
@@ -124,6 +126,10 @@ class TeamController extends Controller
             abort(403);
         }
 
+        if (! AuthScope::canAccessTeam((int) $team->id) && ! $user->hasRole(\App\Models\Role::PROJECT_MANAGER)) {
+            abort(403);
+        }
+
         $team->load([
             'company', 
             'teamHead', 
@@ -132,6 +138,7 @@ class TeamController extends Controller
             },
             'subTeamHeads.user',
             'approvedProjectManagers.role',
+            'brands',
         ]);
 
         $month = (int) request()->get('month', now()->month);
@@ -170,27 +177,39 @@ class TeamController extends Controller
 
         $totalSpending = $spendings->sum('amount');
 
-        return view('admin.teams.show', compact('team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc'));
+        $canManageMembers = $user->hasRole(\App\Models\Role::ADMIN);
+
+        return view('admin.teams.show', compact(
+            'team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc', 'canManageMembers'
+        ));
     }
 
     public function edit(Team $team): View
     {
+        $this->authorizeManage();
+
         $companies = Company::query()->orderBy('name')->get();
         $allUsers  = User::query()->orderBy('name')->get();
         $teamUsers = $team->users()->with(['role', 'subTeamHead'])->orderBy('name')->get(); // Only users in this team
-        $team->load('subTeamHeads.user');
+        $team->load(['subTeamHeads.user', 'brands']);
+        $brands = Brand::query()->orderBy('name')->get(['id', 'name']);
 
-        return view('admin.teams.edit', compact('team', 'companies', 'allUsers', 'teamUsers'));
+        return view('admin.teams.edit', compact('team', 'companies', 'allUsers', 'teamUsers', 'brands'));
     }
 
     public function update(Request $request, Team $team): RedirectResponse
     {
+        $this->authorizeManage();
+
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
             'team_head_id'     => 'nullable|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name,' . $team->id,
             'description'      => 'nullable|string',
+            'brand_ids'        => 'nullable|array',
+            'brand_ids.*'      => 'integer|exists:brands,id',
             'sub_heads'        => 'nullable|array',
+            'sub_heads.*.id'   => 'nullable|integer',
             'sub_heads.*.title' => 'required|string|max:255',
             'sub_heads.*.user_id' => 'required|exists:users,id',
         ]);
@@ -198,22 +217,17 @@ class TeamController extends Controller
         $oldName = $team->name;
         
         $team->update([
-            'company_id'   => $validated['company_id'] ?? null,
+            'company_id'   => CompanyContext::idForUpdate($team->company_id, $validated['company_id'] ?? null),
             'team_head_id' => $validated['team_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
         ]);
 
-        // Update sub-team heads - delete old ones and create new ones
-        $team->subTeamHeads()->delete();
-        if (!empty($validated['sub_heads'])) {
-            foreach ($validated['sub_heads'] as $subHead) {
-                $team->subTeamHeads()->create([
-                    'title'   => $subHead['title'],
-                    'user_id' => $subHead['user_id'],
-                ]);
-            }
-        }
+        $team->brands()->sync($validated['brand_ids'] ?? []);
+
+        // Preserve sub-head IDs so users.sub_team_head_id stays intact
+        $this->syncSubTeamHeads($team, $validated['sub_heads'] ?? []);
+        $this->syncTeamHeadMembership($team);
 
         // Log activity
         $team->load('company');
@@ -234,6 +248,8 @@ class TeamController extends Controller
 
     public function destroy(Team $team): RedirectResponse
     {
+        $this->authorizeManage();
+
         $teamName = $team->name;
         $companyName = $team->company?->name ?? 'No company';
         $membersCount = $team->users()->count();
@@ -284,5 +300,75 @@ class TeamController extends Controller
             });
 
         return response()->json($subTeamHeads);
+    }
+
+    private function authorizeManage(): void
+    {
+        if (! AuthScope::isAdminOrManager()) {
+            abort(403, 'Only Admin or Manager can manage teams.');
+        }
+    }
+
+    /**
+     * Update-or-create sub-team heads without wiping member FKs.
+     * Only rows removed from the form are deleted.
+     *
+     * @param  array<int, array{id?: mixed, title: string, user_id: mixed}>  $subHeads
+     */
+    private function syncSubTeamHeads(Team $team, array $subHeads): void
+    {
+        $keptIds = [];
+
+        foreach ($subHeads as $row) {
+            $title = trim((string) ($row['title'] ?? ''));
+            $userId = (int) ($row['user_id'] ?? 0);
+            if ($title === '' || $userId < 1) {
+                continue;
+            }
+
+            $id = isset($row['id']) && $row['id'] !== '' ? (int) $row['id'] : null;
+            $existing = $id
+                ? $team->subTeamHeads()->where('id', $id)->first()
+                : null;
+
+            if ($existing) {
+                $existing->update([
+                    'title' => $title,
+                    'user_id' => $userId,
+                ]);
+                $keptIds[] = $existing->id;
+            } else {
+                $created = $team->subTeamHeads()->create([
+                    'title' => $title,
+                    'user_id' => $userId,
+                ]);
+                $keptIds[] = $created->id;
+            }
+
+            // Keep the sub-head user on this team
+            User::where('id', $userId)->update(['team_id' => $team->id]);
+        }
+
+        $query = $team->subTeamHeads();
+        if ($keptIds === []) {
+            $query->delete();
+        } else {
+            $query->whereNotIn('id', $keptIds)->delete();
+        }
+    }
+
+    /** Ensure Team Head's users.team_id matches the team they head. */
+    private function syncTeamHeadMembership(Team $team): void
+    {
+        if (! $team->team_head_id) {
+            return;
+        }
+
+        $attrs = ['team_id' => $team->id];
+        if ($team->company_id) {
+            $attrs['company_id'] = $team->company_id;
+        }
+
+        User::where('id', $team->team_head_id)->update($attrs);
     }
 }

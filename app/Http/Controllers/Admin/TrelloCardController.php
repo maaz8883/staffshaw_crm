@@ -1,0 +1,582 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Team;
+use App\Models\TeamTrelloIntegration;
+use App\Services\Trello\TrelloApiClient;
+use App\Support\AuthScope;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class TrelloCardController extends Controller
+{
+    public function show(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+
+        // Don't hold the session lock while waiting on Trello (lets tick/poll run on artisan serve).
+        try {
+            if ($request->hasSession()) {
+                $request->session()->save();
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $boardIdHint = $request->query('board_id');
+        $boardIdHint = is_string($boardIdHint) && $boardIdHint !== '' ? $boardIdHint : null;
+
+        try {
+            $workspace = $client->cardWorkspace($cardId, $boardIdHint);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $card = $workspace['card'];
+        // Larger preview so modal cover matches Trello sharpness (~700px wide).
+        $refs = TrelloApiClient::cardCoverRefs($card, 700);
+        $cover = is_array($card['cover'] ?? null) ? $card['cover'] : null;
+        $edgeColor = is_string($cover['edgeColor'] ?? null) ? $cover['edgeColor'] : null;
+        $namedColor = TrelloApiClient::cardCoverColor($cover);
+        $coverBg = $edgeColor ?: $namedColor;
+        $coverSize = is_string($cover['size'] ?? null) ? $cover['size'] : 'normal';
+
+        $attachments = array_map(function (array $att) use ($team, $cardId) {
+            $att['download_url'] = route('admin.trello.attachment', [
+                'team' => $team->id,
+                'cardId' => $cardId,
+                'attachmentId' => $att['id'],
+            ]);
+            $preview = null;
+            if (! empty($att['previews']) && is_array($att['previews'])) {
+                $scaled = $att['previews'];
+                usort($scaled, fn ($a, $b) => abs(((int) ($a['width'] ?? 0)) - 300) <=> abs(((int) ($b['width'] ?? 0)) - 300));
+                $previewId = (string) ($scaled[0]['id'] ?? $scaled[0]['_id'] ?? '');
+                if ($previewId !== '') {
+                    $preview = route('admin.trello.cover', [
+                        'team' => $team->id,
+                        'cardId' => $cardId,
+                        'attachmentId' => $att['id'],
+                        'previewId' => $previewId,
+                    ]);
+                }
+            }
+            $att['preview_url'] = $preview;
+
+            return $att;
+        }, $workspace['attachments']);
+
+        $integration = $team->trelloIntegration;
+        $meId = $integration?->trello_member_id;
+        if (! $meId) {
+            try {
+                $me = $client->me();
+                $meId = is_string($me['id'] ?? null) ? $me['id'] : null;
+                if ($meId && $integration) {
+                    $integration->forceFill([
+                        'trello_member_id' => $meId,
+                        'trello_username' => $me['username'] ?? $integration->trello_username,
+                        'trello_full_name' => $me['fullName'] ?? $integration->trello_full_name,
+                    ])->save();
+                }
+            } catch (RuntimeException) {
+                $meId = null;
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'card' => $card,
+            'comments' => $workspace['comments'],
+            'activity' => $workspace['activity'] ?? $workspace['comments'],
+            'reactions' => $workspace['reactions'] ?? [],
+            'checklists' => $workspace['checklists'],
+            'attachments' => $attachments,
+            'members' => $workspace['members'],
+            'labels' => $workspace['labels'],
+            'board_labels' => $workspace['board_labels'],
+            'board_members' => $workspace['board_members'],
+            'lists' => $workspace['lists'],
+            'me_id' => $meId,
+            'cover_proxy_url' => $refs ? route('admin.trello.cover', [
+                'team' => $team->id,
+                'cardId' => $refs['card_id'],
+                'attachmentId' => $refs['attachment_id'],
+                'previewId' => $refs['preview_id'],
+            ]) : null,
+            'cover_bg' => $coverBg,
+            'cover_size' => $coverSize,
+        ]);
+    }
+
+    public function store(Request $request, Team $team): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'list_id' => ['required', 'string', 'max:64'],
+            'name' => ['required', 'string', 'max:16384'],
+            'url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'pos' => ['sometimes', 'string', 'max:32'],
+        ]);
+
+        $name = trim($data['name']);
+        if ($name === '') {
+            return response()->json(['ok' => false, 'message' => 'Enter a title for this card.'], 422);
+        }
+
+        $opts = ['pos' => $data['pos'] ?? 'bottom'];
+        $url = isset($data['url']) && is_string($data['url']) ? trim($data['url']) : '';
+        if ($url === '' && preg_match('#^https?://\S+$#i', $name)) {
+            $url = $name;
+        }
+        if ($url !== '') {
+            $opts['urlSource'] = $url;
+        }
+
+        try {
+            $card = $client->createCard($data['list_id'], $name, $opts);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $cover = is_array($card['cover'] ?? null) ? $card['cover'] : null;
+        $refs = TrelloApiClient::cardCoverRefs($card, 300);
+
+        return response()->json([
+            'ok' => true,
+            'card' => [
+                'id' => $card['id'] ?? null,
+                'name' => $card['name'] ?? $name,
+                'idList' => $card['idList'] ?? $data['list_id'],
+                'pos' => $card['pos'] ?? null,
+                'due' => $card['due'] ?? null,
+                'dueComplete' => $card['dueComplete'] ?? false,
+                'labels' => is_array($card['labels'] ?? null) ? $card['labels'] : [],
+                'dateLastActivity' => $card['dateLastActivity'] ?? null,
+                'cover_proxy_url' => $refs
+                    ? route('admin.trello.cover', [
+                        'team' => $team->id,
+                        'cardId' => $refs['card_id'],
+                        'attachmentId' => $refs['attachment_id'],
+                        'previewId' => $refs['preview_id'],
+                    ])
+                    : null,
+                'cover_color' => TrelloApiClient::cardCoverColor($cover),
+            ],
+        ]);
+    }
+
+    public function update(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:16384'],
+            'desc' => ['sometimes', 'nullable', 'string'],
+            'due' => ['sometimes', 'nullable', 'string'],
+            'dueComplete' => ['sometimes', 'boolean'],
+            'start' => ['sometimes', 'nullable', 'string'],
+            'dueReminder' => ['sometimes', 'nullable', 'integer'],
+            'idList' => ['sometimes', 'string', 'max:64'],
+            'closed' => ['sometimes', 'boolean'],
+            'subscribed' => ['sometimes', 'boolean'],
+        ]);
+
+        $payload = [];
+        foreach (['name', 'desc', 'idList'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $payload[$key] = $data[$key];
+            }
+        }
+        if (array_key_exists('due', $data)) {
+            // Empty / null clears due date on Trello.
+            $payload['due'] = $data['due'] ?: '';
+        }
+        if (array_key_exists('start', $data)) {
+            $payload['start'] = $data['start'] ?: '';
+        }
+        if (array_key_exists('dueReminder', $data)) {
+            $payload['dueReminder'] = $data['dueReminder'];
+        }
+        if (array_key_exists('dueComplete', $data)) {
+            $payload['dueComplete'] = (bool) $data['dueComplete'];
+        }
+        if (array_key_exists('closed', $data)) {
+            $payload['closed'] = (bool) $data['closed'];
+        }
+        if (array_key_exists('subscribed', $data)) {
+            $payload['subscribed'] = (bool) $data['subscribed'];
+        }
+        if ($payload === []) {
+            return response()->json(['ok' => false, 'message' => 'Nothing to update.'], 422);
+        }
+
+        try {
+            $card = $client->updateCard($cardId, $payload);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'card' => $card]);
+    }
+
+    public function comment(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate(['text' => ['required', 'string', 'max:16384']]);
+
+        try {
+            $action = $client->addComment($cardId, $data['text']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'comment' => $action]);
+    }
+
+    public function deleteComment(Team $team, string $actionId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+
+        try {
+            $client->deleteComment($actionId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function updateComment(Request $request, Team $team, string $actionId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate(['text' => ['required', 'string', 'max:16384']]);
+
+        try {
+            $action = $client->updateComment($actionId, $data['text']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'comment' => $action]);
+    }
+
+    public function attachUrl(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+            'name' => ['sometimes', 'nullable', 'string', 'max:256'],
+        ]);
+
+        try {
+            $att = $client->attachUrl($cardId, $data['url'], $data['name'] ?? null);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'attachment' => $att]);
+    }
+
+    public function addReaction(Request $request, Team $team, string $actionId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'native' => ['required', 'string', 'max:32'],
+        ]);
+
+        try {
+            $reaction = $client->addReaction($actionId, $data['native']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'reaction' => $reaction]);
+    }
+
+    public function toggleLabel(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'label_id' => ['required', 'string', 'max:64'],
+            'active' => ['required', 'boolean'],
+        ]);
+
+        try {
+            if ($data['active']) {
+                $client->addCardLabel($cardId, $data['label_id']);
+            } else {
+                $client->removeCardLabel($cardId, $data['label_id']);
+            }
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function createLabel(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:16384'],
+            'color' => ['required', 'string', 'max:32'],
+            'board_id' => ['required', 'string', 'max:64'],
+        ]);
+
+        try {
+            $label = $client->createBoardLabel($data['board_id'], (string) ($data['name'] ?? ''), $data['color']);
+            $client->addCardLabel($cardId, (string) $label['id']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'label' => $label]);
+    }
+
+    public function updateLabel(Request $request, Team $team, string $labelId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['sometimes', 'nullable', 'string', 'max:16384'],
+            'color' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'board_id' => ['sometimes', 'nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $fields = [];
+            if (array_key_exists('name', $data)) {
+                $fields['name'] = (string) ($data['name'] ?? '');
+            }
+            if (array_key_exists('color', $data)) {
+                $fields['color'] = $data['color'];
+            }
+            if ($fields === []) {
+                return response()->json(['ok' => false, 'message' => 'Nothing to update.'], 422);
+            }
+            $label = $client->updateBoardLabel($labelId, $fields, $data['board_id'] ?? null);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'label' => $label]);
+    }
+
+    public function toggleMember(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'member_id' => ['required', 'string', 'max:64'],
+            'active' => ['required', 'boolean'],
+        ]);
+
+        try {
+            if ($data['active']) {
+                $client->addCardMember($cardId, $data['member_id']);
+            } else {
+                $client->removeCardMember($cardId, $data['member_id']);
+            }
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function createChecklist(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'source_id' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $checklist = $client->createChecklist($cardId, $data['name'], $data['source_id'] ?? null);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'checklist' => $checklist]);
+    }
+
+    public function deleteChecklist(Team $team, string $checklistId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+
+        try {
+            $client->deleteChecklist($checklistId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function addCheckItem(Request $request, Team $team, string $checklistId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate(['name' => ['required', 'string', 'max:16384']]);
+
+        try {
+            $item = $client->addCheckItem($checklistId, $data['name']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'item' => $item]);
+    }
+
+    public function updateCheckItem(Request $request, Team $team, string $cardId, string $checkItemId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate(['state' => ['required', 'in:complete,incomplete']]);
+
+        try {
+            $item = $client->updateCheckItem($cardId, $checkItemId, $data['state']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'item' => $item]);
+    }
+
+    public function deleteCheckItem(Team $team, string $checklistId, string $checkItemId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+
+        try {
+            $client->deleteCheckItem($checklistId, $checkItemId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function uploadAttachment(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $request->validate([
+            'file' => ['required', 'file', 'max:20480'],
+        ]);
+
+        $file = $request->file('file');
+        try {
+            $att = $client->uploadAttachment($cardId, $file->getRealPath(), $file->getClientOriginalName());
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'attachment' => $att]);
+    }
+
+    public function updateAttachment(Request $request, Team $team, string $cardId, string $attachmentId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:256'],
+        ]);
+
+        try {
+            $att = $client->updateAttachment($cardId, $attachmentId, $data['name']);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'attachment' => $att]);
+    }
+
+    public function setCover(Request $request, Team $team, string $cardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'attachment_id' => ['nullable', 'string', 'max:64'],
+            'color' => ['nullable', 'in:green,yellow,orange,red,purple,blue,sky,lime,pink,black'],
+            'size' => ['nullable', 'in:normal,full'],
+            'remove' => ['nullable', 'boolean'],
+        ]);
+        $attachmentId = ($data['attachment_id'] ?? '') !== '' ? $data['attachment_id'] : null;
+
+        try {
+            if ($request->boolean('remove')) {
+                $card = $client->removeCardCover($cardId);
+            } elseif (! empty($data['color']) || ! empty($data['size'])) {
+                // Cover popover: color or attachment, optionally with size.
+                $cover = array_filter([
+                    'idAttachment' => $attachmentId,
+                    'color' => $data['color'] ?? null,
+                    'size' => $data['size'] ?? null,
+                ]);
+                $card = $client->setCardCover($cardId, $cover);
+            } else {
+                // Attachments "Make cover" / "Remove cover"
+                $card = $client->setCardCoverAttachment($cardId, $attachmentId);
+            }
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'card' => $card]);
+    }
+
+    public function deleteAttachment(Team $team, string $cardId, string $attachmentId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+
+        try {
+            $client->deleteAttachment($cardId, $attachmentId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function attachment(Team $team, string $cardId, string $attachmentId): Response|StreamedResponse
+    {
+        $client = $this->clientFor($team);
+
+        try {
+            $file = $client->downloadAttachment($cardId, $attachmentId);
+        } catch (RuntimeException $e) {
+            abort(404, $e->getMessage());
+        }
+
+        // Only images and PDFs open inline (preview / new tab). Anything else — e.g. an attached
+        // .html — is forced to download so it can never run as a page on the CRM's origin.
+        $type = strtolower((string) $file['content_type']);
+        $inline = (str_starts_with($type, 'image/') && ! str_contains($type, 'svg')) || str_starts_with($type, 'application/pdf');
+        $headers = [
+            'Content-Type' => $file['content_type'],
+            'Cache-Control' => 'private, max-age=3600',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+        if (str_contains($type, 'svg')) {
+            // SVG can carry script: show it, but sandboxed
+            $headers['Content-Security-Policy'] = 'sandbox';
+        } elseif (! $inline) {
+            $headers['Content-Disposition'] = 'attachment';
+        }
+
+        return response($file['body'], 200, $headers);
+    }
+
+    private function clientFor(Team $team): TrelloApiClient
+    {
+        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
+        abort_if($team->parent_team_id !== null, 422, 'Use the main team for Trello.');
+
+        $integration = $team->trelloIntegration;
+        abort_unless($integration instanceof TeamTrelloIntegration && $integration->isReady(), 422, 'Trello is not connected.');
+
+        return TrelloApiClient::forIntegration($integration);
+    }
+}

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Brand extends Model
@@ -24,5 +25,11 @@ class Brand extends Model
     public function briefForms(): HasMany
     {
         return $this->hasMany(BrandBriefForm::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /** Teams allowed to use this brand in sales/invoices/etc. */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'brand_team')->withTimestamps();
     }
 }

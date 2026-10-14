@@ -68,7 +68,9 @@
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
                         <div class="fw-semibold">{{ $team->name }}</div>
+                        @unless($singleCompany)
                         <div class="text-muted small">{{ $team->company?->name ?? '—' }}</div>
+                        @endunless
                     </div>
                     @if($team->month_spending > 0)
                         <span class="badge bg-danger">${{ number_format($team->month_spending, 0) }}</span>

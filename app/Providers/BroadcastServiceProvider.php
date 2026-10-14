@@ -12,7 +12,8 @@ class BroadcastServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Broadcast::routes();
+        // Private channel auth for logged-in CRM users (same checks as the admin area)
+        Broadcast::routes(['middleware' => ['web', 'auth', 'active.account', 'single.session']]);
 
         require base_path('routes/channels.php');
     }

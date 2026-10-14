@@ -15,7 +15,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
-                        <th>Company</th>
+                        @unless($singleCompany)<th>Company</th>@endunless
                         <th>Team</th>
                         <th class="text-muted small">Requested</th>
                         <th class="text-end">Actions</th>
@@ -26,7 +26,7 @@
                     <tr>
                         <td class="fw-semibold">{{ $u->name }}</td>
                         <td>{{ $u->email }}</td>
-                        <td>{{ $u->company?->name ?? '—' }}</td>
+                        @unless($singleCompany)<td>{{ $u->company?->name ?? '—' }}</td>@endunless
                         <td>{{ $u->team?->name ?? '—' }}</td>
                         <td class="text-muted small">{{ $u->created_at->format('d M Y H:i') }}</td>
                         <td class="text-end text-nowrap">

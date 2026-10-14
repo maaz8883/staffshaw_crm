@@ -6,8 +6,15 @@
 
 @section('content')
 
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Total Customers</div><div class="fs-5 fw-semibold">{{ $stats['total'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Active Customers</div><div class="fs-5 fw-semibold">{{ $stats['active'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Inactive Customers</div><div class="fs-5 fw-semibold">{{ $stats['inactive'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Contacts</div><div class="fs-5 fw-semibold">{{ $stats['contacts'] }}</div></div></div></div>
+</div>
+
 <div class="mb-3">
-    <a href="{{ route('admin.clients.create') }}" class="btn btn-primary">Add Client</a>
+    <a href="{{ route('admin.clients.create') }}" class="btn btn-primary">New Customer</a>
 </div>
 
 <div class="card">
@@ -20,6 +27,8 @@
                     <th>Email</th>
                     <th>Phone</th>
                     <th>Company</th>
+                    <th>Brand</th>
+                    <th>Active</th>
                     <th>Team</th>
                     <th>Sales</th>
                     <th>Added By</th>
@@ -52,6 +61,8 @@ $(function () {
             {data: 'email', name: 'email'},
             {data: 'phone', name: 'phone'},
             {data: 'company_name', name: 'company_name'},
+            {data: 'brand_name', name: 'brand.name', orderable: false, searchable: false},
+            {data: 'active_badge', name: 'is_active', searchable: false},
             {data: 'team_name', name: 'team.name', searchable: false},
             {data: 'sales_count', name: 'sales_count', orderable: false, searchable: false},
             {data: 'created_by_name', name: 'createdBy.name', searchable: false},

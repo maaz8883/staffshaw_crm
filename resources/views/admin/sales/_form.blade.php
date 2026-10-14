@@ -1,10 +1,18 @@
 @csrf
+@php
+    $pf = $leadPrefill ?? [];
+    $defaultSaleType = $suggestedSaleType ?? \App\Models\Sale::TYPE_FRONT;
+@endphp
+@if(!empty($pf['lead_id']))
+    <input type="hidden" name="lead_id" value="{{ $pf['lead_id'] }}">
+    <div class="alert alert-info py-2">Creating sale from lead #{{ $pf['lead_id'] }}.</div>
+@endif
 
 <div class="row">
     <div class="col-md-6 mb-3">
         <label for="title" class="form-label">Project Title <span class="text-danger">*</span></label>
         <input type="text" id="title" name="title" class="form-control"
-            value="{{ old('title', $sale->title ?? '') }}" required>
+            value="{{ old('title', $sale->title ?? ($pf['title'] ?? '')) }}" required>
     </div>
 
     <div class="col-md-6 mb-3">
@@ -13,7 +21,7 @@
             <option value="">-- Select Brand --</option>
             @foreach($brands as $brand)
                 <option value="{{ $brand->id }}"
-                    {{ old('brand_id', $sale->brand_id ?? '') == $brand->id ? 'selected' : '' }}>
+                    {{ old('brand_id', $sale->brand_id ?? ($pf['brand_id'] ?? '')) == $brand->id ? 'selected' : '' }}>
                     {{ $brand->name }}
                 </option>
             @endforeach
@@ -42,7 +50,7 @@
             @foreach($clients ?? [] as $c)
                 <option value="{{ $c->id }}"
                     data-name="{{ $c->name }}" data-email="{{ $c->email }}" data-phone="{{ $c->phone }}"
-                    {{ old('client_id', $sale->client_id ?? '') == $c->id ? 'selected' : '' }}>
+                    {{ old('client_id', $sale->client_id ?? ($pf['client_id'] ?? '')) == $c->id ? 'selected' : '' }}>
                     {{ $c->name }}
                 </option>
             @endforeach
@@ -53,19 +61,19 @@
     <div class="col-md-6 mb-3">
         <label for="client_name" class="form-label">Client Name <span class="text-danger">*</span></label>
         <input type="text" id="client_name" name="client_name" class="form-control"
-            value="{{ old('client_name', $sale->client_name ?? '') }}" required>
+            value="{{ old('client_name', $sale->client_name ?? ($pf['client_name'] ?? '')) }}" required>
     </div>
 
     <div class="col-md-6 mb-3">
         <label for="client_email" class="form-label">Client Email</label>
         <input type="email" id="client_email" name="client_email" class="form-control"
-            value="{{ old('client_email', $sale->client_email ?? '') }}">
+            value="{{ old('client_email', $sale->client_email ?? ($pf['client_email'] ?? '')) }}">
     </div>
 
     <div class="col-md-6 mb-3">
         <label for="client_phone" class="form-label">Client Phone</label>
         <input type="text" id="client_phone" name="client_phone" class="form-control"
-            value="{{ old('client_phone', $sale->client_phone ?? '') }}">
+            value="{{ old('client_phone', $sale->client_phone ?? ($pf['client_phone'] ?? '')) }}">
     </div>
 
     <div class="col-md-6 mb-3">
@@ -74,7 +82,7 @@
             <span class="input-group-text">$</span>
             <input type="number" id="amount" name="amount" class="form-control"
                 step="0.01" min="0"
-                value="{{ old('amount', $sale->amount ?? '') }}" required>
+                value="{{ old('amount', $sale->amount ?? ($pf['amount'] ?? '')) }}" required>
         </div>
         <div class="form-text">
             Total sale amount.
@@ -92,7 +100,7 @@
                 step="0.01" min="0"
                 value="{{ old('received_amount', $sale->received_amount ?? 0) }}">
         </div>
-        <div class="form-text">Amount received from the client.</div>
+        <div class="form-text">Initial amount received (optional). After approval, add more via <strong>Record Payment Receipt</strong> on the sale.</div>
     </div>
 
     <div class="col-md-6 mb-3">
@@ -104,7 +112,7 @@
     <div class="col-md-6 mb-3">
         <label for="sale_type" class="form-label">Sale type <span class="text-danger">*</span></label>
         <select id="sale_type" name="sale_type" class="form-select" required>
-            @php $st = old('sale_type', isset($sale) ? $sale->sale_type : \App\Models\Sale::TYPE_FRONT); @endphp
+            @php $st = old('sale_type', isset($sale) ? $sale->sale_type : $defaultSaleType); @endphp
             <option value="{{ \App\Models\Sale::TYPE_FRONT }}" {{ $st === \App\Models\Sale::TYPE_FRONT ? 'selected' : '' }}>
                 Front
             </option>
@@ -112,7 +120,7 @@
                 Upsell
             </option>
         </select>
-        <div class="form-text">Refunds are marked by admin or team lead from the sales list.</div>
+        <div class="form-text">Defaults from your Front/Upsell seat when set. Refunds are marked by admin or team lead.</div>
     </div>
 
     <div class="col-12 mb-3">

@@ -5,6 +5,9 @@
 @section('page-icon', 'receipt')
 
 @section('content')
+<div class="mb-3">
+    <a href="{{ route('admin.invoices.create') }}" class="btn btn-primary">Create Invoice</a>
+</div>
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">
@@ -16,7 +19,7 @@
                     <th>Client</th>
                     <th>Brand</th>
                     <th>Amount</th>
-                    <th>Sale Balance</th>
+                    <th>Open Balance</th>
                     <th>Status</th>
                     <th>Date</th>
                     <th class="text-end">Actions</th>

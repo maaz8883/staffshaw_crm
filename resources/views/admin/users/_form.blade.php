@@ -24,6 +24,7 @@
     </select>
 </div>
 
+@unless($singleCompany)
 <div class="mb-3">
     <label for="company_id" class="form-label">Company / Branch</label>
     <select id="company_id" name="company_id" class="form-select">
@@ -35,17 +36,23 @@
         @endforeach
     </select>
 </div>
+@endunless
 
 <div class="mb-3">
     <label for="team_id" class="form-label">Team</label>
     <select id="team_id" name="team_id" class="form-select">
         <option value="">-- Select Team --</option>
-        {{-- Populated via AJAX based on company, or pre-filled on edit --}}
-        @if(isset($user) && $user->team)
+        @if($singleCompany)
+            @foreach($teams as $team)
+                <option value="{{ $team->id }}" @selected((string) old('team_id', $user->team_id ?? '') === (string) $team->id)>{{ $team->name }}</option>
+            @endforeach
+        @elseif(isset($user) && $user->team)
             <option value="{{ $user->team->id }}" selected>{{ $user->team->name }}</option>
         @endif
     </select>
+    @unless($singleCompany)
     <small class="text-muted">Select a company first to load its teams.</small>
+    @endunless
 </div>
 
 <div class="mb-3" id="sub-team-head-wrap" style="display: none;">
@@ -75,7 +82,7 @@
         var companySelect    = document.getElementById('company_id');
         var teamSelect       = document.getElementById('team_id');
         var subTeamHeadSelect = document.getElementById('sub_team_head_id');
-        var companyWrap      = companySelect.closest('.mb-3');
+        var companyWrap      = companySelect ? companySelect.closest('.mb-3') : null;
         var teamWrap         = teamSelect.closest('.mb-3');
         var subTeamHeadWrap  = document.getElementById('sub-team-head-wrap');
         var currentTeamId    = '{{ old('team_id', $user->team_id ?? '') }}';
@@ -84,7 +91,6 @@
         // Role IDs
         var ppcRoleIds   = @json($roles->where('name', 'PPC')->pluck('id')->values());
         var agentRoleIds = @json($roles->where('name', 'Agent')->pluck('id')->values());
-        var pmRoleIds    = @json($roles->where('name', 'Project Manager')->pluck('id')->values());
 
         function isPpc() {
             return ppcRoleIds.includes(parseInt(roleSelect.value));
@@ -94,27 +100,16 @@
             return agentRoleIds.includes(parseInt(roleSelect.value));
         }
 
-        function isProjectManager() {
-            return pmRoleIds.includes(parseInt(roleSelect.value));
-        }
-
         function toggleCompanyTeam() {
             var hideCompany = isPpc();
-            // Project Manager joins teams dynamically via the Team Directory, no fixed team_id needed.
-            var hideTeam = isPpc() || isProjectManager();
-            companyWrap.style.display = hideCompany ? 'none' : '';
-            teamWrap.style.display    = hideTeam ? 'none' : '';
-            if (hideCompany) {
+            if (companyWrap) {
+                companyWrap.style.display = hideCompany ? 'none' : '';
+            }
+            teamWrap.style.display = '';
+            if (hideCompany && companySelect) {
                 companySelect.value = '';
             }
-            if (hideTeam) {
-                teamSelect.value = '';
-                teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
-                subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
-                subTeamHeadWrap.style.display = 'none';
-            } else if (!hideCompany) {
-                toggleSubTeamHead();
-            }
+            toggleSubTeamHead();
         }
 
         function toggleSubTeamHead() {
@@ -179,9 +174,11 @@
             toggleSubTeamHead();
         });
 
-        companySelect.addEventListener('change', function () {
-            loadTeams(this.value, '');
-        });
+        if (companySelect) {
+            companySelect.addEventListener('change', function () {
+                loadTeams(this.value, '');
+            });
+        }
 
         teamSelect.addEventListener('change', function () {
             toggleSubTeamHead();
@@ -189,7 +186,7 @@
 
         // On page load
         toggleCompanyTeam();
-        if (companySelect.value && !isPpc()) {
+        if (companySelect && companySelect.value) {
             loadTeams(companySelect.value, currentTeamId);
         }
     })();

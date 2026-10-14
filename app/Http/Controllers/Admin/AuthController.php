@@ -90,8 +90,8 @@ class AuthController extends Controller
             ]);
         }
 
-        $hrmAppUrl = rtrim(env('HRM_APP_URL', ''), '/');
-        $ssoSecret = env('SSO_SHARED_SECRET');
+        $hrmAppUrl = rtrim((string) config('services.hrm.url'), '/');
+        $ssoSecret = config('services.hrm.sso_secret');
 
         if (!$hrmAppUrl || !$ssoSecret) {
             return redirect()->route('admin.login')->withErrors([
@@ -181,13 +181,13 @@ class AuthController extends Controller
 
     private function hrmLoginUrl(): string
     {
-        return rtrim(env('HRM_APP_URL', ''), '/') . '/login';
+        return rtrim((string) config('services.hrm.url'), '/') . '/login';
     }
 
     private function buildCrossAppLogoutUrl(): string
     {
-        $hrm = rtrim(env('HRM_APP_URL', ''), '/');
-        $trello = rtrim(env('TRELLO_APP_URL', ''), '/');
+        $hrm = rtrim((string) config('services.hrm.url'), '/');
+        $trello = rtrim((string) config('services.trello.app_url'), '/');
 
         $next = $hrm ? "{$hrm}/api/auth/global-logout?redirect=/login" : '/admin/login';
 
@@ -201,8 +201,8 @@ class AuthController extends Controller
     private function safeRedirect(Request $request, string $default): string
     {
         $target = $request->query('redirect', $default);
-        $hrm = rtrim(env('HRM_APP_URL', ''), '/');
-        $trello = rtrim(env('TRELLO_APP_URL', ''), '/');
+        $hrm = rtrim((string) config('services.hrm.url'), '/');
+        $trello = rtrim((string) config('services.trello.app_url'), '/');
 
         if ($trello && str_starts_with($target, $trello)) {
             return $target;

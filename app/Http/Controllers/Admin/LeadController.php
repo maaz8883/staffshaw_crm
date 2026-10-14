@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Lead;
-use App\Models\Team;
-use App\Models\User;
+use App\Models\LeadActivity;
+use App\Models\Role;
+use App\Services\TrelloClientDispatcher;
 use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -18,19 +20,21 @@ class LeadController extends Controller
     public function index(): View
     {
         $teams = AuthScope::teamsForDropdown();
+        $countQuery = Lead::query();
+        AuthScope::scopeLeads($countQuery);
+        $counts = $countQuery->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
 
-        return view('admin.leads.index', compact('teams'));
+        return view('admin.leads.index', compact('teams', 'counts'));
     }
 
     public function datatable(Request $request): JsonResponse
     {
         $query = Lead::query()
-            ->with(['assignedUser', 'team'])
+            ->with(['assignedUser', 'team', 'brand'])
             ->select('leads.*');
 
         AuthScope::scopeLeads($query);
 
-        // Filters
         if ($request->filled('brand_id')) {
             $query->where('brand_id', $request->brand_id);
         }
@@ -40,11 +44,28 @@ class LeadController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+        if ($request->boolean('overdue_follow_up')) {
+            $query->whereNotNull('follow_up_at')
+                ->whereDate('follow_up_at', '<', today())
+                ->whereNotIn('status', ['customer', 'lost']);
+        }
 
         return DataTables::eloquent($query)
             ->addColumn('assigned_to_name', fn (Lead $lead) => e($lead->assignedUser?->name ?? '-'))
             ->addColumn('team_name', fn (Lead $lead) => e($lead->team?->name ?? '-'))
-            ->editColumn('status', fn (Lead $lead) => '<span class="badge bg-' . self::statusColor($lead->status) . '">' . ucfirst($lead->status) . '</span>')
+            ->addColumn('brand_name', fn (Lead $lead) => e($lead->brand?->name ?? '-'))
+            ->editColumn('company', fn (Lead $lead) => e($lead->company ?: '-'))
+            ->editColumn('lead_value', fn (Lead $lead) => '$' . number_format((float) $lead->lead_value, 2))
+            ->editColumn('status', function (Lead $lead) {
+                $html = '<span class="badge bg-' . self::statusColor($lead->status) . '">' . e($lead->statusLabel()) . '</span>';
+                if ($lead->isFollowUpOverdue()) {
+                    $html .= ' <span class="badge bg-danger">Follow-up overdue</span>';
+                } elseif ($lead->follow_up_at) {
+                    $html .= ' <span class="badge bg-light text-dark border">' . e($lead->follow_up_at->format('d M')) . '</span>';
+                }
+
+                return $html;
+            })
             ->editColumn('source', fn (Lead $lead) => ucwords(str_replace('_', ' ', $lead->source ?? '-')))
             ->addColumn('actions', function (Lead $lead) {
                 $showUrl   = route('admin.leads.show', $lead);
@@ -52,11 +73,11 @@ class LeadController extends Controller
                 $deleteUrl = route('admin.leads.destroy', $lead);
                 $csrf      = csrf_field();
                 $method    = method_field('DELETE');
-                $isAgent   = auth()->user()?->hasRole('Agent');
+                $canDelete = AuthScope::isAdminOrManager();
 
                 $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>
                     <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>';
-                if (!$isAgent) {
+                if ($canDelete) {
                     $html .= '
                     <form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this lead?">
                         '.$csrf.$method.'
@@ -73,26 +94,19 @@ class LeadController extends Controller
     {
         $users = AuthScope::usersForDropdown();
         $teams = AuthScope::teamsForDropdown();
+        $brands = AuthScope::brandsForDropdown();
 
-        return view('admin.leads.create', compact('users', 'teams'));
+        return view('admin.leads.create', compact('users', 'teams', 'brands'));
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'email'       => 'nullable|email|max:255',
-            'phone'       => 'nullable|string|max:50',
-            'source'      => 'nullable|string|max:100',
-            'status'      => 'required|in:' . implode(',', Lead::STATUSES),
-            'assigned_to' => 'nullable|exists:users,id',
-            'team_id'     => 'nullable|exists:teams,id',
-            'notes'       => 'nullable|string',
-        ]);
+        $validated = $request->validate($this->leadRules());
+        $validated = $this->leadPayload($validated);
 
-        // Auto-assign team for agents
-        if (AuthScope::isAgent()) {
+        if (! AuthScope::isAdminOrManager()) {
             $validated['team_id'] = auth()->user()->team_id;
+            $validated['assigned_to'] = $validated['assigned_to'] ?: auth()->id();
         }
 
         Lead::query()->create($validated);
@@ -102,53 +116,205 @@ class LeadController extends Controller
 
     public function show(Lead $lead): View
     {
-        $lead->load(['assignedUser', 'team']);
+        $this->authorizeLead($lead);
+        $lead->load(['assignedUser', 'team', 'brand', 'client', 'activities.user']);
 
         return view('admin.leads.show', compact('lead'));
     }
 
+    public function storeActivity(Request $request, Lead $lead): RedirectResponse
+    {
+        $this->authorizeLead($lead);
+
+        $validated = $request->validate([
+            'body' => 'required|string|max:2000',
+            'type' => 'nullable|in:note,follow_up,contact',
+            'follow_up_at' => 'nullable|date',
+        ]);
+
+        LeadActivity::query()->create([
+            'lead_id' => $lead->id,
+            'user_id' => auth()->id(),
+            'type' => $validated['type'] ?? LeadActivity::TYPE_NOTE,
+            'body' => $validated['body'],
+        ]);
+
+        $leadUpdates = [];
+        if (! empty($validated['follow_up_at'])) {
+            $leadUpdates['follow_up_at'] = $validated['follow_up_at'];
+        }
+        if (($validated['type'] ?? '') === LeadActivity::TYPE_CONTACT) {
+            $leadUpdates['last_contact_at'] = now()->toDateString();
+        }
+        if ($leadUpdates !== []) {
+            $lead->update($leadUpdates);
+        }
+
+        return back()->with('success', 'Activity added.');
+    }
+
     public function edit(Lead $lead): View
     {
+        $this->authorizeLead($lead);
         $users = AuthScope::usersForDropdown();
         $teams = AuthScope::teamsForDropdown();
+        $brands = AuthScope::brandsForDropdown();
 
-        return view('admin.leads.edit', compact('lead', 'users', 'teams'));
+        return view('admin.leads.edit', compact('lead', 'users', 'teams', 'brands'));
     }
 
     public function update(Request $request, Lead $lead): RedirectResponse
     {
-        $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'email'       => 'nullable|email|max:255',
-            'phone'       => 'nullable|string|max:50',
-            'source'      => 'nullable|string|max:100',
-            'status'      => 'required|in:' . implode(',', Lead::STATUSES),
-            'assigned_to' => 'nullable|exists:users,id',
-            'team_id'     => 'nullable|exists:teams,id',
-            'notes'       => 'nullable|string',
-        ]);
+        $this->authorizeLead($lead);
+        $validated = $this->leadPayload($request->validate($this->leadRules()));
+
+        if (! AuthScope::isAdminOrManager()) {
+            $validated['team_id'] = $lead->team_id ?: auth()->user()->team_id;
+        }
 
         $lead->update($validated);
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead updated successfully.');
     }
 
+    public function convert(Lead $lead): RedirectResponse
+    {
+        $this->authorizeLead($lead);
+
+        $user = auth()->user();
+        $isAdmin = $user->hasRole(Role::ADMIN);
+
+        if ($lead->client_id) {
+            if ($isAdmin) {
+                return redirect()
+                    ->route('admin.clients.show', $lead->client_id)
+                    ->with('success', 'Customer already exists for this lead.');
+            }
+
+            return redirect()->route('admin.sales.create', [
+                'lead_id' => $lead->id,
+                'client_id' => $lead->client_id,
+            ])->with('success', 'Customer already exists — create a sale from this lead.');
+        }
+
+        $teamId = $lead->team_id ?: $user->team_id;
+        if (! $teamId && AuthScope::isAdminOrManager()) {
+            $teamId = \App\Models\Team::query()->orderBy('id')->value('id');
+        }
+
+        if (! $teamId) {
+            return back()->with('error', 'Cannot convert lead without a team. Assign a team on the lead first.');
+        }
+
+        $client = Client::query()->create([
+            'name' => $lead->company ?: $lead->name,
+            'company_name' => $lead->company,
+            'email' => $lead->email,
+            'phone' => $lead->phone,
+            'website' => $lead->website,
+            'address' => $lead->address,
+            'city' => $lead->city,
+            'state' => $lead->state,
+            'zip' => $lead->zip,
+            'country' => $lead->country,
+            'brand_id' => $lead->brand_id,
+            'notes' => $lead->notes,
+            'team_id' => $teamId,
+            'created_by' => $user->id,
+            'is_active' => true,
+            'currency' => 'USD',
+        ]);
+
+        if ($lead->name) {
+            $client->contacts()->create([
+                'first_name' => $lead->name,
+                'email' => $lead->email,
+                'phone' => $lead->phone,
+                'position' => $lead->position,
+                'is_primary' => true,
+            ]);
+        }
+
+        $lead->update([
+            'status' => 'customer',
+            'client_id' => $client->id,
+            'team_id' => $lead->team_id ?: $teamId,
+        ]);
+
+        TrelloClientDispatcher::dispatch($client->fresh());
+
+        if ($isAdmin) {
+            return redirect()
+                ->route('admin.clients.show', $client)
+                ->with('success', 'Lead converted to customer. Admins cannot create sales — assign an agent to create the sale.');
+        }
+
+        return redirect()->route('admin.sales.create', [
+            'lead_id' => $lead->id,
+            'client_id' => $client->id,
+        ])->with('success', 'Lead converted to customer. Complete the sale below.');
+    }
+
     public function destroy(Lead $lead): RedirectResponse
     {
+        $this->authorizeLead($lead);
+
+        if (! AuthScope::isAdminOrManager()) {
+            abort(403);
+        }
+
         $lead->delete();
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead deleted successfully.');
     }
 
+    private function authorizeLead(Lead $lead): void
+    {
+        if (! AuthScope::canAccessLead($lead)) {
+            abort(403);
+        }
+    }
+
+    private function leadRules(): array
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'company' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
+            'lead_value' => 'nullable|numeric|min:0',
+            'brand_id' => AuthScope::brandIdRule(),
+            'source' => 'nullable|string|max:100',
+            'status' => 'required|in:' . implode(',', Lead::STATUSES),
+            'assigned_to' => 'nullable|exists:users,id',
+            'team_id' => 'nullable|exists:teams,id',
+            'follow_up_at' => 'nullable|date',
+            'notes' => 'nullable|string',
+        ];
+    }
+
+    private function leadPayload(array $validated): array
+    {
+        $validated['brand_id'] = $validated['brand_id'] ?: null;
+        $validated['assigned_to'] = $validated['assigned_to'] ?: null;
+        $validated['team_id'] = $validated['team_id'] ?: null;
+        $validated['follow_up_at'] = $validated['follow_up_at'] ?: null;
+        $validated['lead_value'] = $validated['lead_value'] ?? 0;
+        // Simplified form no longer edits these — do not wipe existing values on update.
+        unset($validated['position'], $validated['website'], $validated['tags'], $validated['address'], $validated['city'], $validated['state'], $validated['zip'], $validated['country'], $validated['is_public']);
+
+        return $validated;
+    }
+
     private static function statusColor(string $status): string
     {
         return match ($status) {
-            'new'       => 'primary',
-            'contacted' => 'info',
-            'proposal'  => 'warning',
-            'won'       => 'success',
-            'lost'      => 'danger',
-            default     => 'secondary',
+            'new_lead' => 'primary',
+            'contacted', 'follow_up' => 'info',
+            'proposal' => 'warning',
+            'customer' => 'success',
+            'lost' => 'danger',
+            default => 'secondary',
         };
     }
 }

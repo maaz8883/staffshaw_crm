@@ -9,11 +9,30 @@
 {{-- Team Info --}}
 <div class="card mb-3">
     <div class="card-body">
-        <h5 class="mb-1">{{ $team->name }}</h5>
-        <div class="text-muted mb-2">{{ $team->company?->name ?? 'No company' }}</div>
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+            <div>
+                <h5 class="mb-1">{{ $team->name }}</h5>
+                @unless($singleCompany)
+                <div class="text-muted mb-0">{{ $team->company?->name ?? 'No company' }}</div>
+                @endunless
+            </div>
+            @if($canManageMembers ?? false)
+                <a href="{{ route('admin.teams.members.index', $team) }}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-person-plus"></i> Manage Members
+                </a>
+            @endif
+        </div>
         <div class="mb-2">
             <small class="text-muted">Team Head:</small>
             <strong>{{ $team->teamHead?->name ?? 'Not assigned' }}</strong>
+        </div>
+        <div class="mb-2">
+            <small class="text-muted d-block mb-1">Assigned Brands:</small>
+            @forelse($team->brands as $brand)
+                <span class="badge bg-secondary me-1">{{ $brand->name }}</span>
+            @empty
+                <span class="text-muted">None — members will not see any brands until assigned.</span>
+            @endforelse
         </div>
         <div class="mb-2">
             <small class="text-muted">{{ \DateTime::createFromFormat('!m', $month)->format('F') }} {{ $year }} Team Target:</small>
@@ -76,7 +95,9 @@
 
                 {{-- Users under this Sub-Team Head --}}
                 @php
-                    $usersUnderSubHead = $team->users->where('sub_team_head_id', $subHead->id);
+                    $usersUnderSubHead = $team->users
+                        ->where('sub_team_head_id', $subHead->id)
+                        ->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER));
                 @endphp
                 @if($usersUnderSubHead->count() > 0)
                 <div class="mt-2 ps-4 border-start border-2 border-secondary">
@@ -127,9 +148,11 @@
         </div>
         @endif
 
-        {{-- Users without Sub-Team Head --}}
+        {{-- Users without Sub-Team Head (PMs only via Team_Membership section above) --}}
         @php
-            $usersWithoutSubHead = $team->users->whereNull('sub_team_head_id');
+            $usersWithoutSubHead = $team->users
+                ->whereNull('sub_team_head_id')
+                ->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER));
         @endphp
         @if($usersWithoutSubHead->count() > 0)
         <div class="mt-4 ps-4 border-start border-3 border-secondary">
@@ -154,7 +177,10 @@
         </div>
         @endif
 
-        @if($team->users->count() === 0 && $team->approvedProjectManagers->count() === 0)
+        @php
+            $hierarchyUserCount = $team->users->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER))->count();
+        @endphp
+        @if($hierarchyUserCount === 0 && $team->approvedProjectManagers->count() === 0)
         <div class="text-muted text-center py-3">
             <i class="bi bi-inbox"></i> No users assigned to this team yet.
         </div>

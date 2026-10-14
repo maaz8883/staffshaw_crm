@@ -4,6 +4,14 @@
 <style>
     .dashboard-chart-card { border-radius: 12px; overflow: hidden; }
     .dashboard-chart-wrap { position: relative; width: 100%; }
+    .dash-more-toggle {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; margin: 4px 0 16px; padding: 10px 14px;
+        background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px;
+        color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .dash-more-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+    #dash-more[hidden], #dash-more tr[hidden] { display: none !important; }
 </style>
 @endpush
 
@@ -18,6 +26,8 @@
     $isSubTeamHead = isset($isSubTeamHeadView) && $isSubTeamHeadView;
     $isProjectManagerDash = isset($isProjectManagerView) && $isProjectManagerView;
 @endphp
+
+@include('admin.partials.crm-overview')
 
 @if($isProjectManagerDash)
 {{-- ═══════════════════════════════════════════════════════════════
@@ -147,64 +157,69 @@
      SUB-TEAM HEAD DASHBOARD
 ═══════════════════════════════════════════════════════════════ --}}
 
-{{-- Team Target + Sub-Team Target --}}
-
+@php
+    $tta = $teamTargetAchievement ?? ['target' => $teamTargetAmt ?? 0, 'achieved' => 0, 'percent' => null];
+@endphp
 <div class="row g-3 mb-4">
-    {{-- Team Target (Read-only) --}}
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
-                        <div class="text-muted small"><i class="bi bi-flag"></i> Team Target</div>
-                        <div class="fw-semibold">
-                            {{ $currentMonthLabel }} · {{ $team?->name ?? 'Team not assigned' }}
-                        </div>
+                        <div class="text-muted small"><i class="bi bi-flag"></i> Team target</div>
+                        <div class="fw-semibold">{{ $currentMonthLabel }} · {{ $team?->name ?? 'Team not assigned' }}</div>
                     </div>
+                    @if(($tta['percent'] ?? null) !== null)
+                        <span class="badge rounded-pill bg-primary px-3 py-2">{{ $tta['percent'] }}%</span>
+                    @endif
                 </div>
-                <div class="display-6 fw-bold text-primary">${{ number_format($teamTargetAmt, 0) }}</div>
-                @if($teamTargetAmt <= 0)
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="fw-semibold">${{ number_format($tta['achieved'] ?? 0, 0) }} <span class="text-muted fw-normal">/ ${{ number_format($tta['target'] ?? $teamTargetAmt, 0) }}</span></span>
+                </div>
+                <div class="progress rounded-pill" style="height:12px">
+                    <div class="progress-bar bg-primary rounded-pill" style="width:{{ min(100, $tta['percent'] ?? 0) }}%"></div>
+                </div>
+                @if(($tta['target'] ?? $teamTargetAmt) <= 0)
                     <p class="text-muted small mb-0 mt-2">No team target set for this month.</p>
                 @endif
             </div>
         </div>
     </div>
 
-    {{-- Sub-Team Target --}}
     <div class="col-lg-6">
-        <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <div class="card-body text-white">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
-                        <div class="small"><i class="bi bi-flag-fill"></i> Sub-Team Target</div>
+                        <div class="text-muted small"><i class="bi bi-flag-fill"></i> Sub-team target</div>
                         <div class="fw-semibold">{{ $currentMonthLabel }} · {{ $subTeamHead->title }}</div>
                     </div>
                     @if($subTeamTargetAchievement['percent'] !== null)
-                        <span class="badge rounded-pill bg-white text-dark px-3 py-2">{{ $subTeamTargetAchievement['percent'] }}%</span>
+                        <span class="badge rounded-pill bg-success px-3 py-2">{{ $subTeamTargetAchievement['percent'] }}%</span>
                     @endif
                 </div>
                 <div class="d-flex justify-content-between small mb-1">
-                    <span>Achieved</span>
-                    <span class="fw-semibold">${{ number_format($subTeamTargetAchievement['achieved'], 0) }} / ${{ number_format($subTeamTargetAchievement['target'], 0) }}</span>
+                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="fw-semibold">${{ number_format($subTeamTargetAchievement['achieved'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($subTeamTargetAchievement['target'], 0) }}</span></span>
                 </div>
-                <div class="progress rounded-pill mb-2" style="height:12px; background: rgba(255,255,255,0.3);">
-                    <div class="progress-bar bg-white rounded-pill" style="width:{{ min(100, $subTeamTargetAchievement['percent'] ?? 0) }}%"></div>
+                <div class="progress rounded-pill" style="height:12px">
+                    <div class="progress-bar bg-success rounded-pill" style="width:{{ min(100, $subTeamTargetAchievement['percent'] ?? 0) }}%"></div>
                 </div>
                 @if($subTeamTargetAchievement['target'] <= 0)
-                    <p class="small mb-0">No sub-team target set for this month.</p>
+                    <p class="text-muted small mb-0 mt-2">No sub-team target set for this month.</p>
                 @endif
             </div>
         </div>
     </div>
 </div>
 
-{{-- Sub-Team Members Performance Table --}}
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white border-0">
+    <div class="card-header border-0">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h5 class="fw-semibold mb-1"><i class="bi bi-people-fill text-success"></i> {{ $subTeamHead->title }} Team Members</h5>
-                <p class="text-muted small mb-0">{{ $currentMonthLabel }} · Target vs Achievement</p>
+                <h5 class="fw-semibold mb-1"><i class="bi bi-people-fill text-success"></i> {{ $subTeamHead->title }} members</h5>
+                <p class="text-muted small mb-0">{{ $currentMonthLabel }} · sales, revenue &amp; targets (same month)</p>
             </div>
             <span class="badge bg-info">{{ $subTeamMembers->count() }} members</span>
         </div>
@@ -216,10 +231,9 @@
                     <tr>
                         <th>Member</th>
                         <th>Role</th>
-                        <th class="text-center">Sales (All Time)</th>
-                        <th class="text-end">Revenue (All Time)</th>
-                        <th class="text-end">{{ $currentMonthLabel }} Target</th>
+                        <th class="text-center">{{ $currentMonthLabel }} Sales</th>
                         <th class="text-end">{{ $currentMonthLabel }} Revenue</th>
+                        <th class="text-end">{{ $currentMonthLabel }} Target</th>
                         <th class="text-center">Achievement</th>
                     </tr>
                 </thead>
@@ -229,14 +243,13 @@
                         <td>
                             <strong>{{ $member['name'] }}</strong>
                             @if($member['is_sub_team_head'])
-                                <span class="badge bg-info text-dark ms-1" style="font-size:10px">Sub-Team Head</span>
+                                <span class="badge bg-info text-dark ms-1" style="font-size:10px">Head</span>
                             @endif
                         </td>
                         <td class="text-muted small">{{ $member['role_name'] }}</td>
                         <td class="text-center">{{ $member['sales_count'] }}</td>
-                        <td class="text-end text-success fw-semibold">${{ number_format($member['sale_amount'], 0) }}</td>
+                        <td class="text-end text-success fw-semibold">${{ number_format($member['month_revenue'], 0) }}</td>
                         <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
-                        <td class="text-end fw-semibold">${{ number_format($member['month_revenue'], 0) }}</td>
                         <td class="text-center">
                             @if($member['target_achievement_pct'] !== null)
                                 @php
@@ -250,13 +263,14 @@
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-muted text-center py-3">No members in this sub-team.</td></tr>
+                    <tr><td colspan="6" class="text-muted text-center py-3">No members in this sub-team.</td></tr>
                     @endforelse
                 </tbody>
                 <tfoot class="table-light">
                     <tr>
-                        <td colspan="5" class="text-end fw-semibold">Sub-Team Total:</td>
+                        <td colspan="3" class="text-end fw-semibold">Sub-team total</td>
                         <td class="text-end fw-bold text-success">${{ number_format($subTeamTargetAchievement['achieved'], 0) }}</td>
+                        <td class="text-end">${{ number_format($subTeamTargetAchievement['target'], 0) }}</td>
                         <td class="text-center">
                             @if($subTeamTargetAchievement['percent'] !== null)
                                 <span class="badge bg-primary">{{ $subTeamTargetAchievement['percent'] }}%</span>
@@ -271,12 +285,11 @@
     </div>
 </div>
 
-{{-- Revenue Trend Chart --}}
 <div class="row g-3 mb-4">
     <div class="col-12">
         <div class="card border-0 shadow-sm dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> Sub-Team Revenue Trend</h6>
+            <div class="card-header border-0 pb-0">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> Sub-team revenue trend</h6>
                 <span class="text-muted small">Last 14 days · approved &amp; completed</span>
             </div>
             <div class="card-body pt-2">
@@ -288,10 +301,9 @@
     </div>
 </div>
 
-{{-- Recent Sales from Sub-Team --}}
 <div class="card border-0 shadow-sm">
-    <div class="card-header bg-white fw-semibold d-flex justify-content-between">
-        <span><i class="bi bi-cash-stack text-primary"></i> Recent Sales (Sub-Team)</span>
+    <div class="card-header fw-semibold d-flex justify-content-between">
+        <span><i class="bi bi-cash-stack text-primary"></i> Recent sales (sub-team)</span>
         <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
     </div>
     <div class="card-body p-0">
@@ -299,6 +311,7 @@
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        <th>Date</th>
                         <th>Title</th>
                         <th>Agent</th>
                         <th>Client</th>
@@ -310,6 +323,7 @@
                     @forelse($recentSales as $sale)
                     @php $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
                     <tr>
+                        <td class="text-muted small">{{ $sale->sale_date?->format('d M Y') ?? '—' }}</td>
                         <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
                         <td class="text-muted small">{{ $sale->user?->name }}</td>
                         <td class="text-muted small">{{ $sale->client_name }}</td>
@@ -317,7 +331,7 @@
                         <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="5" class="text-muted text-center py-3">No sales yet.</td></tr>
+                    <tr><td colspan="6" class="text-muted text-center py-3">No sales yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -384,12 +398,12 @@
     </div>
 </div> -->
 
-{{-- My target achievement --}}
 @php
     $thMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y');
-    $thMyTarget = $myTarget?->target_amount ?? 0;
-    $thMyRevenue = $mySales['revenue'];
-    $thMyPct = $thMyTarget > 0 ? min(100, round(($thMyRevenue / $thMyTarget) * 100, 1)) : null;
+    $uta = $userTargetAchievement ?? ['target' => 0, 'achieved' => 0, 'percent' => null];
+    $thMyTarget = (float) ($uta['target'] ?? 0);
+    $thMyRevenue = (float) ($uta['achieved'] ?? ($mySales['month_revenue'] ?? $mySales['revenue'] ?? 0));
+    $thMyPct = $uta['percent'] ?? null;
 @endphp
 <div class="row g-3 mb-4">
     <div class="col-lg-6">
@@ -409,7 +423,7 @@
                     <span class="fw-semibold">${{ number_format($thMyRevenue, 0) }} <span class="text-muted fw-normal">/ ${{ number_format($thMyTarget, 0) }}</span></span>
                 </div>
                 <div class="progress rounded-pill" style="height:12px">
-                    <div class="progress-bar bg-primary rounded-pill" style="width:{{ $thMyPct ?? 0 }}%"></div>
+                    <div class="progress-bar bg-primary rounded-pill" style="width:{{ $thMyPct !== null ? min(100, $thMyPct) : 0 }}%"></div>
                 </div>
                 @if($thMyTarget <= 0)
                     <p class="text-muted small mb-0 mt-2">No personal target set for this month.</p>
@@ -445,32 +459,42 @@
             </div>
         </div>
     </div>
-{{-- Revenue + Sales count --}}
+</div>
+
+{{-- Team month KPIs (not personal all-time) --}}
 <div class="row g-3 mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm text-center h-100">
             <div class="card-body py-4">
-                <div class="text-muted small mb-1">My Revenue (all time)</div>
-                <div class="display-6 fw-bold text-warning">${{ number_format($mySales['revenue'], 0) }}</div>
+                <div class="text-muted small mb-1">Team revenue ({{ $thMonth }})</div>
+                <div class="display-6 fw-bold text-warning">${{ number_format($teamTargetAchievement['achieved'] ?? 0, 0) }}</div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm text-center h-100">
             <div class="card-body py-4">
-                <div class="text-muted small mb-1">Total Sales</div>
-                <div class="display-6 fw-bold text-info">{{ $mySales['total'] }}</div>
+                <div class="text-muted small mb-1">Team sales ({{ $thMonth }})</div>
+                <div class="display-6 fw-bold text-info">{{ $teamMonthSalesCount ?? 0 }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm text-center h-100">
+            <div class="card-body py-4">
+                <div class="text-muted small mb-1">My revenue ({{ $thMonth }})</div>
+                <div class="display-6 fw-bold text-primary">${{ number_format($thMyRevenue, 0) }}</div>
             </div>
         </div>
     </div>
 </div>
 
-{{-- Charts: revenue trend + sales mix --}}
+{{-- Charts: team revenue trend + team sales mix --}}
 <div class="row g-3 mb-4">
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> My revenue</h6>
+            <div class="card-header border-0 pb-0">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> Team revenue</h6>
                 <span class="text-muted small">Last 14 days · approved &amp; completed</span>
             </div>
             <div class="card-body pt-2">
@@ -482,9 +506,9 @@
     </div>
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart-fill text-primary"></i> My sales mix</h6>
-                <span class="text-muted small">By status</span>
+            <div class="card-header border-0 pb-0">
+                <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart-fill text-primary"></i> Team sales mix</h6>
+                <span class="text-muted small">{{ $thMonth }} · by status</span>
             </div>
             <div class="card-body d-flex align-items-center justify-content-center pt-2" style="min-height:260px;">
                 <canvas id="agentStatusChart" style="max-height:240px;"></canvas>
@@ -585,8 +609,8 @@
                     <tr>
                         <th>Member</th>
                         <th>Role</th>
-                        <th class="text-center">Sales</th>
-                        <th class="text-end">Revenue</th>
+                        <th class="text-center">{{ $card['month_label'] }} Sales</th>
+                        <th class="text-end">{{ $card['month_label'] }} Revenue</th>
                         <th class="text-end">{{ $card['month_label'] }} Target</th>
                         <th class="text-center">Achieve</th>
                     </tr>
@@ -625,29 +649,30 @@
 </div>
 @endforeach
 
-{{-- My recent sales --}}
+{{-- Team recent sales --}}
 <div class="card border-0 shadow-sm">
-    <div class="card-header bg-white fw-semibold d-flex justify-content-between">
-        <span><i class="bi bi-cash-stack text-primary"></i> My Recent Sales</span>
+    <div class="card-header fw-semibold d-flex justify-content-between">
+        <span><i class="bi bi-cash-stack text-primary"></i> Team recent sales</span>
         <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead class="table-light">
-                    <tr><th>Title</th><th>Client</th><th>Status</th><th class="text-end">Amount</th></tr>
+                    <tr><th>Title</th><th>Agent</th><th>Client</th><th>Status</th><th class="text-end">Amount</th></tr>
                 </thead>
                 <tbody>
                     @forelse($recentSales as $sale)
                     @php $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
                     <tr>
                         <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
+                        <td class="text-muted small">{{ $sale->user?->name ?? '—' }}</td>
                         <td class="text-muted small">{{ $sale->client_name }}</td>
                         <td><span class="badge bg-{{ $sc2[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span></td>
                         <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="4" class="text-muted text-center py-3">No sales yet.</td></tr>
+                    <tr><td colspan="5" class="text-muted text-center py-3">No sales yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -713,9 +738,8 @@
     </div>
 </div> -->
 
-{{-- Target achievement + revenue --}}
 @php
-    $curMonth = \DateTime::createFromFormat('!m', $month)->format('F');
+    $agentMonth = $currentMonthLabel ?? \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y');
     $ua = $userTargetAchievement;
     $ta = $teamTargetAchievement;
     $up = $ua['percent'];
@@ -735,7 +759,7 @@
                     @endif
                 </div>
                 <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="text-muted">Achieved (approved this month)</span>
                     <span class="fw-semibold">${{ number_format($ua['achieved'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($ua['target'], 0) }}</span></span>
                 </div>
                 <div class="progress rounded-pill" style="height: 12px;">
@@ -743,6 +767,8 @@
                 </div>
                 @if(($ua['target'] ?? 0) <= 0)
                     <p class="text-muted small mb-0 mt-2">No personal target set for this month.</p>
+                @elseif(($mySales['pending_approval'] ?? 0) > 0)
+                    <p class="text-muted small mb-0 mt-2">{{ $mySales['pending_approval'] }} sale(s) awaiting approval — not counted yet.</p>
                 @endif
             </div>
         </div>
@@ -760,7 +786,7 @@
                     @endif
                 </div>
                 <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">Achieved (this month)</span>
+                    <span class="text-muted">Achieved (approved this month)</span>
                     <span class="fw-semibold">${{ number_format($ta['achieved'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($ta['target'], 0) }}</span></span>
                 </div>
                 <div class="progress rounded-pill" style="height: 12px;">
@@ -774,44 +800,39 @@
     </div>
 </div>
 <div class="row g-3 mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm h-100 text-center">
             <div class="card-body py-4">
-                <div class="text-muted small mb-1">My revenue (all time)</div>
+                <div class="text-muted small mb-1">My revenue ({{ $agentMonth }})</div>
                 <div class="display-6 fw-bold text-warning">${{ number_format($mySales['revenue'], 0) }}</div>
+                <div class="text-muted small mt-1">Approved &amp; completed</div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm h-100 text-center">
             <div class="card-body py-4">
-                <div class="text-muted small mb-1">Total sales (all)</div>
-                <div class="display-6 fw-bold text-info">{{ $mySales['total'] }}</div>
+                <div class="text-muted small mb-1">Approved sales ({{ $agentMonth }})</div>
+                <div class="display-6 fw-bold text-info">{{ $mySales['completed'] }}</div>
+                <div class="text-muted small mt-1">Of {{ $mySales['total'] }} submitted</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 text-center">
+            <div class="card-body py-4">
+                <div class="text-muted small mb-1">Awaiting approval</div>
+                <div class="display-6 fw-bold text-primary">{{ $mySales['pending_approval'] ?? 0 }}</div>
+                <div class="text-muted small mt-1">{{ $agentMonth }}</div>
             </div>
         </div>
     </div>
 </div>
 
-{{-- Sales by status mini cards --}}
-<!-- <div class="row g-3 mb-4">
-    @php $sc = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
-    @foreach($sc as $s => $color)
-    <div class="col-4">
-        <div class="card border-0 shadow-sm text-center">
-            <div class="card-body py-3">
-                <div class="fw-bold fs-4 text-{{ $color }}">{{ $mySales[$s] }}</div>
-                <div class="text-muted small">{{ ucfirst($s) }}</div>
-            </div>
-        </div>
-    </div>
-    @endforeach
-</div> -->
-
-{{-- Charts: my revenue trend + sales mix --}}
 <div class="row g-3 mb-4">
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
+            <div class="card-header border-0 pb-0">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <h6 class="fw-semibold mb-0"><i class="bi bi-graph-up-arrow text-primary"></i> My revenue</h6>
@@ -828,9 +849,9 @@
     </div>
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
+            <div class="card-header border-0 pb-0">
                 <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart-fill text-primary"></i> My sales mix</h6>
-                <span class="text-muted small">By status</span>
+                <span class="text-muted small">{{ $agentMonth }} · by approval</span>
             </div>
             <div class="card-body d-flex align-items-center justify-content-center pt-2" style="min-height: 260px;">
                 <canvas id="agentStatusChart" style="max-height: 240px;"></canvas>
@@ -840,11 +861,10 @@
 </div>
 
 <div class="row g-3">
-    {{-- My Recent Sales — full width for agent --}}
     <div class="col-12">
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold d-flex justify-content-between">
-                <span><i class="bi bi-cash-stack text-primary"></i> My Recent Sales</span>
+            <div class="card-header fw-semibold d-flex justify-content-between">
+                <span><i class="bi bi-cash-stack text-primary"></i> My recent sales</span>
                 <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body p-0">
@@ -852,23 +872,31 @@
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th>Date</th>
                                 <th>Title</th>
                                 <th>Client</th>
                                 <th>Status</th>
+                                <th>Approval</th>
                                 <th class="text-end">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($recentSales as $sale)
-                            @php $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
+                            @php
+                                $sc2 = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger','refunded'=>'secondary'];
+                                $ac = ['approved'=>'success','rejected'=>'danger','pending_approval'=>'warning'];
+                                $al = ['approved'=>'Approved','rejected'=>'Rejected','pending_approval'=>'Awaiting'];
+                            @endphp
                             <tr>
+                                <td class="text-muted small">{{ $sale->sale_date?->format('d M Y') ?? '—' }}</td>
                                 <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
                                 <td class="text-muted small">{{ $sale->client_name }}</td>
                                 <td><span class="badge bg-{{ $sc2[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span></td>
+                                <td><span class="badge bg-{{ $ac[$sale->approval_status] ?? 'secondary' }}">{{ $al[$sale->approval_status] ?? $sale->approval_status }}</span></td>
                                 <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
                             </tr>
                             @empty
-                            <tr><td colspan="4" class="text-muted text-center py-3">No sales yet.</td></tr>
+                            <tr><td colspan="6" class="text-muted text-center py-3">No sales yet.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -879,178 +907,102 @@
 </div>
 
 @else
-{{-- ═══════════════════════════════════════════════════════════════
-     ADMIN DASHBOARD
-═══════════════════════════════════════════════════════════════ --}}
-
-{{-- Per-team progress + members table (top) --}}
+<button type="button" class="dash-more-toggle" id="dash-more-toggle" aria-expanded="false" aria-controls="dash-more">
+    <span>Show detailed team and sales breakdown</span>
+    <i class="bi bi-chevron-down"></i>
+</button>
+<div id="dash-more" hidden>
 @php $tach = $targetAchievement; @endphp
-<div class="row g-3 mb-2">
-    <div class="col-12">
-        <h5 class="fw-semibold mb-1"><i class="bi bi-people-fill text-success"></i> Teams — progress</h5>
-        <p class="text-muted small mb-0">{{ $tach['label'] }} · team monthly target vs revenue (approved &amp; completed) · members: all-time sales &amp; this month vs target</p>
-    </div>
-</div>
-<div class="row g-3 mb-4">
-    @forelse(($teamDashboardCards ?? collect()) as $tc)
-    <div class="col-12 col-md-6">
-        <div class="card border-0 shadow-sm team-progress-card h-100">
-            <div class="card-header bg-white border-0 pb-0 pt-3">
-                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-                    <div>
-                        <div class="fw-semibold">{{ $tc['name'] }}</div>
-                        <div class="text-muted small">
-                            @if(!empty($tc['company_name']))
-                                {{ $tc['company_name'] }} ·
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="dash-card-title">Teams · {{ $tach['label'] ?? '' }}</div>
+            <span class="text-muted" style="font-size:12px">Member lists stay closed until you open a team</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Team</th>
+                        @unless($singleCompany)<th>Company</th>@endunless
+                        <th class="text-center">Members</th>
+                        <th class="text-end">This month</th>
+                        <th class="text-end">Target</th>
+                        <th class="text-center">Achieve</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse(($teamDashboardCards ?? collect()) as $tc)
+                    <tr>
+                        <td class="fw-semibold">
+                            {{ $tc['name'] }}
+                            @if(($tc['ppc_spending'] ?? 0) > 0)
+                                <div class="text-danger" style="font-size:11px;font-weight:500">PPC ${{ number_format($tc['ppc_spending'], 0) }}</div>
                             @endif
-                            {{ $tc['members_count'] }} members
-                        </div>
-                    </div>
-                    @if($tc['achievement_percent'] !== null)
-                        <span class="badge rounded-pill bg-success">{{ $tc['achievement_percent'] }}%</span>
-                    @else
-                        <span class="badge rounded-pill bg-secondary">—</span>
+                        </td>
+                        @unless($singleCompany)
+                        <td class="text-muted">{{ $tc['company_name'] ?: '—' }}</td>
+                        @endunless
+                        <td class="text-center">{{ $tc['members_count'] }}</td>
+                        <td class="text-end">${{ number_format($tc['monthly_revenue'], 0) }}</td>
+                        <td class="text-end">${{ number_format($tc['target'], 0) }}</td>
+                        <td class="text-center">{{ $tc['achievement_percent'] !== null ? $tc['achievement_percent'].'%' : '—' }}</td>
+                        <td class="text-end">
+                            @if(!empty($tc['members']))
+                            <button type="button" class="btn btn-sm btn-outline-secondary js-team-members" aria-expanded="false" aria-controls="team-members-{{ $tc['id'] }}">Members</button>
+                            @endif
+                        </td>
+                    </tr>
+                    @if(!empty($tc['members']))
+                    <tr id="team-members-{{ $tc['id'] }}" hidden>
+                        <td colspan="{{ $singleCompany ? 6 : 7 }}" class="bg-light">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Role</th>
+                                        <th class="text-center">Sales</th>
+                                        <th class="text-end">Revenue</th>
+                                        <th class="text-end">Month target</th>
+                                        <th class="text-end">Month revenue</th>
+                                        <th class="text-center">Achieve</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($tc['members'] as $m)
+                                    <tr>
+                                        <td>
+                                            {{ $m['name'] }}
+                                            @if(!empty($m['is_head']))
+                                                <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-muted">{{ $m['role_name'] }}</td>
+                                        <td class="text-center">{{ $m['sales_count'] }}</td>
+                                        <td class="text-end">${{ number_format($m['sale_amount'], 0) }}</td>
+                                        <td class="text-end">${{ number_format($m['month_target'], 0) }}</td>
+                                        <td class="text-end">${{ number_format($m['month_revenue'], 0) }}</td>
+                                        <td class="text-center">{{ $m['target_achievement_pct'] !== null ? $m['target_achievement_pct'].'%' : '—' }}</td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>
                     @endif
-                </div>
-            </div>
-            <div class="card-body pt-2">
-                <div class="d-flex justify-content-between small mb-1">
-                    <span class="text-muted">Team · this month (revenue / target)</span>
-                    <span class="fw-semibold">${{ number_format($tc['monthly_revenue'], 0) }} <span class="text-muted fw-normal">/ ${{ number_format($tc['target'], 0) }}</span></span>
-                </div>
-                <div class="progress rounded-pill mb-3" style="height: 14px;">
-                    <div class="progress-bar bg-success rounded-pill" role="progressbar"
-                         style="width: {{ $tc['achievement_percent'] !== null ? min(100, $tc['achievement_percent']) : 0 }}%;"
-                         aria-valuenow="{{ $tc['achievement_percent'] ?? 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-                @if(($tc['target'] ?? 0) <= 0)
-                    <p class="text-muted small mb-3">No team target set for {{ $tc['month_label'] }}.</p>
-                @endif
-
-                @if(($tc['ppc_spending'] ?? 0) > 0)
-                <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded bg-light border">
-                    <i class="bi bi-graph-up text-danger"></i>
-                    <span class="small text-muted">PPC Spending — {{ $tc['month_label'] }}</span>
-                    <span class="ms-auto fw-bold text-danger">${{ number_format($tc['ppc_spending'], 2) }}</span>
-                </div>
-                @endif
-
-                <div class="fw-semibold small mb-2"><i class="bi bi-person-lines-fill text-primary"></i> Members</div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Name</th>
-                                <th>Role</th>
-                                <th class="text-center" title="Approved completed (all time)">Sales</th>
-                                <th class="text-end">Revenue</th>
-                                <th class="text-end">Month target</th>
-                                <th class="text-end">Month revenue</th>
-                                <th class="text-center" title="This month · vs personal target">Achieve</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($tc['members'] ?? [] as $m)
-                            <tr>
-                                <td>
-                                    {{ $m['name'] }}
-                                    @if(!empty($m['is_head']))
-                                        <span class="badge bg-warning text-dark ms-1" style="font-size:10px">Head</span>
-                                    @endif
-                                </td>
-                                <td><span class="text-muted small">{{ $m['role_name'] }}</span></td>
-                                <td class="text-center">{{ $m['sales_count'] }}</td>
-                                <td class="text-end text-success">${{ number_format($m['sale_amount'], 0) }}</td>
-                                <td class="text-end">${{ number_format($m['month_target'], 0) }}</td>
-                                <td class="text-end">${{ number_format($m['month_revenue'], 0) }}</td>
-                                <td class="text-center">
-                                    @if($m['target_achievement_pct'] !== null)
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $m['target_achievement_pct'] }}%</span>
-                                    @elseif(($m['month_target'] ?? 0) <= 0)
-                                        <span class="text-muted">—</span>
-                                    @else
-                                        <span class="text-muted">0%</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="7" class="text-muted text-center py-3">No members in this team.</td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    @empty
-    <div class="col-12">
-        <div class="alert alert-light border mb-0 text-muted">No teams yet. Create teams under <strong>Teams</strong> to see progress here.</div>
-    </div>
-    @endforelse
-</div>
-
-<div class="row g-3 mb-4">
-    @php
-        $cards = [
-            ['label'=>'Total Users',       'value'=>$stats['total_users'],                          'icon'=>'people-fill',    'color'=>'primary'],
-            ['label'=>'Companies',         'value'=>$stats['total_companies'],                      'icon'=>'buildings',      'color'=>'info'],
-            ['label'=>'Teams',             'value'=>$stats['total_teams'],                          'icon'=>'people',         'color'=>'success'],
-            ['label'=>'Total Sales',       'value'=>$stats['total_sales'],                          'icon'=>'cash-stack',     'color'=>'warning'],
-            ['label'=>'Completed',         'value'=>$stats['sales_completed'],                      'icon'=>'check-circle',   'color'=>'success'],
-            ['label'=>'Pending Approval',  'value'=>$stats['pending_approval'],                     'icon'=>'hourglass-split','color'=>'warning'],
-            ['label'=>'Cancelled',         'value'=>$stats['sales_cancelled'],                      'icon'=>'x-circle',       'color'=>'danger'],
-            ['label'=>'Total Revenue',     'value'=>'$'.number_format($stats['total_revenue'], 0),  'icon'=>'currency-dollar','color'=>'success'],
-        ];
-    @endphp
-    @foreach($cards as $card)
-    <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-{{ $card['color'] }} bg-opacity-10 p-3 flex-shrink-0">
-                    <i class="bi bi-{{ $card['icon'] }} fs-5 text-{{ $card['color'] }}"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">{{ $card['label'] }}</div>
-                    <div class="fw-bold fs-4">{{ $card['value'] }}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    @endforeach
-</div>
-
-{{-- Revenue trend + sales status --}}
-<div class="row g-3 mb-4">
-    <div class="col-lg-8">
-        <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <h6 class="fw-semibold mb-0"><i class="bi bi-activity text-primary"></i> Revenue trend</h6>
-                <span class="text-muted small">Last 30 days · approved &amp; completed sales</span>
-            </div>
-            <div class="card-body pt-2">
-                <div class="dashboard-chart-wrap" style="height: 300px;">
-                    <canvas id="revenueTrendChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <h6 class="fw-semibold mb-0"><i class="bi bi-pie-chart-fill text-primary"></i> Sales by status</h6>
-                <span class="text-muted small">Approved sales only</span>
-            </div>
-            <div class="card-body d-flex align-items-center justify-content-center pt-2" style="min-height: 300px;">
-                <canvas id="salesChart"></canvas>
-            </div>
+                    @empty
+                    <tr><td colspan="{{ $singleCompany ? 6 : 7 }}" class="text-muted text-center py-3">No teams yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
 
 {{-- Companies bar + approval pipeline --}}
 <div class="row g-3 mb-4">
+    @unless($singleCompany)
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
             <div class="card-header bg-white border-0 pb-0">
@@ -1064,7 +1016,8 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
+    @endunless
+    <div class="{{ $singleCompany ? 'col-lg-6' : 'col-lg-5' }}">
         <div class="card border-0 shadow-sm h-100 dashboard-chart-card">
             <div class="card-header bg-white border-0 pb-0">
                 <h6 class="fw-semibold mb-0"><i class="bi bi-shield-check text-warning"></i> Approval pipeline</h6>
@@ -1077,50 +1030,68 @@
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    {{-- Company Breakdown table --}}
-    <div class="col-12">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold">
-                <i class="bi bi-buildings text-info"></i> Company breakdown
-            </div>
-            <div class="card-body ">
+<div class="row g-3">
+    @unless($singleCompany)
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="dash-card-title mb-2">Company breakdown</div>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
+                    <table class="table table-sm align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Logo</th>
                                 <th>Company</th>
                                 <th class="text-center">Teams</th>
                                 <th class="text-center">Users</th>
                                 <th class="text-center">Sales</th>
                                 <th class="text-end">Revenue</th>
-                                <th class="text-end">{{ \DateTime::createFromFormat('!m', $month)->format('M') }} Target</th>
+                                <th class="text-end">{{ \DateTime::createFromFormat('!m', $month)->format('M') }} target</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($companies as $company)
                             <tr>
-                                <td>
-                                    @if($company->logo)
-                                        <img src="{{ asset('storage/' . $company->logo) }}" alt="{{ $company->name }}"
-                                             style="height:36px;width:36px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
-                                    @else
-                                        <div class="rounded bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                                             style="height:36px;width:36px;border-radius:6px;">
-                                            <i class="bi bi-buildings text-secondary small"></i>
-                                        </div>
-                                    @endif
-                                </td>
                                 <td class="fw-semibold">{{ $company->name }}</td>
                                 <td class="text-center">{{ $company->teams_count }}</td>
                                 <td class="text-center">{{ $company->users_count }}</td>
                                 <td class="text-center">{{ $company->sales_count }}</td>
-                                <td class="text-end text-success">${{ number_format($company->revenue, 0) }}</td>
+                                <td class="text-end">${{ number_format($company->revenue, 0) }}</td>
                                 <td class="text-end">${{ number_format($company->team_target, 0) }}</td>
                             </tr>
                             @empty
-                            <tr><td colspan="7" class="text-muted text-center py-3">No companies yet.</td></tr>
+                            <tr><td colspan="6" class="text-muted text-center py-3">No companies yet.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endunless
+    <div class="{{ $singleCompany ? 'col-lg-6' : 'col-lg-5' }}">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="dash-card-title mb-2">Top agents</div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Agent</th>
+                                <th>Team</th>
+                                <th class="text-center">Sales</th>
+                                <th class="text-end">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($topAgents as $agent)
+                            <tr>
+                                <td class="fw-semibold">{{ $agent->name }}</td>
+                                <td class="text-muted">{{ $agent->team?->name ?? '—' }}</td>
+                                <td class="text-center">{{ $agent->total_sales }}</td>
+                                <td class="text-end">${{ number_format($agent->total_amount, 0) }}</td>
+                            </tr>
+                            @empty
+                            <tr><td colspan="4" class="text-muted text-center py-3">No data.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -1129,86 +1100,6 @@
         </div>
     </div>
 </div>
-
-<div class="row g-3">
-    {{-- Top Agents --}}
-    <div class="col-md-5">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold">
-                <i class="bi bi-trophy text-warning"></i> Top Agents by Revenue
-            </div>
-            <div class="card-body ">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>#</th>
-                                <th>Agent</th>
-                                <th>Team</th>
-                                <th class="text-center">Sales</th>
-                                <th class="text-end">Revenue</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($topAgents as $i => $agent)
-                            <tr>
-                                <td class="text-muted">{{ $i + 1 }}</td>
-                                <td>
-                                    <div>{{ $agent->name }}</div>
-                                    <div class="text-muted small">{{ $agent->company?->name }}</div>
-                                </td>
-                                <td class="text-muted small">{{ $agent->team?->name ?? '-' }}</td>
-                                <td class="text-center">{{ $agent->total_sales }}</td>
-                                <td class="text-end fw-bold text-success">${{ number_format($agent->total_amount, 0) }}</td>
-                            </tr>
-                            @empty
-                            <tr><td colspan="5" class="text-muted text-center py-3">No data.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Recent Sales --}}
-    <div class="col-md-7">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-semibold d-flex justify-content-between">
-                <span><i class="bi bi-cash-stack text-primary"></i> Recent Sales</span>
-                <a href="{{ route('admin.sales.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            <div class="card-body ">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Title</th>
-                                <th>Client</th>
-                                <th>Agent</th>
-                                <th>Status</th>
-                                <th class="text-end">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($recentSales as $sale)
-                            @php $sc = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger']; @endphp
-                            <tr>
-                                <td><a href="{{ route('admin.sales.show', $sale) }}" class="text-decoration-none">{{ $sale->title }}</a></td>
-                                <td class="text-muted small">{{ $sale->client_name }}</td>
-                                <td class="text-muted small">{{ $sale->user?->name ?? '-' }}</td>
-                                <td><span class="badge bg-{{ $sc[$sale->status] ?? 'secondary' }}">{{ ucfirst($sale->status) }}</span></td>
-                                <td class="text-end fw-semibold">${{ number_format($sale->amount, 0) }}</td>
-                            </tr>
-                            @empty
-                            <tr><td colspan="5" class="text-muted text-center py-3">No sales yet.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 @endif
@@ -1283,8 +1174,10 @@
         });
     }
 @else
+    function drawDetailCharts() {
     const rt = document.getElementById('revenueTrendChart');
-    if (rt) {
+    if (rt && !rt.dataset.ready) {
+        rt.dataset.ready = '1';
         const grad = rt.getContext('2d').createLinearGradient(0, 0, 0, 300);
         grad.addColorStop(0, 'rgba(46, 134, 193, 0.4)');
         grad.addColorStop(0.5, 'rgba(107, 58, 125, 0.12)');
@@ -1331,7 +1224,8 @@
     }
 
     const sc = document.getElementById('salesChart');
-    if (sc) {
+    if (sc && !sc.dataset.ready) {
+        sc.dataset.ready = '1';
         new Chart(sc, {
             type: 'doughnut',
             data: {
@@ -1356,7 +1250,8 @@
     }
 
     const cb = document.getElementById('companyBarChart');
-    if (cb) {
+    if (cb && !cb.dataset.ready) {
+        cb.dataset.ready = '1';
         new Chart(cb, {
             type: 'bar',
             data: {
@@ -1388,7 +1283,8 @@
     }
 
     const ap = document.getElementById('approvalChart');
-    if (ap) {
+    if (ap && !ap.dataset.ready) {
+        ap.dataset.ready = '1';
         new Chart(ap, {
             type: 'doughnut',
             data: {
@@ -1409,6 +1305,113 @@
                     legend: { position: 'bottom', labels: { boxWidth: 14, padding: 12, usePointStyle: true } }
                 }
             }
+        });
+    }
+    }
+
+    function drawBossCharts() {
+        const raw = document.getElementById('boss-dash-data');
+        if (!raw || !window.Chart) return;
+        const data = JSON.parse(raw.textContent);
+        const money = function (v) { return '$' + Number(v).toLocaleString(); };
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const tickColor = isDark ? '#9ca3af' : '#64748b';
+        const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+        const barColor = isDark ? '#60a5fa' : '#1e293b';
+        const donutBorder = isDark ? '#1a1d27' : '#ffffff';
+        const legendColor = isDark ? '#e4e6eb' : '#334155';
+
+        const donut = function (id, pack, colors) {
+            const node = document.getElementById(id);
+            if (!node || !pack.values || !pack.values.length) return;
+            if (node._crmChart) { node._crmChart.destroy(); }
+            node._crmChart = new Chart(node, {
+                type: 'doughnut',
+                data: { labels: pack.labels, datasets: [{ data: pack.values, backgroundColor: colors, borderWidth: 2, borderColor: donutBorder }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '68%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 8, padding: 10, usePointStyle: true, font: { size: 11 }, color: legendColor }
+                        }
+                    }
+                }
+            });
+        };
+
+        const revenue = document.getElementById('bossRevenueChart');
+        if (revenue) {
+            if (revenue._crmChart) { revenue._crmChart.destroy(); }
+            revenue.dataset.ready = '1';
+            revenue._crmChart = new Chart(revenue, {
+                type: 'bar',
+                data: {
+                    labels: data.revenue.labels,
+                    datasets: [{
+                        data: data.revenue.values,
+                        backgroundColor: barColor,
+                        hoverBackgroundColor: isDark ? '#93c5fd' : '#334155',
+                        borderRadius: 4,
+                        maxBarThickness: 28
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function (c) { return ' ' + money(c.raw); } } }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: tickColor }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor },
+                            ticks: { color: tickColor, callback: function (v) { return money(v); } }
+                        }
+                    }
+                }
+            });
+        }
+        donut('bossInvoiceChart', data.invoices, ['#22c55e', '#f59e0b', '#ef4444']);
+        donut('bossLeadChart', data.leads, ['#3b82f6', '#6366f1', '#06b6d4', '#f59e0b', '#94a3b8', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6', '#eab308']);
+    }
+    drawBossCharts();
+    window.addEventListener('crm:themechange', function () { drawBossCharts(); });
+
+    const dashMore = document.getElementById('dash-more');
+    const dashToggle = document.getElementById('dash-more-toggle');
+    if (dashMore && dashToggle) {
+        dashToggle.addEventListener('click', function () {
+            const willOpen = dashMore.hasAttribute('hidden');
+            if (willOpen) {
+                dashMore.removeAttribute('hidden');
+                dashToggle.setAttribute('aria-expanded', 'true');
+                dashToggle.querySelector('span').textContent = 'Hide detailed team and sales breakdown';
+                drawDetailCharts();
+                setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 80);
+            } else {
+                dashMore.setAttribute('hidden', '');
+                dashToggle.setAttribute('aria-expanded', 'false');
+                dashToggle.querySelector('span').textContent = 'Show detailed team and sales breakdown';
+            }
+        });
+        dashMore.addEventListener('click', function (event) {
+            const btn = event.target.closest('.js-team-members');
+            if (!btn) return;
+            const row = document.getElementById(btn.getAttribute('aria-controls'));
+            if (!row) return;
+            const willOpen = row.hasAttribute('hidden');
+            if (willOpen) row.removeAttribute('hidden');
+            else row.setAttribute('hidden', '');
+            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            btn.textContent = willOpen ? 'Hide' : 'Members';
         });
     }
 @endif

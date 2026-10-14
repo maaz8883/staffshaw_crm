@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Notifications\PpcSpendingAddedNotification;
 use App\Services\ActivityLogger;
+use App\Support\AuthScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,10 +25,12 @@ class PpcController extends Controller
         $month = (int) $request->get('month', now()->month);
         $year  = (int) $request->get('year', now()->year);
 
-        // Show all teams with their spending
-        $teams = Team::with(['company'])
-            ->orderBy('name')
-            ->get()
+        $teamsQuery = Team::with(['company'])->orderBy('name');
+        if (! $user->hasRole(Role::ADMIN)) {
+            AuthScope::scopeByTeam($teamsQuery, 'id');
+        }
+
+        $teams = $teamsQuery->get()
             ->map(function (Team $team) use ($month, $year) {
                 $team->month_spending = (float) TeamPpcSpending::where('team_id', $team->id)
                     ->where('month', $month)
@@ -38,12 +41,17 @@ class PpcController extends Controller
 
         $totalSpending = $teams->sum('month_spending');
 
-        // All entries for selected month/year
-        $spendings = TeamPpcSpending::where('month', $month)
+        $spendingsQuery = TeamPpcSpending::where('month', $month)
             ->where('year', $year)
             ->with(['user', 'team'])
-            ->latest()
-            ->get();
+            ->latest();
+
+        if (! $user->hasRole(Role::ADMIN)) {
+            $teamIds = AuthScope::accessibleTeamIds();
+            $spendingsQuery->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds);
+        }
+
+        $spendings = $spendingsQuery->get();
 
         return view('admin.ppc.index', compact('teams', 'spendings', 'totalSpending', 'month', 'year'));
     }
@@ -57,15 +65,24 @@ class PpcController extends Controller
             'year'   => 'required|integer|min:2020|max:2100',
             'amount' => 'required|numeric|min:0.01',
             'notes'  => 'nullable|string|max:500',
+            'team_id_override' => 'nullable|exists:teams,id',
         ]);
 
-        if (! $user->team_id && ! $request->filled('team_id_override')) {
+        if ($user->hasRole(Role::ADMIN) && $request->filled('team_id_override')) {
+            $teamId = (int) $request->team_id_override;
+        } elseif ($user->team_id) {
+            $teamId = (int) $user->team_id;
+            // Non-admin may only log against their own team even if override is posted
+            if ($request->filled('team_id_override') && (int) $request->team_id_override !== $teamId) {
+                abort(403, 'You can only add PPC spending for your own team.');
+            }
+        } else {
             return back()->withErrors(['team' => 'You are not assigned to any team.']);
         }
 
-        $teamId = $request->filled('team_id_override')
-            ? (int) $request->team_id_override
-            : $user->team_id;
+        if (! $user->hasRole(Role::ADMIN) && ! AuthScope::canAccessTeam($teamId)) {
+            abort(403);
+        }
 
         $spending = TeamPpcSpending::create([
             'team_id' => $teamId,
@@ -76,7 +93,6 @@ class PpcController extends Controller
             'notes'   => $validated['notes'] ?? null,
         ]);
 
-        // Notify all admins
         $admins = User::whereHas('role', fn ($q) => $q->where('name', Role::ADMIN))->get();
         Notification::send($admins, new PpcSpendingAddedNotification($spending));
 
@@ -92,8 +108,11 @@ class PpcController extends Controller
     {
         $user = Auth::user();
 
-        // Only the creator or admin can delete
-        if (! $user->hasRole('Admin') && $spending->user_id !== $user->id) {
+        if (! $user->hasRole(Role::ADMIN) && $spending->user_id !== $user->id) {
+            abort(403);
+        }
+
+        if (! $user->hasRole(Role::ADMIN) && ! AuthScope::canAccessTeam((int) $spending->team_id)) {
             abort(403);
         }
 

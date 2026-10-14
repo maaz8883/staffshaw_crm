@@ -15,11 +15,35 @@ class Client extends Model
         'name',
         'email',
         'phone',
+        'website',
+        'customer_group',
         'company_name',
+        'brand_id',
         'address',
+        'city',
+        'state',
+        'zip',
+        'country',
+        'currency',
+        'language',
+        'billing_address',
+        'shipping_address',
         'notes',
+        'is_active',
         'team_id',
         'created_by',
+        'trello_card_id',
+        'trello_board_id',
+        'trello_list_id',
+        'trello_board_name',
+        'trello_list_name',
+        'trello_card_url',
+        'trello_synced_at',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'trello_synced_at' => 'datetime',
     ];
 
     public function team(): BelongsTo
@@ -30,6 +54,26 @@ class Client extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(ClientContact::class);
+    }
+
+    public function primaryContact(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ClientContact::class)->where('is_primary', true);
+    }
+
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
     }
 
     public function sales(): HasMany
@@ -55,21 +99,35 @@ class Client extends Model
         return max(0, $this->totalSaleAmount() - $this->totalReceivedAmount());
     }
 
-    /** Total invoiced amount (non-void) across all sales for this client. */
+    /** Total invoiced amount (non-void) for this client (sale-linked + standalone). */
     public function totalInvoicedAmount(): float
     {
+        $saleIds = $this->sales()->pluck('id');
+
         return (float) Invoice::query()
-            ->whereIn('sale_id', $this->sales()->pluck('id'))
             ->where('status', '!=', Invoice::STATUS_VOID)
+            ->where(function ($q) use ($saleIds) {
+                $q->where('client_id', $this->id);
+                if ($saleIds->isNotEmpty()) {
+                    $q->orWhereIn('sale_id', $saleIds);
+                }
+            })
             ->sum('amount');
     }
 
-    /** Count of non-void invoices across all sales for this client. */
+    /** Count of non-void invoices for this client (sale-linked + standalone). */
     public function invoiceCount(): int
     {
+        $saleIds = $this->sales()->pluck('id');
+
         return Invoice::query()
-            ->whereIn('sale_id', $this->sales()->pluck('id'))
             ->where('status', '!=', Invoice::STATUS_VOID)
+            ->where(function ($q) use ($saleIds) {
+                $q->where('client_id', $this->id);
+                if ($saleIds->isNotEmpty()) {
+                    $q->orWhereIn('sale_id', $saleIds);
+                }
+            })
             ->count();
     }
 }

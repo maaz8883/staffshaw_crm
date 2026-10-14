@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Brand;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\Role;
@@ -11,6 +12,7 @@ use App\Models\SubTeamHead;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\TrelloClientDispatcher;
+use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -91,21 +93,40 @@ class ClientController extends Controller
 
     public function index(): View
     {
-        return view('admin.clients.index');
+        $base = $this->baseQuery();
+        $stats = [
+            'total' => (clone $base)->count(),
+            'active' => (clone $base)->where('is_active', true)->count(),
+            'inactive' => (clone $base)->where('is_active', false)->count(),
+            'contacts' => \App\Models\ClientContact::query()
+                ->whereIn('client_id', (clone $base)->select('clients.id'))
+                ->count(),
+        ];
+
+        return view('admin.clients.index', compact('stats'));
     }
 
     public function datatable(Request $request): JsonResponse
     {
-        $query = $this->baseQuery()->select('clients.*');
+        $query = $this->baseQuery()->with('brand')->select('clients.*');
 
         if ($request->filled('team_id')) {
             $query->where('team_id', $request->team_id);
         }
 
+        $query->withCount(['sales as sales_count' => fn ($q) => $q->where('is_draft', false)]);
+
         return DataTables::eloquent($query)
+            ->addColumn('brand_name', fn (Client $client) => e($client->brand?->name ?? '-'))
+            ->addColumn('active_badge', function (Client $client) {
+                $class = $client->is_active ? 'success' : 'secondary';
+                $label = $client->is_active ? 'Active' : 'Inactive';
+
+                return '<span class="badge bg-' . $class . '">' . $label . '</span>';
+            })
             ->addColumn('team_name', fn (Client $client) => e($client->team?->name ?? '-'))
             ->addColumn('created_by_name', fn (Client $client) => e($client->createdBy?->name ?? '-'))
-            ->addColumn('sales_count', fn (Client $client) => $client->sales()->where('is_draft', false)->count())
+            ->addColumn('sales_count', fn (Client $client) => (int) $client->sales_count)
             ->addColumn('actions', function (Client $client) {
                 $showUrl = route('admin.clients.show', $client);
                 $editUrl = route('admin.clients.edit', $client);
@@ -126,7 +147,7 @@ class ClientController extends Controller
 
                 return $html;
             })
-            ->rawColumns(['actions'])
+            ->rawColumns(['actions', 'active_badge'])
             ->toJson();
     }
 
@@ -134,26 +155,30 @@ class ClientController extends Controller
 
     public function create(): View
     {
-        return view('admin.clients.create');
+        $brands = AuthScope::brandsForDropdown();
+        $teams = $this->teamsForClientForm();
+
+        return view('admin.clients.create', compact('brands', 'teams'));
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name'         => 'required|string|max:255',
-            'email'        => 'nullable|email|max:255',
-            'phone'        => 'nullable|string|max:50',
-            'company_name' => 'nullable|string|max:255',
-            'address'      => 'nullable|string',
-            'notes'        => 'nullable|string',
-        ]);
+        $validated = $request->validate($this->clientRules());
+        $payload = $this->clientPayload($validated, $request);
+        $teamId = $this->resolveTeamIdForWrite($validated);
 
-        $client = Client::query()->create(array_merge($validated, [
-            'team_id'    => $this->defaultTeamIdForCreate(),
+        if (! $teamId) {
+            return back()->withInput()->with('error', 'A team is required for this customer.');
+        }
+
+        $client = Client::query()->create(array_merge($payload, [
+            'team_id'    => $teamId,
             'created_by' => Auth::id(),
+            'currency'   => $payload['currency'] ?? 'USD',
         ]));
 
-        TrelloClientDispatcher::dispatch($client);
+        $this->syncPrimaryContact($client, $validated);
+        TrelloClientDispatcher::dispatch($client->fresh());
 
         return redirect()
             ->route('admin.clients.show', $client)
@@ -164,21 +189,33 @@ class ClientController extends Controller
     {
         $this->authorizeClient($client);
 
-        $client->load(['team', 'createdBy']);
+        $client->load(['team', 'createdBy', 'brand', 'contacts']);
 
-        $sales = $client->sales()
+        $salesQuery = $client->sales()
             ->where('is_draft', false)
-            ->with(['user', 'team', 'brand'])
-            ->latest('sale_date')
-            ->get();
+            ->with(['user', 'team', 'brand']);
+        $this->scopeSalesForViewer($salesQuery);
+        $sales = $salesQuery->latest('sale_date')->get();
 
         $totalSaleAmount = $sales->sum('amount');
         $totalReceived   = $sales->sum('received_amount');
         $totalRemaining  = max(0, $totalSaleAmount - $totalReceived);
 
+        $visibleSaleIds = $sales->pluck('id');
         $invoices = Invoice::query()
-            ->whereIn('sale_id', $sales->pluck('id'))
             ->where('status', '!=', Invoice::STATUS_VOID)
+            ->where(function ($q) use ($client, $visibleSaleIds) {
+                if ($visibleSaleIds->isNotEmpty()) {
+                    $q->whereIn('sale_id', $visibleSaleIds);
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+
+                $q->orWhere(function ($standalone) use ($client) {
+                    $standalone->where('client_id', $client->id)->whereNull('sale_id');
+                    $this->scopeStandaloneInvoicesForViewer($standalone);
+                });
+            })
             ->latest('issued_at')
             ->get();
 
@@ -194,23 +231,28 @@ class ClientController extends Controller
     {
         $this->authorizeClient($client);
 
-        return view('admin.clients.edit', compact('client'));
+        $brands = AuthScope::brandsForDropdown();
+        $teams = $this->teamsForClientForm();
+
+        return view('admin.clients.edit', compact('client', 'brands', 'teams'));
     }
 
     public function update(Request $request, Client $client): RedirectResponse
     {
         $this->authorizeClient($client);
 
-        $validated = $request->validate([
-            'name'         => 'required|string|max:255',
-            'email'        => 'nullable|email|max:255',
-            'phone'        => 'nullable|string|max:50',
-            'company_name' => 'nullable|string|max:255',
-            'address'      => 'nullable|string',
-            'notes'        => 'nullable|string',
-        ]);
+        $validated = $request->validate($this->clientRules());
+        $payload = $this->clientPayload($validated, $request);
 
-        $client->update($validated);
+        if (array_key_exists('team_id', $validated) || Auth::user()->hasRole([Role::ADMIN, Role::MANAGER]) || $this->isTeamHead()) {
+            $teamId = $this->resolveTeamIdForWrite($validated);
+            if ($teamId) {
+                $payload['team_id'] = $teamId;
+            }
+        }
+
+        $client->update($payload);
+        $this->syncPrimaryContact($client, $validated);
 
         TrelloClientDispatcher::dispatch($client->fresh());
 
@@ -225,6 +267,24 @@ class ClientController extends Controller
             abort(403);
         }
 
+        $saleCount = $client->sales()->count();
+        $invoiceCount = Invoice::query()
+            ->where(function ($q) use ($client) {
+                $q->where('client_id', $client->id)
+                    ->orWhereIn('sale_id', $client->sales()->select('id'));
+            })
+            ->count();
+        $leadCount = \App\Models\Lead::query()->where('client_id', $client->id)->count();
+
+        if ($saleCount > 0 || $invoiceCount > 0 || $leadCount > 0) {
+            return back()->with(
+                'error',
+                'Cannot delete this customer — linked records exist'
+                . " (sales: {$saleCount}, invoices: {$invoiceCount}, leads: {$leadCount})."
+            );
+        }
+
+        $client->contacts()->delete();
         $client->delete();
 
         return redirect()->route('admin.clients.index')->with('success', 'Client deleted successfully.');
@@ -246,7 +306,81 @@ class ClientController extends Controller
     /** For dropdowns — clients scoped to the same teams the current user can see. */
     public static function forDropdown()
     {
-        return (new self())->baseQuery()->orderBy('name')->get(['id', 'name', 'email', 'phone', 'team_id']);
+        return (new self())->baseQuery()->orderBy('name')->get(['id', 'name', 'email', 'phone', 'team_id', 'brand_id']);
+    }
+
+    /** Client IDs the current user may attach to sales/invoices. */
+    public static function accessibleClientIds(): \Illuminate\Support\Collection
+    {
+        return (new self())->baseQuery()->pluck('id');
+    }
+
+    private function clientRules(): array
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'company_name' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
+            'brand_id' => AuthScope::brandIdRule(),
+            'notes' => 'nullable|string',
+            'contact_first_name' => 'nullable|string|max:100',
+            'contact_last_name' => 'nullable|string|max:100',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:50',
+        ];
+
+        if (Auth::user()->hasRole([Role::ADMIN, Role::MANAGER]) || $this->isTeamHead()) {
+            $rules['team_id'] = 'required|exists:teams,id';
+        }
+
+        return $rules;
+    }
+
+    private function clientPayload(array $validated, Request $request): array
+    {
+        unset(
+            $validated['contact_first_name'],
+            $validated['contact_last_name'],
+            $validated['contact_email'],
+            $validated['contact_phone'],
+            $validated['contact_position']
+        );
+
+        $validated['is_active'] = $request->boolean('is_active', true);
+        $validated['brand_id'] = $validated['brand_id'] ?: null;
+        if (! array_key_exists('currency', $validated) || ! $validated['currency']) {
+            $validated['currency'] = 'USD';
+        }
+
+        return $validated;
+    }
+
+    private function syncPrimaryContact(Client $client, array $validated): void
+    {
+        $first = trim((string) ($validated['contact_first_name'] ?? ''));
+        if ($first === '') {
+            return;
+        }
+
+        $client->contacts()->updateOrCreate(
+            ['is_primary' => true],
+            [
+                'first_name' => $first,
+                'last_name' => $validated['contact_last_name'] ?? null,
+                'email' => $validated['contact_email'] ?? null,
+                'phone' => $validated['contact_phone'] ?? null,
+                'position' => $validated['contact_position'] ?? null,
+                'is_primary' => true,
+            ]
+        );
+
+        if (! $client->email && ! empty($validated['contact_email'])) {
+            $client->update(['email' => $validated['contact_email']]);
+        }
+        if (! $client->phone && ! empty($validated['contact_phone'])) {
+            $client->update(['phone' => $validated['contact_phone']]);
+        }
     }
 
     private function authorizeClient(Client $client): void
@@ -260,5 +394,82 @@ class ClientController extends Controller
         if (! $teamIds->contains($client->team_id)) {
             abort(403);
         }
+    }
+
+    private function teamsForClientForm()
+    {
+        if (Auth::user()->hasRole([Role::ADMIN, Role::MANAGER])) {
+            return Team::query()->orderBy('name')->get(['id', 'name']);
+        }
+
+        if ($this->isTeamHead()) {
+            return Team::query()
+                ->where('team_head_id', Auth::id())
+                ->orderBy('name')
+                ->get(['id', 'name']);
+        }
+
+        return collect();
+    }
+
+    private function resolveTeamIdForWrite(array $validated): ?int
+    {
+        if (! empty($validated['team_id'])) {
+            $teamId = (int) $validated['team_id'];
+            $allowed = $this->visibleTeamIds();
+            if ($allowed === null || $allowed->contains($teamId)) {
+                return $teamId;
+            }
+            abort(403, 'You cannot assign this team.');
+        }
+
+        return $this->defaultTeamIdForCreate();
+    }
+
+    /** Limit client-show sales to what the viewer may normally see on Sales. */
+    private function scopeSalesForViewer($query): void
+    {
+        $user = Auth::user();
+
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            return;
+        }
+
+        if ($this->isProjectManager()) {
+            $query->whereIn('team_id', $user->approvedTeamIds());
+
+            return;
+        }
+
+        if ($this->isTeamHead()) {
+            $query->whereIn('team_id', Team::where('team_head_id', $user->id)->pluck('id'));
+
+            return;
+        }
+
+        $subTeamHeadIds = SubTeamHead::where('user_id', $user->id)->pluck('id');
+        if ($subTeamHeadIds->isNotEmpty()) {
+            $memberIds = User::whereIn('sub_team_head_id', $subTeamHeadIds)
+                ->pluck('id')
+                ->push($user->id)
+                ->unique()
+                ->values();
+            $query->whereIn('user_id', $memberIds);
+
+            return;
+        }
+
+        $query->where('user_id', $user->id);
+    }
+
+    private function scopeStandaloneInvoicesForViewer($query): void
+    {
+        $user = Auth::user();
+
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER]) || $this->isTeamHead() || $this->isProjectManager()) {
+            return;
+        }
+
+        $query->where('created_by', $user->id);
     }
 }

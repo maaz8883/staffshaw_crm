@@ -6,11 +6,22 @@
 
 @section('content')
 <div class="mb-3">
-    @if(auth()->user()->hasRole('Admin') || (int)$sale->user_id === (int)auth()->id())
-    <a href="{{ route('admin.sales.edit', $sale) }}" class="btn btn-outline-warning btn-sm">Edit</a>
+    @if($canEdit ?? false)
+    <a href="{{ route('admin.sales.edit', $sale) }}" class="btn btn-outline-warning btn-sm">
+        {{ $sale->approval_status === \App\Models\Sale::APPROVAL_REJECTED ? 'Edit & Resubmit' : 'Edit' }}
+    </a>
     @endif
     <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
 </div>
+
+@if($sale->approval_status === \App\Models\Sale::APPROVAL_REJECTED && ($canEdit ?? false))
+<div class="alert alert-warning py-2">
+    This sale was rejected. Fix the details and save to re-submit for approval.
+    @if($sale->approval_note)
+        <div class="small mt-1"><strong>Reason:</strong> {{ $sale->approval_note }}</div>
+    @endif
+</div>
+@endif
 
 <div class="card">
     <div class="card-body">
@@ -128,10 +139,12 @@
                 <small class="text-muted d-block">Team</small>
                 {{ $sale->team?->name ?? '-' }}
             </div>
+            @unless($singleCompany)
             <div class="col-md-6">
                 <small class="text-muted d-block">Company</small>
                 {{ $sale->company?->name ?? '-' }}
             </div>
+            @endunless
             <div class="col-md-6">
                 <small class="text-muted d-block">Created</small>
                 {{ $sale->created_at->format('d M Y, h:i A') }}
@@ -146,7 +159,8 @@
 
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-receipt"></i> Invoices</span>
+        <span><i class="bi bi-receipt"></i> Payment Receipts</span>
+        <small class="text-muted">Records money received against this sale (not a standalone AR invoice)</small>
     </div>
     <div class="card-body">
         <div class="row g-3 mb-3">
@@ -169,7 +183,7 @@
             <table class="table table-sm table-bordered mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>Invoice #</th>
+                        <th>Receipt #</th>
                         <th>Date</th>
                         <th>Amount</th>
                         <th>Status</th>
@@ -194,14 +208,14 @@
             </table>
         </div>
         @else
-        <p class="text-muted mb-3">No invoices generated for this sale yet.</p>
+        <p class="text-muted mb-3">No payment receipts recorded for this sale yet.</p>
         @endif
 
         @if($canGenerateInvoice)
         <form method="POST" action="{{ route('admin.invoices.store', $sale) }}" class="row g-2 align-items-end border-top pt-3">
             @csrf
             <div class="col-md-4">
-                <label for="invoice_amount" class="form-label mb-1">Received Amount ($)</label>
+                <label for="invoice_amount" class="form-label mb-1">Payment Amount ($)</label>
                 <div class="input-group input-group-sm">
                     <span class="input-group-text">$</span>
                     <input type="number" name="amount" id="invoice_amount" class="form-control"
@@ -210,16 +224,18 @@
                 </div>
                 <div class="form-text">Maximum: ${{ number_format($invoiceMaxAmount, 2) }} (sale balance remaining)</div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-receipt"></i> Generate Invoice
+                    <i class="bi bi-receipt"></i> Record Payment Receipt
                 </button>
             </div>
         </form>
+        @elseif(! $sale->isApproved())
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Payment receipts can only be recorded after the sale is approved.</p>
         @elseif($sale->is_refunded || $sale->status === \App\Models\Sale::STATUS_REFUNDED)
-        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Invoices cannot be generated for refunded sales.</p>
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Payments cannot be recorded for refunded sales.</p>
         @elseif($billableRemaining <= 0 || $sale->remainingAmount() <= 0)
-        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully received and invoiced.</p>
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully received.</p>
         @endif
     </div>
 </div>

@@ -13,10 +13,10 @@ class InvoiceService
 {
     public function invoicedTotal(Sale $sale): float
     {
-        return (float) Invoice::query()
+        return round((float) Invoice::query()
             ->where('sale_id', $sale->id)
             ->where('status', '!=', Invoice::STATUS_VOID)
-            ->sum('amount');
+            ->sum('amount'), 2);
     }
 
     /** Align legacy sales where invoices exist but received_amount was not updated. */
@@ -24,7 +24,7 @@ class InvoiceService
     {
         $invoiced = $this->invoicedTotal($sale);
 
-        if ((float) $sale->received_amount < $invoiced) {
+        if (round((float) $sale->received_amount, 2) < $invoiced) {
             $sale->update(['received_amount' => $invoiced]);
             $sale->refresh();
         }
@@ -34,12 +34,12 @@ class InvoiceService
 
     public function maxReceivableAmount(Sale $sale): float
     {
-        return max(0, min($sale->remainingAmount(), $this->billableRemaining($sale)));
+        return round(max(0, min($sale->remainingAmount(), $this->billableRemaining($sale))), 2);
     }
 
     public function billableRemaining(Sale $sale): float
     {
-        return max(0, (float) $sale->amount - $this->invoicedTotal($sale));
+        return round(max(0, (float) $sale->amount - $this->invoicedTotal($sale)), 2);
     }
 
     public function generateNumber(): string
@@ -47,23 +47,30 @@ class InvoiceService
         $year = now()->format('Y');
         $prefix = "INV-{$year}-";
 
-        $lastNumber = Invoice::query()
-            ->where('invoice_number', 'like', $prefix . '%')
-            ->orderByDesc('invoice_number')
-            ->value('invoice_number');
+        return DB::transaction(function () use ($prefix) {
+            $lastNumber = Invoice::query()
+                ->where('invoice_number', 'like', $prefix . '%')
+                ->orderByDesc('invoice_number')
+                ->lockForUpdate()
+                ->value('invoice_number');
 
-        $seq = 1;
+            $seq = 1;
 
-        if (is_string($lastNumber) && preg_match('/-(\d+)$/', $lastNumber, $matches)) {
-            $seq = (int) $matches[1] + 1;
-        }
+            if (is_string($lastNumber) && preg_match('/-(\d+)$/', $lastNumber, $matches)) {
+                $seq = (int) $matches[1] + 1;
+            }
 
-        return $prefix . str_pad((string) $seq, 5, '0', STR_PAD_LEFT);
+            return $prefix . str_pad((string) $seq, 5, '0', STR_PAD_LEFT);
+        });
     }
 
     public function canGenerateForSale(Sale $sale): bool
     {
         if ($sale->is_draft) {
+            return false;
+        }
+
+        if (! $sale->isApproved()) {
             return false;
         }
 
@@ -84,8 +91,7 @@ class InvoiceService
             ]);
         }
 
-        $remaining = $sale->remainingAmount();
-        $billable = $this->billableRemaining($sale);
+        $amount = round($amount, 2);
         $maxAmount = $this->maxReceivableAmount($sale);
 
         if ($amount <= 0) {
@@ -94,6 +100,7 @@ class InvoiceService
             ]);
         }
 
+        // Compare cents (round to 2dp) — raw float can make exact remaining fail (e.g. 963.95).
         if ($amount > $maxAmount) {
             throw ValidationException::withMessages([
                 'amount' => 'Received amount cannot exceed $' . number_format($maxAmount, 2) . '.',
@@ -104,11 +111,12 @@ class InvoiceService
             $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
             $sale->loadMissing(['user', 'team', 'company', 'brand']);
 
-            $newReceived = (float) $sale->received_amount + $amount;
-            $newBalance = max(0, (float) $sale->amount - $newReceived);
+            $newReceived = round((float) $sale->received_amount + $amount, 2);
+            $newBalance = round(max(0, (float) $sale->amount - $newReceived), 2);
 
             $invoice = Invoice::query()->create([
                 'sale_id'         => $sale->id,
+                'client_id'       => $sale->client_id,
                 'invoice_number'  => $this->generateNumber(),
                 'issued_at'       => now()->toDateString(),
                 'amount'          => $amount,
@@ -150,17 +158,24 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($invoice, $user) {
-            $invoice->update(['status' => Invoice::STATUS_VOID]);
-
             $sale = Sale::query()->lockForUpdate()->find($invoice->sale_id);
 
             if ($sale !== null) {
-                $newReceived = max(0, (float) $sale->received_amount - (float) $invoice->amount);
+                $newReceived = round(max(0, (float) $sale->received_amount - (float) $invoice->amount), 2);
                 $sale->update(['received_amount' => $newReceived]);
+            } else {
+                // Standalone: drop payments so voided invoices do not keep AR/payment history active
+                $invoice->payments()->delete();
+                $invoice->update([
+                    'sale_received' => 0,
+                    'sale_balance' => 0,
+                ]);
             }
 
+            $invoice->update(['status' => Invoice::STATUS_VOID]);
+
             ActivityLogger::log($user, UserActivityLog::TYPE_INVOICE_VOIDED,
-                "Voided invoice {$invoice->invoice_number} (sale #{$invoice->sale_id})",
+                "Voided invoice {$invoice->invoice_number}" . ($invoice->sale_id ? " (sale #{$invoice->sale_id})" : ''),
                 ['invoice_id' => $invoice->id, 'sale_id' => $invoice->sale_id, 'amount' => $invoice->amount]
             );
 

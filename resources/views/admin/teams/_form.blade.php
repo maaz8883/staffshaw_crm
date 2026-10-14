@@ -1,5 +1,6 @@
 @csrf
 
+@unless($singleCompany)
 <div class="mb-3">
     <label for="company_id" class="form-label">Company / Branch</label>
     <select id="company_id" name="company_id" class="form-select">
@@ -11,6 +12,7 @@
         @endforeach
     </select>
 </div>
+@endunless
 
 <div class="mb-3">
     <label for="name" class="form-label">Team Name <span class="text-danger">*</span></label>
@@ -25,9 +27,11 @@
         @foreach($allUsers as $user)
             <option value="{{ $user->id }}" {{ old('team_head_id', $team->team_head_id ?? '') == $user->id ? 'selected' : '' }}>
                 {{ $user->name }}
+                @unless($singleCompany)
                 @if($user->company)
                     ({{ $user->company->name }})
                 @endif
+                @endunless
             </option>
         @endforeach
     </select>
@@ -44,6 +48,7 @@
         @if(isset($team) && $team->subTeamHeads && $team->subTeamHeads->count() > 0)
             @foreach($team->subTeamHeads as $index => $subHead)
                 <div class="sub-team-head-row mb-3 border rounded p-3 bg-light" data-index="{{ $index }}">
+                    <input type="hidden" name="sub_heads[{{ $index }}][id]" value="{{ old('sub_heads.'.$index.'.id', $subHead->id) }}">
                     <div class="row g-2">
                         <div class="col-md-4">
                             <input type="text" name="sub_heads[{{ $index }}][title]" class="form-control" placeholder="Title (e.g., Front Head)" value="{{ old('sub_heads.'.$index.'.title', $subHead->title) }}" required>
@@ -92,6 +97,19 @@
         <i class="bi bi-plus-circle"></i> Add Sub-Team Head
     </button>
     <div class="form-text">Add multiple sub-team heads (e.g., Front Head, Upsell Head, etc.){{ isset($team) && $team->id ? ' - Only users from this team are shown' : '' }}</div>
+</div>
+
+<div class="mb-3">
+    <label for="brand_ids" class="form-label">Assigned Brands</label>
+    <select id="brand_ids" name="brand_ids[]" class="js-select2-multi" multiple data-placeholder="Select brands this team can use">
+        @foreach(($brands ?? []) as $brand)
+            <option value="{{ $brand->id }}"
+                @selected(collect(old('brand_ids', isset($team) ? $team->brands->pluck('id')->all() : []))->map(fn ($id) => (string) $id)->contains((string) $brand->id))>
+                {{ $brand->name }}
+            </option>
+        @endforeach
+    </select>
+    <div class="form-text">Team members will only see these brands in sales, invoices, clients, and related forms.</div>
 </div>
 
 <div class="mb-3">

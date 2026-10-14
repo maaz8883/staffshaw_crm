@@ -8,12 +8,14 @@
     <div class="mb-3 d-flex gap-2 flex-wrap align-items-end">
         <a href="{{ route('admin.users.create') }}" class="btn btn-primary">Add User</a>
 
+        @unless($singleCompany)
         <select id="filter-company" class="form-select form-select-sm" style="width:auto">
             <option value="">All Companies</option>
             @foreach($companies as $company)
                 <option value="{{ $company->id }}">{{ $company->name }}</option>
             @endforeach
         </select>
+        @endunless
 
         <select id="filter-team" class="form-select form-select-sm" style="width:auto">
             <option value="">All Teams</option>
@@ -40,7 +42,7 @@
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
-                    <th>Company</th>
+                    @unless($singleCompany)<th>Company</th>@endunless
                     <th>Team</th>
                     <th class="text-end">Actions</th>
                 </tr>
@@ -66,7 +68,7 @@
                 ajax: {
                     url: @json(route('admin.users.datatable')),
                     data: function (d) {
-                        d.company_id = $('#filter-company').val();
+                        d.company_id = $('#filter-company').val() || '';
                         d.team_id    = $('#filter-team').val();
                         d.role_id    = $('#filter-role').val();
                     }
@@ -75,7 +77,9 @@
                     {data: 'name',         name: 'name'},
                     {data: 'email',        name: 'email'},
                     {data: 'role_name',    name: 'role.name',    orderable: false, searchable: false},
+                    @unless($singleCompany)
                     {data: 'company_name', name: 'company.name', orderable: false, searchable: false},
+                    @endunless
                     {data: 'team_name',    name: 'team.name',    orderable: false, searchable: false},
                     {data: 'actions',      name: 'actions',      orderable: false, searchable: false, className: 'text-end'}
                 ]

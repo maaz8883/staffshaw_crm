@@ -32,8 +32,15 @@ return [
     ],
 
     'trello' => [
+        'app_url' => env('TRELLO_APP_URL'),
         'sale_webhook_url' => env('TRELLO_SALE_WEBHOOK_URL'),
         'sale_webhook_token' => env('TRELLO_SALE_WEBHOOK_TOKEN'),
+    ],
+
+    'hrm' => [
+        'url' => env('HRM_APP_URL'),
+        // Shared with HRM: SSO token verification and trusted user provisioning (X-SSO-Secret).
+        'sso_secret' => env('SSO_SHARED_SECRET'),
     ],
 
     'orbit_brief' => [

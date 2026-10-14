@@ -20,7 +20,7 @@
                 <input type="date" name="date_to" class="form-control form-control-sm"
                        value="{{ $filters['date_to'] ?? $dateTo->toDateString() }}">
             </div>
-            @if(!$isAgent && $companies->isNotEmpty())
+            @if(!$singleCompany && !$isAgent && $companies->isNotEmpty())
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Company</label>
                 <select name="company_id" class="form-select form-select-sm" style="min-width: 160px">
@@ -63,7 +63,7 @@
                         <th>#</th>
                         <th>User</th>
                         <th>Team</th>
-                        <th>Company</th>
+                        @unless($singleCompany)<th>Company</th>@endunless
                         <th class="text-center">Completed sales</th>
                         <th class="text-end">Revenue</th>
                     </tr>
@@ -74,12 +74,14 @@
                         <td class="text-muted">{{ $i + 1 }}</td>
                         <td class="fw-semibold">{{ $row['user']->name }}</td>
                         <td class="text-muted small">{{ $row['user']->team?->name ?? '—' }}</td>
+                        @unless($singleCompany)
                         <td class="text-muted small">{{ $row['user']->company?->name ?? '—' }}</td>
+                        @endunless
                         <td class="text-center">{{ number_format($row['count']) }}</td>
                         <td class="text-end text-success fw-semibold">${{ number_format($row['revenue'], 0) }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="6" class="text-muted text-center py-4">No users in scope.</td></tr>
+                    <tr><td colspan="{{ $singleCompany ? 5 : 6 }}" class="text-muted text-center py-4">No users in scope.</td></tr>
                     @endforelse
                 </tbody>
             </table>

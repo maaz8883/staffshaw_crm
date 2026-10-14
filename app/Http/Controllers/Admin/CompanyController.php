@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Support\AuthScope;
+use App\Support\CompanyContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,13 +14,30 @@ use Yajra\DataTables\Facades\DataTables;
 
 class CompanyController extends Controller
 {
-    public function index(): View
+    private function hideWhenSingle(): ?RedirectResponse
     {
+        if (! CompanyContext::single()) {
+            return null;
+        }
+
+        return redirect()->route('admin.dashboard');
+    }
+
+    public function index(): View|RedirectResponse
+    {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         return view('admin.companies.index');
     }
 
-    public function datatable(): JsonResponse
+    public function datatable(): JsonResponse|RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         $query = Company::query()
             ->select('companies.*')
             ->withCount(['teams', 'users']);
@@ -54,13 +72,21 @@ class CompanyController extends Controller
             ->toJson();
     }
 
-    public function create(): View
+    public function create(): View|RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         return view('admin.companies.create');
     }
 
     public function store(Request $request): RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         $validated = $request->validate([
             'name'        => 'required|string|max:255|unique:companies,name',
             'logo'        => 'nullable|image|max:2048',
@@ -76,13 +102,21 @@ class CompanyController extends Controller
         return redirect()->route('admin.companies.index')->with('success', 'Company created successfully.');
     }
 
-    public function edit(Company $company): View
+    public function edit(Company $company): View|RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         return view('admin.companies.edit', compact('company'));
     }
 
     public function update(Request $request, Company $company): RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         $validated = $request->validate([
             'name'        => 'required|string|max:255|unique:companies,name,' . $company->id,
             'logo'        => 'nullable|image|max:2048',
@@ -106,6 +140,10 @@ class CompanyController extends Controller
 
     public function destroy(Company $company): RedirectResponse
     {
+        if ($redirect = $this->hideWhenSingle()) {
+            return $redirect;
+        }
+
         $company->delete();
 
         return redirect()->route('admin.companies.index')->with('success', 'Company deleted successfully.');

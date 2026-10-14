@@ -19,7 +19,7 @@
                 <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Company</th>
+                    @unless($singleCompany)<th>Company</th>@endunless
                     @if(!$isPpc)<th>Team Head</th>@endif
                     @if(!$isPpc)<th>Description</th>@endif
                     @if(!$isPpc)<th>Users</th>@endif
@@ -45,8 +45,10 @@
 
             var columns = [
                 {data: 'name', name: 'name'},
-                {data: 'company_name', name: 'company.name', searchable: false},
             ];
+            @unless($singleCompany)
+            columns.push({data: 'company_name', name: 'company.name', searchable: false});
+            @endunless
 
             if (!isPpc) {
                 columns.push({data: 'team_head_name', name: 'teamHead.name', searchable: false});

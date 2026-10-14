@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use App\Support\AuthScope;
+use App\Support\CompanyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -101,7 +102,7 @@ class UserController extends Controller
             'email'            => $validated['email'],
             'password'         => Hash::make($validated['password']),
             'role_id'          => $validated['role_id'] ?? null,
-            'company_id'       => $validated['company_id'] ?? null,
+            'company_id'       => CompanyContext::idForCreate($validated['company_id'] ?? null),
             'team_id'          => $validated['team_id'] ?? null,
             'sub_team_id'      => $validated['sub_team_id'] ?? null,
             'sub_team_head_id' => $validated['sub_team_head_id'] ?? null,
@@ -165,7 +166,7 @@ class UserController extends Controller
             'name'             => $validated['name'],
             'email'            => $validated['email'],
             'role_id'          => $validated['role_id'] ?? null,
-            'company_id'       => $validated['company_id'] ?? null,
+            'company_id'       => CompanyContext::idForUpdate($user->company_id, $validated['company_id'] ?? null),
             'team_id'          => $validated['team_id'] ?? null,
             'sub_team_id'      => $validated['sub_team_id'] ?? null,
             'sub_team_head_id' => $validated['sub_team_head_id'] ?? null,

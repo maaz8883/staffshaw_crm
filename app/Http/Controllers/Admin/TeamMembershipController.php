@@ -131,6 +131,9 @@ class TeamMembershipController extends Controller
         $wasApproved = $membership->isApproved();
         $membership->delete();
 
+        // PMs may still have a stale users.team_id pointing at the left team.
+        $user->syncHomeTeamFromMemberships();
+
         return redirect()
             ->route('admin.team-memberships.index')
             ->with('success', $wasApproved
@@ -170,6 +173,9 @@ class TeamMembershipController extends Controller
             'decided_at' => now(),
         ]);
 
+        $membership->loadMissing('user');
+        $membership->user?->syncHomeTeamFromMemberships();
+
         Notification::send($membership->user, new TeamJoinDecisionNotification($membership, true));
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_TEAM_UPDATED,
@@ -188,6 +194,9 @@ class TeamMembershipController extends Controller
             'decided_by' => Auth::id(),
             'decided_at' => now(),
         ]);
+
+        $membership->loadMissing('user');
+        $membership->user?->syncHomeTeamFromMemberships();
 
         Notification::send($membership->user, new TeamJoinDecisionNotification($membership, false));
 
@@ -217,9 +226,9 @@ class TeamMembershipController extends Controller
 
         $membership->loadMissing('team');
         $isHead = $membership->team && (int) $membership->team->team_head_id === (int) $user->id;
-        $teamHasNoHead = $membership->team && $membership->team->team_head_id === null;
 
-        if ($isHead || $teamHasNoHead) {
+        // Headless teams: only Admin/Manager (already returned above) may decide.
+        if ($isHead) {
             return;
         }
 

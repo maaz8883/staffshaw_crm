@@ -23,8 +23,24 @@ class NotificationController extends Controller
     {
         $user = auth()->user();
 
+        // Release session lock quickly so Trello card/tick requests are not queued behind poll.
+        try {
+            if (request()->hasSession()) {
+                request()->session()->save();
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         $recent = $user->notifications()->latest()->limit(12)->get();
-        $unreadCount = $user->unreadNotifications()->count();
+        $unreadCount = $recent->whereNull('read_at')->count();
+        // If the unread set may extend past the latest 12, fall back to a count query.
+        if ($unreadCount >= 12) {
+            $unreadCount = $user->unreadNotifications()->count();
+        }
 
         $items = $recent->map(function ($n) {
             $data = $n->data ?? [];

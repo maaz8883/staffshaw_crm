@@ -14,7 +14,12 @@
 <div class="card mb-3">
     <div class="card-body">
         <h5 class="mb-1">{{ $client->name }}</h5>
-        <div class="text-muted mb-2">{{ $client->company_name ?: 'No company' }} · Team: {{ $client->team?->name ?? '-' }}</div>
+        <div class="text-muted mb-2">
+            {{ $client->company_name ?: 'No company' }}
+            · Team: {{ $client->team?->name ?? '-' }}
+            · Brand: {{ $client->brand?->name ?: '-' }}
+            · {{ $client->is_active ? 'Active' : 'Inactive' }}
+        </div>
         <div class="row g-3">
             <div class="col-md-6">
                 <small class="text-muted d-block">Email</small>
@@ -23,10 +28,6 @@
             <div class="col-md-6">
                 <small class="text-muted d-block">Phone</small>
                 {{ $client->phone ?: '-' }}
-            </div>
-            <div class="col-md-6">
-                <small class="text-muted d-block">Address</small>
-                {{ $client->address ?: '-' }}
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Added By</small>
@@ -39,6 +40,27 @@
         </div>
     </div>
 </div>
+
+@if($client->contacts->isNotEmpty())
+<div class="card mb-3">
+    <div class="card-header">Contacts</div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Position</th></tr></thead>
+            <tbody>
+            @foreach($client->contacts as $contact)
+                <tr>
+                    <td>{{ $contact->fullName() }} @if($contact->is_primary)<span class="badge bg-light text-dark">Primary</span>@endif</td>
+                    <td>{{ $contact->email ?: '-' }}</td>
+                    <td>{{ $contact->phone ?: '-' }}</td>
+                    <td>{{ $contact->position ?: '-' }}</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+</div>
+@endif
 
 {{-- Summary cards --}}
 <div class="row g-3 mb-3">
@@ -137,7 +159,13 @@
                     @forelse($invoices as $invoice)
                     <tr>
                         <td>{{ $invoice->invoice_number }}</td>
-                        <td><a href="{{ route('admin.sales.show', $invoice->sale_id) }}" class="text-decoration-none">#{{ $invoice->sale_id }} — {{ $invoice->title }}</a></td>
+                        <td>
+                            @if($invoice->sale_id)
+                                <a href="{{ route('admin.sales.show', $invoice->sale_id) }}" class="text-decoration-none">#{{ $invoice->sale_id }} — {{ $invoice->title }}</a>
+                            @else
+                                <span class="text-muted">{{ $invoice->title ?: 'Standalone' }}</span>
+                            @endif
+                        </td>
                         <td>{{ $invoice->issued_at->format('d M Y') }}</td>
                         <td class="text-end fw-semibold">${{ number_format($invoice->amount, 2) }}</td>
                         <td class="text-end"><a href="{{ route('admin.invoices.show', $invoice) }}" class="btn btn-sm btn-outline-info">View</a></td>

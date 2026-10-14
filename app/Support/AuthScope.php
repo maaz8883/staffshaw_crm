@@ -2,33 +2,91 @@
 
 namespace App\Support;
 
+use App\Models\Brand;
+use App\Models\Role;
+use App\Models\SubTeamHead;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 
 /**
- * Central scoping helper.
- * Admin / Manager  → no restrictions (full data)
- * Agent            → scoped to own company + own team
+ * Central scoping helper for org hierarchy.
+ *
+ * Admin / Manager → full data
+ * Team Head       → headed teams
+ * Sub-Team Head   → own sub-team members / those teams
+ * Project Manager → approved joined teams
+ * Agent / PPC     → own team
  */
 class AuthScope
 {
     public static function isAgent(): bool
     {
-        return auth()->user()?->hasRole('Agent') ?? false;
+        return auth()->user()?->hasRole(Role::AGENT) ?? false;
     }
 
     public static function isManager(): bool
     {
-        return auth()->user()?->hasRole('Manager') ?? false;
+        return auth()->user()?->hasRole(Role::MANAGER) ?? false;
+    }
+
+    public static function isAdmin(): bool
+    {
+        return auth()->user()?->hasRole(Role::ADMIN) ?? false;
+    }
+
+    public static function isAdminOrManager(): bool
+    {
+        return auth()->user()?->hasRole([Role::ADMIN, Role::MANAGER]) ?? false;
     }
 
     public static function isProjectManager(): bool
     {
-        return auth()->user()?->hasRole('Project Manager') ?? false;
+        return auth()->user()?->hasRole(Role::PROJECT_MANAGER) ?? false;
     }
 
-    /** Team IDs the current Project Manager has approved access to (empty collection for non-PMs). */
-    public static function projectManagerTeamIds(): \Illuminate\Support\Collection
+    public static function isPpc(): bool
+    {
+        return auth()->user()?->hasRole(Role::PPC) ?? false;
+    }
+
+    /** Team IDs where the user is Team Head. */
+    public static function headedTeamIds(): Collection
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return collect();
+        }
+
+        return Team::where('team_head_id', $user->id)->pluck('id');
+    }
+
+    /** SubTeamHead row IDs where the user is a sub-team head. */
+    public static function subTeamHeadIds(): Collection
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return collect();
+        }
+
+        return SubTeamHead::where('user_id', $user->id)->pluck('id');
+    }
+
+    /** Team IDs for sub-team head seats. */
+    public static function subHeadTeamIds(): Collection
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return collect();
+        }
+
+        return SubTeamHead::where('user_id', $user->id)->pluck('team_id')->unique()->values();
+    }
+
+    /** Team IDs the current Project Manager has approved access to. */
+    public static function projectManagerTeamIds(): Collection
     {
         if (! self::isProjectManager()) {
             return collect();
@@ -37,73 +95,243 @@ class AuthScope
         return auth()->user()->approvedTeamIds();
     }
 
-    /** Apply company_id scope to any query that has a company_id column */
+    /**
+     * Team IDs the current user may access across modules.
+     */
+    public static function accessibleTeamIds(): Collection
+    {
+        if (self::isAdminOrManager()) {
+            return Team::query()->pluck('id');
+        }
+
+        if (self::isProjectManager()) {
+            return self::projectManagerTeamIds();
+        }
+
+        $headed = self::headedTeamIds();
+        if ($headed->isNotEmpty()) {
+            return $headed->merge(self::subHeadTeamIds())->unique()->values();
+        }
+
+        $subTeams = self::subHeadTeamIds();
+        if ($subTeams->isNotEmpty()) {
+            return $subTeams;
+        }
+
+        $teamId = auth()->user()?->team_id;
+        return $teamId ? collect([(int) $teamId]) : collect();
+    }
+
+    public static function canAccessTeam(int $teamId): bool
+    {
+        if (self::isAdminOrManager()) {
+            return true;
+        }
+
+        return self::accessibleTeamIds()->contains($teamId);
+    }
+
+    /** Apply company_id scope */
     public static function scopeByCompany(Builder $query, string $column = 'company_id'): Builder
     {
-        if (self::isAgent()) {
-            $query->where($column, auth()->user()->company_id);
+        if (self::isAdminOrManager()) {
+            return $query;
+        }
+
+        $user = auth()->user();
+        if ($user?->company_id) {
+            $query->where($column, $user->company_id);
         }
 
         return $query;
     }
 
-    /** Apply team_id scope to any query that has a team_id column */
+    /** Apply team_id scope (column may be teams.id when listing teams) */
     public static function scopeByTeam(Builder $query, string $column = 'team_id'): Builder
     {
-        if (self::isAgent()) {
-            $query->where($column, auth()->user()->team_id);
+        if (self::isAdminOrManager()) {
+            return $query;
         }
 
-        return $query;
+        $ids = self::accessibleTeamIds();
+        if ($ids->isEmpty()) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn($column, $ids);
     }
 
-    /** Scope users — agent sees only teammates */
+    /** Scope users list */
     public static function scopeUsers(Builder $query): Builder
     {
-        if (self::isAgent()) {
-            $query->where('team_id', auth()->user()->team_id)
-                  ->where('company_id', auth()->user()->company_id);
+        if (self::isAdminOrManager()) {
+            return $query;
         }
 
-        return $query;
+        if (self::isProjectManager()) {
+            return $query->whereIn('team_id', self::projectManagerTeamIds());
+        }
+
+        $headed = self::headedTeamIds();
+        if ($headed->isNotEmpty()) {
+            return $query->whereIn('team_id', $headed);
+        }
+
+        $subHeadIds = self::subTeamHeadIds();
+        if ($subHeadIds->isNotEmpty()) {
+            return $query->where(function (Builder $q) use ($subHeadIds) {
+                $q->whereIn('sub_team_head_id', $subHeadIds)
+                    ->orWhere('id', auth()->id());
+            });
+        }
+
+        $user = auth()->user();
+        if ($user?->team_id) {
+            return $query->where('team_id', $user->team_id)
+                ->where('company_id', $user->company_id);
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
-    /** Scope leads — agent sees only leads assigned to their team */
+    /** Scope leads by org seat */
     public static function scopeLeads(Builder $query): Builder
     {
-        if (self::isAgent()) {
-            $query->where('team_id', auth()->user()->team_id);
+        if (self::isAdminOrManager()) {
+            return $query;
         }
 
-        return $query;
+        if (self::isProjectManager()) {
+            $ids = self::projectManagerTeamIds();
+            return $ids->isEmpty()
+                ? $query->whereRaw('1 = 0')
+                : $query->whereIn('team_id', $ids);
+        }
+
+        $headed = self::headedTeamIds();
+        if ($headed->isNotEmpty()) {
+            return $query->whereIn('team_id', $headed);
+        }
+
+        $subHeadIds = self::subTeamHeadIds();
+        if ($subHeadIds->isNotEmpty()) {
+            $memberIds = User::whereIn('sub_team_head_id', $subHeadIds)
+                ->pluck('id')
+                ->push(auth()->id())
+                ->unique()
+                ->values();
+
+            return $query->where(function (Builder $q) use ($memberIds) {
+                $q->whereIn('assigned_to', $memberIds)
+                    ->orWhereIn('team_id', self::subHeadTeamIds());
+            });
+        }
+
+        $user = auth()->user();
+        if ($user?->team_id) {
+            return $query->where(function (Builder $q) use ($user) {
+                $q->where('team_id', $user->team_id)
+                    ->orWhere('assigned_to', $user->id);
+            });
+        }
+
+        return $query->where('assigned_to', auth()->id());
     }
 
-    /** For dropdowns — teams list scoped to agent's own team, or a Project Manager's joined teams */
+    public static function canAccessLead(\App\Models\Lead $lead): bool
+    {
+        if (self::isAdminOrManager()) {
+            return true;
+        }
+
+        return self::scopeLeads(\App\Models\Lead::query()->whereKey($lead->id))->exists();
+    }
+
+    /** Teams for dropdowns */
     public static function teamsForDropdown()
     {
-        $q = \App\Models\Team::query()->orderBy('name');
+        $q = Team::query()->orderBy('name');
 
-        if (self::isAgent()) {
-            $q->where('id', auth()->user()->team_id);
-        } elseif (self::isProjectManager()) {
-            $q->whereIn('id', self::projectManagerTeamIds());
+        if (! self::isAdminOrManager()) {
+            $ids = self::accessibleTeamIds();
+            $q->whereIn('id', $ids->isEmpty() ? [0] : $ids);
         }
 
         return $q->get();
     }
 
-    /** For dropdowns — users scoped to agent's team, or a Project Manager's joined teams */
+    /** Users for dropdowns */
     public static function usersForDropdown()
     {
         $q = User::query()->orderBy('name');
-
-        if (self::isAgent()) {
-            $q->where('team_id', auth()->user()->team_id)
-              ->where('company_id', auth()->user()->company_id);
-        } elseif (self::isProjectManager()) {
-            $q->whereIn('team_id', self::projectManagerTeamIds());
-        }
+        self::scopeUsers($q);
 
         return $q->get();
+    }
+
+    /**
+     * Brand IDs the current user may select.
+     * Admin/Manager → all. Others → brands assigned to their accessible teams.
+     */
+    public static function accessibleBrandIds(): Collection
+    {
+        if (self::isAdminOrManager()) {
+            return Brand::query()->pluck('id');
+        }
+
+        $teamIds = self::accessibleTeamIds();
+        if ($teamIds->isEmpty()) {
+            return collect();
+        }
+
+        return Brand::query()
+            ->whereHas('teams', fn (Builder $q) => $q->whereIn('teams.id', $teamIds))
+            ->pluck('id');
+    }
+
+    public static function canAccessBrand(?int $brandId): bool
+    {
+        if ($brandId === null) {
+            return true;
+        }
+
+        if (self::isAdminOrManager()) {
+            return true;
+        }
+
+        return self::accessibleBrandIds()->contains($brandId);
+    }
+
+    /** Brands for dropdowns (scoped by team assignment). */
+    public static function brandsForDropdown()
+    {
+        $q = Brand::query()->orderBy('name');
+
+        if (! self::isAdminOrManager()) {
+            $ids = self::accessibleBrandIds();
+            $q->whereIn('id', $ids->isEmpty() ? [0] : $ids);
+        }
+
+        return $q->get(['id', 'name']);
+    }
+
+    /**
+     * Validation rule for brand_id fields.
+     *
+     * @return array<int, mixed>
+     */
+    public static function brandIdRule(bool $required = false): array
+    {
+        // Include int + string forms so HTML select values pass Rule::in.
+        $ids = self::accessibleBrandIds()
+            ->flatMap(fn ($id) => [(int) $id, (string) $id])
+            ->unique()
+            ->values()
+            ->all();
+
+        return [
+            $required ? 'required' : 'nullable',
+            Rule::in($ids),
+        ];
     }
 }
