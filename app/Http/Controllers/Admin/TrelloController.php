@@ -654,10 +654,21 @@ class TrelloController extends Controller
             'last_verified_at' => now(),
         ];
 
-        TeamTrelloIntegration::query()->updateOrCreate(
-            ['team_id' => $team->id],
-            $payload
-        );
+        if ($existing && ! $reuse) {
+            // Old values can't be decrypted (other APP_KEY). Eloquent decrypts the original value to
+            // compare it with the new one, which crashes — so forget the unreadable originals and
+            // just write the new encrypted credentials.
+            $existing->setRawAttributes(
+                array_merge($existing->getAttributes(), ['api_key' => null, 'api_token' => null]),
+                true
+            );
+            $existing->fill($payload)->save();
+        } else {
+            TeamTrelloIntegration::query()->updateOrCreate(
+                ['team_id' => $team->id],
+                $payload
+            );
+        }
 
         return redirect()
             ->route('admin.trello.index', ['team' => $team->id])
