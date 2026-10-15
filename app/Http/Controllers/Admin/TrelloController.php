@@ -618,16 +618,18 @@ class TrelloController extends Controller
         $this->assertParentTeam($team);
 
         $existing = $team->trelloIntegration;
+        // Saved credentials that can't be decrypted (other APP_KEY) count as missing: ask for new ones
+        $reuse = $existing?->hasReadableCredentials() ?? false;
         $rules = [
             'account_email' => ['nullable', 'email', 'max:190'],
-            'api_key' => [$existing ? 'nullable' : 'required', 'string', 'max:255'],
-            'api_token' => [$existing ? 'nullable' : 'required', 'string', 'max:255'],
+            'api_key' => [$reuse ? 'nullable' : 'required', 'string', 'max:255'],
+            'api_token' => [$reuse ? 'nullable' : 'required', 'string', 'max:255'],
         ];
 
         $data = $request->validate($rules);
 
-        $apiKey = filled($data['api_key'] ?? null) ? trim($data['api_key']) : $existing?->api_key;
-        $apiToken = filled($data['api_token'] ?? null) ? trim($data['api_token']) : $existing?->api_token;
+        $apiKey = filled($data['api_key'] ?? null) ? trim($data['api_key']) : ($reuse ? $existing->api_key : null);
+        $apiToken = filled($data['api_token'] ?? null) ? trim($data['api_token']) : ($reuse ? $existing->api_token : null);
 
         if (! filled($apiKey) || ! filled($apiToken)) {
             return back()->withInput()->with('error', 'API key and token are required.');

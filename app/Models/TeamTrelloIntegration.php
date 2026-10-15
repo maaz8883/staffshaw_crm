@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -46,9 +47,21 @@ class TeamTrelloIntegration extends Model
 
     public function isReady(): bool
     {
-        return $this->is_active
-            && filled($this->api_key)
-            && filled($this->api_token);
+        return $this->is_active && $this->hasReadableCredentials();
+    }
+
+    /**
+     * Key + token are set and can be decrypted. They can't when the data came from another
+     * install with a different APP_KEY — treat that as "not connected" so the team can
+     * reconnect, instead of crashing the Trello pages.
+     */
+    public function hasReadableCredentials(): bool
+    {
+        try {
+            return filled($this->api_key) && filled($this->api_token);
+        } catch (DecryptException) {
+            return false;
+        }
     }
 
     public function displayAccount(): string
