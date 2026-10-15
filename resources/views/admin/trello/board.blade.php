@@ -105,7 +105,7 @@
         border-color: rgba(0,0,0,.08);
     }
     .trello-list-head {
-        padding: 12px 14px 8px; font-weight: 650; font-size: 13px; color: #f1f2f4;
+        padding: 12px 14px 8px 16px; font-weight: 600; font-size: 14px; color: #f1f2f4;
         display: flex; justify-content: space-between; gap: 8px; flex-shrink: 0;
     }
     .trello-board-stage.is-light .trello-list-head { color: #172b4d; }
@@ -113,11 +113,15 @@
     .trello-list-head .js-list-count { color: rgba(255,255,255,.55) !important; }
     .trello-board-stage.is-light .trello-list-head .text-muted,
     .trello-board-stage.is-light .trello-list-head .js-list-count { color: rgba(0,0,0,.45) !important; }
+    /* Trello: an empty list is just header + "Add a card" (no empty area / message) */
     .trello-list-body {
-        padding: 0 8px 10px; overflow-x: hidden; overflow-y: auto;
-        display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 80px;
+        padding: 0 8px; overflow-x: hidden; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0;
         -webkit-overflow-scrolling: touch;
     }
+    .trello-list-body:has(.trello-card) { padding-bottom: 8px; }
+    /* While a card is dragged, empty lists open a drop area */
+    .trello-board-wrap.is-dragging .trello-list-body { min-height: 44px; padding-bottom: 8px; }
     .trello-list-name { overflow-wrap: anywhere; line-height: 1.35; }
     .trello-card {
         position: relative;
@@ -188,7 +192,7 @@
     .trello-card-cover-color { height: 32px; min-height: 32px; width: 100%; }
     .trello-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
     .trello-label { height: 8px; width: 40px; border-radius: 4px; background: #9fadbc; }
-    .trello-empty { font-size: 12px; color: rgba(255,255,255,.5); padding: 8px 4px; pointer-events: none; }
+    .trello-empty { display: none !important; }
     .trello-board-stage.is-light .trello-empty { color: rgba(0,0,0,.45); }
     .trello-hint { font-size: 12px; }
     .trello-board-empty {
@@ -198,14 +202,14 @@
 
     /* Trello-style add-card composer (list footer) */
     .trello-list-footer {
-        flex-shrink: 0; padding: 0 8px 10px;
+        flex-shrink: 0; padding: 0 8px 8px;
     }
-    .trello-list.is-composing .trello-list-footer { padding-top: 2px; }
+    .trello-list.is-composing .trello-list-footer { padding-top: 0; }
     .trello-add-card-btn {
         display: flex; align-items: center; gap: 8px; width: 100%;
         border: 0; border-radius: 8px; background: transparent;
-        color: rgba(255,255,255,.72); font-size: 14px; font-weight: 500;
-        padding: 8px 10px; cursor: pointer; text-align: left;
+        color: #b6c2cf; font-size: 14px; font-weight: 500;
+        padding: 6px 8px; cursor: pointer; text-align: left;
     }
     .trello-add-card-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
     .trello-board-stage.is-light .trello-add-card-btn { color: rgba(0,0,0,.55); }
@@ -455,8 +459,9 @@
                 filter: '.js-empty-msg, .trello-list-footer, .trello-card-composer',
                 ghostClass: 'sortable-ghost',
                 dragClass: 'sortable-drag',
-                onStart() { dragged = true; panning = false; board.classList.remove('is-panning'); },
+                onStart() { dragged = true; panning = false; board.classList.remove('is-panning'); board.classList.add('is-dragging'); },
                 onEnd(evt) {
+                    board.classList.remove('is-dragging');
                     refreshListUi(evt.from);
                     refreshListUi(evt.to);
                     setTimeout(() => { dragged = false; }, 50);
