@@ -29,14 +29,8 @@ use App\Http\Controllers\Admin\TrelloCardController;
 use App\Http\Controllers\Admin\TrelloController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\TrelloWebhookController;
-use Illuminate\Support\Facades\Artisan;
 
 
-
-Route::get('/clear-all', function () {
-    Artisan::call('optimize:clear');
-    return "All cache cleared!";
-});
 
 Route::get('/', fn () => redirect()->route('admin.login'));
 
