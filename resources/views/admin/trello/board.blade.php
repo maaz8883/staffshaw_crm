@@ -155,20 +155,6 @@
     .trello-board-stage.is-light .trello-card-check { color: #626f86; }
     .trello-board-stage.is-light .trello-card-check:hover { color: #172b4d; }
     .trello-board-stage.is-light .trello-card.is-complete .trello-card-check { color: #1f845a; }
-
-    /* Hover edit (pencil) button, top-right like Trello */
-    .trello-card-edit {
-        position: absolute; top: 6px; right: 6px; z-index: 2;
-        width: 32px; height: 32px; border: 0; border-radius: 50%;
-        display: none; align-items: center; justify-content: center;
-        background: #22272b; color: #b6c2cf; font-size: 14px; cursor: pointer;
-        box-shadow: 0 1px 2px rgba(0,0,0,.35);
-    }
-    .trello-card:hover .trello-card-edit { display: inline-flex; }
-    .trello-card-edit:hover { background: #2c333a; color: #dee4ea; }
-    .trello-board-stage.is-light .trello-card-edit { background: #fff; color: #44546f; }
-    .trello-board-stage.is-light .trello-card-edit:hover { background: #f1f2f4; color: #172b4d; }
-
     /* Badge row: due / description / comments / attachments / checklist + members */
     .trello-card-badges {
         display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px;
@@ -5247,7 +5233,6 @@
         const complete = !!c.dueComplete;
         return `<div class="trello-card${complete ? ' is-complete' : ''}" data-card-id="${escapeHtml(c.id)}" data-pos="${escapeHtml(String(c.pos ?? ''))}" data-activity="${escapeHtml(c.dateLastActivity || '')}">
             ${cover}
-            <button type="button" class="trello-card-edit" title="Open card" aria-label="Open card"><i class="bi bi-pencil"></i></button>
             <div class="trello-card-body">
                 ${labels ? `<div class="trello-labels">${labels}</div>` : ''}
                 <div class="trello-card-name-row">
