@@ -303,6 +303,10 @@ class TrelloController extends Controller
             $row->secret = Str::random(40);
         }
         $row->active = true;
+        // Save before asking Trello: while creating the webhook Trello immediately sends a HEAD
+        // to the callback URL, and TrelloWebhookController only answers 200 for a secret it can
+        // find in the database. Saving afterwards made every webhook creation fail.
+        $row->save();
 
         $callback = url('/webhooks/trello/'.$team->id.'/'.$row->secret);
 
