@@ -67,6 +67,8 @@ class TrelloBoardChanged implements ShouldBroadcastNow
             'type' => (string) ($action['type'] ?? ''),
             'date' => $action['date'] ?? null,
             'memberCreator' => $pick($creator, ['id', 'fullName', 'username', 'initials']),
+            // Real CRM user when the change came from the CRM (shared Trello account)
+            'crm_user' => $pick($action['crm_user'] ?? null, ['id', 'name']),
             'data' => array_filter([
                 'text' => isset($data['text']) ? Str::limit((string) $data['text'], 6000, '') : null,
                 'card' => $pick($data['card'] ?? null, ['id', 'name', 'idList', 'closed', 'due', 'dueComplete', 'pos']),

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Events\TrelloBoardChanged;
+use App\Models\TeamTrelloIntegration;
 use App\Models\TrelloBoardWebhook;
+use App\Services\Trello\TrelloActivityRecorder;
 use App\Support\TrelloLive;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -39,7 +41,7 @@ class TrelloWebhookController extends Controller
                 broadcast(new TrelloBoardChanged(
                     (int) $hook->team_id,
                     $boardId,
-                    is_array($payload['action'] ?? null) ? $payload['action'] : []
+                    $this->withCrmUser(is_array($payload['action'] ?? null) ? $payload['action'] : [], (int) $hook->team_id)
                 ));
             } catch (\Throwable $e) {
                 report($e);
@@ -47,6 +49,40 @@ class TrelloWebhookController extends Controller
         }
 
         return response('OK', 200);
+    }
+
+    /**
+     * Add `crm_user` when the change was made through the CRM, so other open boards show the
+     * real person straight away instead of the team's shared Trello account.
+     *
+     * @param  array<string, mixed>  $action
+     * @return array<string, mixed>
+     */
+    private function withCrmUser(array $action, int $teamId): array
+    {
+        $cardId = (string) ($action['data']['card']['id'] ?? '');
+        if ($action === [] || $cardId === '') {
+            return $action;
+        }
+        $shared = TeamTrelloIntegration::query()->where('team_id', $teamId)->value('trello_member_id');
+        $creator = (string) ($action['memberCreator']['id'] ?? $action['idMemberCreator'] ?? '');
+        if ($shared && $creator !== $shared) {
+            return $action; // someone's own Trello account
+        }
+
+        $attributed = TrelloActivityRecorder::attribute([$action], $cardId, $shared)[0];
+        $tracked = in_array($action['type'] ?? '', [
+            'commentCard', 'createCard', 'updateCard', 'addMemberToCard', 'removeMemberFromCard',
+            'addChecklistToCard', 'removeChecklistFromCard', 'createCheckItem', 'updateCheckItemStateOnCard',
+            'addAttachmentToCard', 'deleteAttachmentFromCard',
+        ], true);
+        if ($tracked && empty($attributed['crm_user'])) {
+            // Trello can be a hair faster than the CRM writing its log row — look once more
+            usleep(800000);
+            $attributed = TrelloActivityRecorder::attribute([$action], $cardId, $shared)[0];
+        }
+
+        return $attributed;
     }
 
     /** @param array<string, mixed> $payload */

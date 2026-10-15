@@ -39,6 +39,25 @@ class TrelloActivityRecorder
             'user_agent' => $request->userAgent(),
         ];
 
+        // Write "who did it" right away (one cheap insert, no Trello calls): Trello's webhook for
+        // this change reaches other open boards within a second or two, and they need the real
+        // name by then. Names / description are filled in after the response.
+        try {
+            $base['log_id'] = TrelloActivityLog::create([
+                'user_id' => $user->id,
+                'team_id' => $team->id,
+                'board_id' => $ctx['board_id'] ?? null,
+                'card_id' => $ctx['card_id'] ?? null,
+                'card_name' => $ctx['card_name'] ?? null,
+                'action' => $action,
+                'description' => str_replace('_', ' ', $action),
+                'trello_action_id' => $ctx['trello_action_id'] ?? null,
+                'occurred_at' => $base['occurred_at'],
+            ])->id;
+        } catch (\Throwable $e) {
+            Log::warning('Unable to write Trello activity log.', ['action' => $action, 'message' => $e->getMessage()]);
+        }
+
         dispatch(function () use ($team, $action, $ctx, $base) {
             self::write($team, $action, $ctx, $base);
         })->afterResponse();
@@ -113,7 +132,7 @@ class TrelloActivityRecorder
                 'emoji' => (string) ($ctx['emoji'] ?? ''),
             ]);
 
-            $log = TrelloActivityLog::create([
+            $fields = [
                 'user_id' => $base['user_id'],
                 'team_id' => $base['team_id'],
                 'board_id' => $boardId ?: null,
@@ -127,7 +146,14 @@ class TrelloActivityRecorder
                     'list_name' => $listName ?: null,
                 ]) ?: null,
                 'occurred_at' => $base['occurred_at'],
-            ]);
+            ];
+            // Complete the row written in record(); create it if that insert failed
+            $log = ! empty($base['log_id']) ? TrelloActivityLog::find($base['log_id']) : null;
+            if ($log) {
+                $log->update($fields);
+            } else {
+                $log = TrelloActivityLog::create($fields);
+            }
 
             // Same line on the general Activity Logs page
             UserActivityLog::create([

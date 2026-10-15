@@ -5535,6 +5535,7 @@
                     feeds().forEach((f) => f.forEach((a) => { if (a === temp || (isTempId(a.id) && a.data?.text === data.text)) a.id = action.id; }));
                 } else {
                     const entry = { id: action.id, type, date: action.date, data: { text: data.text || '' }, memberCreator: action.memberCreator || {} };
+                    if (action.crm_user) entry.crm_user = action.crm_user; // real author, not the shared Trello account
                     feeds().forEach((f) => f.unshift({ ...entry }));
                 }
                 if (!descEditing) rerenderCard();
