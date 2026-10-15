@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamTrelloIntegration;
+use App\Services\Trello\TrelloActivityRecorder;
 use App\Services\Trello\TrelloApiClient;
 use App\Support\AuthScope;
 use Illuminate\Http\JsonResponse;
@@ -95,8 +96,9 @@ class TrelloCardController extends Controller
         return response()->json([
             'ok' => true,
             'card' => $card,
-            'comments' => $workspace['comments'],
-            'activity' => $workspace['activity'] ?? $workspace['comments'],
+            // Real CRM user on actions done through the CRM (team shares one Trello account)
+            'comments' => TrelloActivityRecorder::attribute($workspace['comments'], $cardId, $meId),
+            'activity' => TrelloActivityRecorder::attribute($workspace['activity'] ?? $workspace['comments'], $cardId, $meId),
             'reactions' => $workspace['reactions'] ?? [],
             'checklists' => $workspace['checklists'],
             'attachments' => $attachments,
@@ -134,6 +136,7 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'list_created', ['board_id' => $boardId, 'name' => $name]);
 
         return response()->json([
             'ok' => true,
@@ -174,6 +177,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'card_created', [
+            'card_id' => $card['id'] ?? null,
+            'card_name' => $card['name'] ?? $name,
+            'list_id' => $data['list_id'],
+        ]);
 
         $cover = is_array($card['cover'] ?? null) ? $card['cover'] : null;
         $refs = TrelloApiClient::cardCoverRefs($card, 300);
@@ -252,6 +260,27 @@ class TrelloCardController extends Controller
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
 
+        // Who changed what (Watch on/off is personal noise, not logged)
+        $log = fn (string $action, array $ctx = []) => TrelloActivityRecorder::record($team, $action, ['card_id' => $cardId] + $ctx);
+        if (array_key_exists('name', $payload)) {
+            $log('card_renamed', ['card_name' => $payload['name']]);
+        }
+        if (array_key_exists('desc', $payload)) {
+            $log('desc_updated');
+        }
+        if (array_key_exists('idList', $payload)) {
+            $log('card_moved', ['list_id' => $payload['idList']]);
+        }
+        if (array_key_exists('closed', $payload)) {
+            $log($payload['closed'] ? 'card_archived' : 'card_unarchived');
+        }
+        if (array_key_exists('due', $payload)) {
+            // The dates panel also sends dueComplete; the due date is the change worth logging
+            $log($payload['due'] !== '' ? 'due_set' : 'due_removed', ['due' => $payload['due'] ?: null]);
+        } elseif (array_key_exists('dueComplete', $payload)) {
+            $log($payload['dueComplete'] ? 'card_completed' : 'card_incomplete');
+        }
+
         return response()->json(['ok' => true, 'card' => $card]);
     }
 
@@ -265,11 +294,17 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'comment_added', [
+            'card_id' => $cardId,
+            'text' => $data['text'],
+            // Exact link to the Trello comment, so the card activity can show the real author
+            'trello_action_id' => $action['id'] ?? null,
+        ]);
 
         return response()->json(['ok' => true, 'comment' => $action]);
     }
 
-    public function deleteComment(Team $team, string $actionId): JsonResponse
+    public function deleteComment(Request $request, Team $team, string $actionId): JsonResponse
     {
         $client = $this->clientFor($team);
 
@@ -278,6 +313,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        // card_id comes from the page: once deleted, Trello can't tell which card the comment was on
+        TrelloActivityRecorder::record($team, 'comment_deleted', [
+            'card_id' => $request->query('card_id'),
+            'trello_action_id' => $actionId,
+        ]);
 
         return response()->json(['ok' => true]);
     }
@@ -292,6 +332,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'comment_edited', [
+            'card_id' => $action['data']['card']['id'] ?? null,
+            'comment_id' => $actionId,
+            'text' => $data['text'],
+        ]);
 
         return response()->json(['ok' => true, 'comment' => $action]);
     }
@@ -309,6 +354,10 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'attachment_added', [
+            'card_id' => $cardId,
+            'name' => $att['name'] ?? $data['name'] ?? $data['url'],
+        ]);
 
         return response()->json(['ok' => true, 'attachment' => $att]);
     }
@@ -325,6 +374,7 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'reaction_added', ['comment_id' => $actionId, 'emoji' => $data['native']]);
 
         return response()->json(['ok' => true, 'reaction' => $reaction]);
     }
@@ -346,6 +396,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, $data['active'] ? 'label_added' : 'label_removed', [
+            'card_id' => $cardId,
+            'label_id' => $data['label_id'],
+            'board_id' => $request->query('board_id'),
+        ]);
 
         return response()->json(['ok' => true]);
     }
@@ -365,6 +420,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'label_created', [
+            'card_id' => $cardId,
+            'board_id' => $data['board_id'],
+            'name' => ($data['name'] ?? '') !== '' ? $data['name'] : $data['color'],
+        ]);
 
         return response()->json(['ok' => true, 'label' => $label]);
     }
@@ -393,6 +453,10 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'label_updated', [
+            'board_id' => $data['board_id'] ?? null,
+            'name' => ($label['name'] ?? '') !== '' ? $label['name'] : ($label['color'] ?? 'label'),
+        ]);
 
         return response()->json(['ok' => true, 'label' => $label]);
     }
@@ -414,6 +478,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, $data['active'] ? 'member_added' : 'member_removed', [
+            'card_id' => $cardId,
+            'member_id' => $data['member_id'],
+            'board_id' => $request->query('board_id'),
+        ]);
 
         return response()->json(['ok' => true]);
     }
@@ -431,11 +500,12 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'checklist_added', ['card_id' => $cardId, 'name' => $data['name']]);
 
         return response()->json(['ok' => true, 'checklist' => $checklist]);
     }
 
-    public function deleteChecklist(Team $team, string $checklistId): JsonResponse
+    public function deleteChecklist(Request $request, Team $team, string $checklistId): JsonResponse
     {
         $client = $this->clientFor($team);
 
@@ -444,6 +514,8 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        // Gone from Trello now, so the card comes from the page
+        TrelloActivityRecorder::record($team, 'checklist_deleted', ['card_id' => $request->query('card_id')]);
 
         return response()->json(['ok' => true]);
     }
@@ -458,6 +530,11 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'checkitem_added', [
+            'card_id' => $request->query('card_id'),
+            'checklist_id' => $checklistId,
+            'name' => $data['name'],
+        ]);
 
         return response()->json(['ok' => true, 'item' => $item]);
     }
@@ -472,11 +549,15 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, $data['state'] === 'complete' ? 'checkitem_completed' : 'checkitem_uncompleted', [
+            'card_id' => $cardId,
+            'name' => $item['name'] ?? 'an item',
+        ]);
 
         return response()->json(['ok' => true, 'item' => $item]);
     }
 
-    public function deleteCheckItem(Team $team, string $checklistId, string $checkItemId): JsonResponse
+    public function deleteCheckItem(Request $request, Team $team, string $checklistId, string $checkItemId): JsonResponse
     {
         $client = $this->clientFor($team);
 
@@ -485,6 +566,10 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'checkitem_deleted', [
+            'card_id' => $request->query('card_id'),
+            'checklist_id' => $checklistId,
+        ]);
 
         return response()->json(['ok' => true]);
     }
@@ -502,6 +587,10 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'attachment_added', [
+            'card_id' => $cardId,
+            'name' => $att['name'] ?? $file->getClientOriginalName(),
+        ]);
 
         return response()->json(['ok' => true, 'attachment' => $att]);
     }
@@ -518,6 +607,7 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'attachment_renamed', ['card_id' => $cardId, 'name' => $data['name']]);
 
         return response()->json(['ok' => true, 'attachment' => $att]);
     }
@@ -551,6 +641,8 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        $removed = $request->boolean('remove') || (empty($data['color']) && empty($data['size']) && $attachmentId === null);
+        TrelloActivityRecorder::record($team, $removed ? 'cover_removed' : 'cover_changed', ['card_id' => $cardId]);
 
         return response()->json(['ok' => true, 'card' => $card]);
     }
@@ -564,6 +656,7 @@ class TrelloCardController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+        TrelloActivityRecorder::record($team, 'attachment_deleted', ['card_id' => $cardId]);
 
         return response()->json(['ok' => true]);
     }

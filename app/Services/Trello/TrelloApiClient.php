@@ -624,6 +624,45 @@ class TrelloApiClient
     }
 
     /** @return list<array<string, mixed>> */
+    public function boardListsCached(string $boardId): array
+    {
+        return $this->cachedBoardMeta($boardId)['lists'];
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function boardLabelsCached(string $boardId): array
+    {
+        return $this->cachedBoardMeta($boardId)['board_labels'];
+    }
+
+    /** Name / list / board of a card (activity log descriptions). @return array<string, mixed> */
+    public function cardBasics(string $cardId): array
+    {
+        return $this->get('cards/'.$cardId, [
+            'fields' => 'name,idList,idBoard',
+            'board' => 'true',
+            'board_fields' => 'name',
+        ]);
+    }
+
+    /** Card a checklist belongs to. */
+    public function checklistCardId(string $checklistId): ?string
+    {
+        $checklist = $this->get('checklists/'.$checklistId, ['fields' => 'idCard']);
+
+        return isset($checklist['idCard']) ? (string) $checklist['idCard'] : null;
+    }
+
+    /** Card a comment (action) is on. */
+    public function actionCardId(string $actionId): ?string
+    {
+        $action = $this->get('actions/'.$actionId, ['fields' => 'data']);
+        $id = $action['data']['card']['id'] ?? null;
+
+        return is_string($id) ? $id : null;
+    }
+
+    /** @return list<array<string, mixed>> */
     public function boardMembers(string $boardId): array
     {
         $members = $this->get('boards/'.$boardId.'/members', [

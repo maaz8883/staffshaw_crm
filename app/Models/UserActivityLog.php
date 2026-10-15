@@ -41,6 +41,7 @@ class UserActivityLog extends Model
     public const TYPE_BACKUP_DELETED = 'backup_deleted';
     public const TYPE_INVOICE_CREATED = 'invoice_created';
     public const TYPE_INVOICE_VOIDED  = 'invoice_voided';
+    public const TYPE_TRELLO = 'trello';
 
     public function user(): BelongsTo
     {
@@ -75,6 +76,7 @@ class UserActivityLog extends Model
             self::TYPE_BACKUP_DELETED => 'danger',
             self::TYPE_INVOICE_CREATED => 'primary',
             self::TYPE_INVOICE_VOIDED  => 'warning',
+            self::TYPE_TRELLO          => 'info',
             default                   => 'light',
         };
     }

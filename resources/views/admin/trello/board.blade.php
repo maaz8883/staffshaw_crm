@@ -295,6 +295,8 @@
          data-team-id="{{ $team->id }}"
          data-board-id="{{ $board['id'] }}"
          data-me-id="{{ $integration->trello_member_id ?? '' }}"
+         data-crm-user-id="{{ auth()->id() }}"
+         data-crm-user-name="{{ auth()->user()?->name }}"
          data-csrf="{{ csrf_token() }}"
          data-live-url="{{ url('admin/trello/teams/'.$team->id.'/boards/'.$board['id'].'/live') }}"
          data-live-ensure-url="{{ url('admin/trello/teams/'.$team->id.'/boards/'.$board['id'].'/live/ensure') }}"
@@ -377,6 +379,8 @@
     const tickUrl = board.dataset.tickUrl;
     const boardId = board.dataset.boardId || '';
     let meId = board.dataset.meId || '';
+    // Logged-in CRM user (the Trello account is shared by the whole team)
+    const crmUser = { id: String(board.dataset.crmUserId || ''), name: board.dataset.crmUserName || 'You' };
     const moveTpl = board.dataset.moveUrlTemplate;
     const cardTpl = board.dataset.cardUrlTemplate;
     const createCardUrl = board.dataset.createCardUrl || '';
@@ -469,15 +473,16 @@
         return 'bottom';
     }
 
-    async function persistMove(cardEl, listEl) {
+    async function persistMove(cardEl, listEl, fromListEl = null) {
         const cardId = cardEl.dataset.cardId;
         const listId = listEl.dataset.listId;
         if (!cardId || !listId) return;
         const pos = resolvePos(listEl, cardEl);
         cardEl.classList.add('is-saving');
         try {
+            // from_list_id lets the activity log tell a real move from a reorder in the same list
             const data = await api(moveTpl.replace('__CARD__', encodeURIComponent(cardId)), {
-                method: 'POST', json: { list_id: listId, pos }
+                method: 'POST', json: { list_id: listId, pos, from_list_id: fromListEl?.dataset.listId || null }
             });
             if (data.card?.pos !== undefined) cardEl.dataset.pos = String(data.card.pos);
         } catch (err) {
@@ -506,7 +511,7 @@
                 refreshListUi(evt.to);
                 setTimeout(() => { dragged = false; }, 50);
                 if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
-                persistMove(evt.item, evt.to);
+                persistMove(evt.item, evt.to, evt.from);
             },
         });
     }
@@ -1945,7 +1950,8 @@
     }
 
     function activityWho(act) {
-        return act.memberCreator?.fullName || act.memberCreator?.username || 'User';
+        // The team shares one Trello account: prefer the CRM user who actually did it
+        return act.crm_user?.name || act.memberCreator?.fullName || act.memberCreator?.username || 'User';
     }
 
     function syncLabelsColorblind() {
@@ -2360,7 +2366,10 @@
         if (type === 'commentCard') {
             const text = act.data?.text || '';
             const authorId = act.memberCreator?.id || '';
-            const isMine = !!(meId && authorId && meId === authorId);
+            // Known CRM author → only that user may edit/delete; otherwise fall back to the Trello account
+            const isMine = act.crm_user
+                ? String(act.crm_user.id) === crmUser.id
+                : !!(meId && authorId && meId === authorId);
             const linkMatch = String(text).match(/https?:\/\/[^\s<>"')\]]+/i);
             const linkUrl = linkMatch ? linkMatch[0].replace(/[.,;:!?)]+$/, '') : '';
             const chips = renderReactionChips(act.id);
@@ -3881,7 +3890,7 @@
         await optimistic(() => {
             if (Array.isArray(state.activity)) state.activity = state.activity.filter((a) => a.id !== actionId);
             if (Array.isArray(state.comments)) state.comments = state.comments.filter((a) => a.id !== actionId);
-        }, () => api(`/admin/trello/teams/${teamId}/comments/${actionId}`, { method: 'DELETE' }), 'Could not delete comment');
+        }, () => api(`/admin/trello/teams/${teamId}/comments/${actionId}?card_id=${encodeURIComponent(currentCardId || "")}`, { method: 'DELETE' }), 'Could not delete comment');
     });
 
     // Toolbar dropdowns (description + comment editors)
@@ -4772,6 +4781,7 @@
                     date: new Date().toISOString(),
                     data: { text },
                     memberCreator: meMember(),
+                    crm_user: crmUser,
                 };
                 if (Array.isArray(state.activity)) state.activity.unshift(temp);
                 if (Array.isArray(state.comments)) state.comments.unshift({ ...temp });
@@ -4814,7 +4824,7 @@
         if (isTempId(id)) return stillSaving();
         await optimistic(() => {
             state.checklists = (state.checklists || []).filter((cl) => cl.id !== id);
-        }, () => api(`/admin/trello/teams/${teamId}/checklists/${id}`, { method: 'DELETE' }), 'Could not delete checklist');
+        }, () => api(`/admin/trello/teams/${teamId}/checklists/${id}?card_id=${encodeURIComponent(currentCardId || "")}`, { method: 'DELETE' }), 'Could not delete checklist');
     });
 
     // "Add an item": stays open after adding so several items can be typed in a row (Trello).
@@ -4839,7 +4849,7 @@
             const maxPos = Math.max(0, ...(cl.checkItems || []).map((it) => Number(it.pos) || 0));
             cl.checkItems = [...(cl.checkItems || []), { id: 'tmp-' + Date.now(), name, state: 'incomplete', pos: maxPos + 1024 }];
             setTimeout(reopen, 0);
-        }, () => api(`/admin/trello/teams/${teamId}/checklists/${checklistId}/items`, { method: 'POST', json: { name } }),
+        }, () => api(`/admin/trello/teams/${teamId}/checklists/${checklistId}/items?card_id=${encodeURIComponent(currentCardId || "")}`, { method: 'POST', json: { name } }),
         'Could not add checklist item');
     }
 
@@ -5167,7 +5177,7 @@
             await optimistic(() => {
                 const cl = (state.checklists || []).find((x) => x.id === clId);
                 if (cl) cl.checkItems = (cl.checkItems || []).filter((it) => it.id !== itemId);
-            }, () => api(`/admin/trello/teams/${teamId}/checklists/${clId}/items/${itemId}`, { method: 'DELETE' }),
+            }, () => api(`/admin/trello/teams/${teamId}/checklists/${clId}/items/${itemId}?card_id=${encodeURIComponent(currentCardId || "")}`, { method: 'DELETE' }),
             'Could not delete checklist item');
             return;
         }

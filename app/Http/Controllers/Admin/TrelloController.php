@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamTrelloIntegration;
 use App\Models\TrelloBoardWebhook;
+use App\Services\Trello\TrelloActivityRecorder;
 use App\Services\Trello\TrelloApiClient;
 use App\Services\Trello\TrelloCardToClientSync;
 use App\Support\AuthScope;
@@ -379,6 +380,7 @@ class TrelloController extends Controller
         $data = $request->validate([
             'list_id' => ['required', 'string', 'max:64'],
             'board_id' => ['nullable', 'string', 'max:64'],
+            'from_list_id' => ['nullable', 'string', 'max:64'],
             'pos' => ['nullable'],
         ]);
 
@@ -394,6 +396,14 @@ class TrelloController extends Controller
                 ->moveCard($cardId, $data['list_id'], $pos, $data['board_id'] ?? null);
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+        // Reordering inside the same list isn't worth an activity line
+        if (($data['from_list_id'] ?? null) !== $data['list_id'] || ! empty($data['board_id'])) {
+            TrelloActivityRecorder::record($team, 'card_moved', [
+                'card_id' => $cardId,
+                'list_id' => $data['list_id'],
+                'board_id' => $data['board_id'] ?? null,
+            ]);
         }
 
         return response()->json([

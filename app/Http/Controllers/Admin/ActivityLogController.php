@@ -27,6 +27,7 @@ class ActivityLogController extends Controller
             UserActivityLog::TYPE_OTP_UPDATED,
             UserActivityLog::TYPE_BACKUP_CREATED,
             UserActivityLog::TYPE_BACKUP_DELETED,
+            UserActivityLog::TYPE_TRELLO,
         ];
 
         return view('admin.activity_logs.index', compact('users', 'types'));
