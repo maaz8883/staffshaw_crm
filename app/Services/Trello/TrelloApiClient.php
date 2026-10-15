@@ -682,6 +682,20 @@ class TrelloApiClient
      * @param  array{pos?: string|float|int, urlSource?: string}  $opts
      * @return array<string, mixed>
      */
+    /** New list at the end of the board ("Add another list"). @return array<string, mixed> */
+    public function createList(string $boardId, string $name): array
+    {
+        $list = $this->post('lists', [
+            'idBoard' => $boardId,
+            'name' => $name,
+            'pos' => 'bottom',
+        ]);
+        // Card modal "move to list" reads lists from the cached board meta
+        Cache::forget('trello.board.meta.'.$boardId);
+
+        return $list;
+    }
+
     public function createCard(string $listId, string $name, array $opts = []): array
     {
         $payload = [

@@ -215,6 +215,34 @@
     .trello-board-stage.is-light .trello-add-card-btn { color: rgba(0,0,0,.55); }
     .trello-board-stage.is-light .trello-add-card-btn:hover { background: rgba(0,0,0,.06); color: #172b4d; }
     .trello-add-card-btn .plus { font-size: 18px; line-height: 1; font-weight: 400; }
+    /* "Add another list" tile */
+    .trello-add-list {
+        flex: 0 0 280px; max-width: 280px; border-radius: 12px;
+        background: rgba(255,255,255,.24);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .trello-add-list:hover { background: rgba(255,255,255,.32); }
+    .trello-add-list.is-open { background: rgba(16, 18, 22, .9); padding: 8px; }
+    .trello-board-stage.is-light .trello-add-list { background: rgba(9,30,66,.12); }
+    .trello-board-stage.is-light .trello-add-list.is-open { background: rgba(255,255,255,.9); }
+    .trello-add-list-btn {
+        display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent;
+        color: #fff; font-size: 14px; font-weight: 600; padding: 12px; cursor: pointer; text-align: left;
+        border-radius: 12px;
+    }
+    .trello-add-list-btn .plus { font-size: 18px; line-height: 1; font-weight: 400; }
+    .trello-board-stage.is-light .trello-add-list-btn { color: #172b4d; }
+    .trello-add-list-form { display: none; }
+    .trello-add-list.is-open .trello-add-list-btn { display: none; }
+    .trello-add-list.is-open .trello-add-list-form { display: block; }
+    .trello-add-list-input {
+        width: 100%; box-sizing: border-box; height: 36px; padding: 6px 12px;
+        border: 0; border-radius: 4px; outline: none;
+        background: #22272b; color: #f1f2f4; font-size: 14px; font-weight: 600;
+        box-shadow: inset 0 0 0 2px #85b8ff;
+    }
+    .trello-add-list-input::placeholder { color: #8c9bab; font-weight: 400; }
+    .trello-board-stage.is-light .trello-add-list-input { background: #fff; color: #172b4d; }
     .trello-card-composer { display: none; }
     .trello-list.is-composing .trello-card-composer { display: block; }
     .trello-list.is-composing .trello-add-card-btn { display: none; }
@@ -262,9 +290,7 @@
     </div>
 </div>
 
-@if(empty($lists))
-    <div class="trello-board-empty">This board has no open lists.</div>
-@else
+    {{-- Rendered even for an empty board, so its first list can be added --}}
     <div class="trello-board-wrap" id="trello-board"
          data-team-id="{{ $team->id }}"
          data-board-id="{{ $board['id'] }}"
@@ -276,6 +302,7 @@
          data-move-url-template="{{ url('admin/trello/teams/'.$team->id.'/cards/__CARD__/move') }}"
          data-card-url-template="{{ url('admin/trello/teams/'.$team->id.'/cards/__CARD__') }}"
          data-create-card-url="{{ url('admin/trello/teams/'.$team->id.'/cards') }}"
+         data-create-list-url="{{ url('admin/trello/teams/'.$team->id.'/boards/'.$board['id'].'/lists') }}"
          @if(config('broadcasting.default') === 'pusher' && config('broadcasting.connections.pusher.key'))
          data-pusher-key="{{ config('broadcasting.connections.pusher.key') }}"
          data-pusher-cluster="{{ config('broadcasting.connections.pusher.options.cluster', 'mt1') }}"
@@ -307,8 +334,20 @@
                 </div>
             </div>
         @endforeach
+        {{-- Trello "Add another list" (new lists are inserted before this) --}}
+        <div class="trello-add-list" id="trello-add-list">
+            <button type="button" class="trello-add-list-btn js-add-list-open">
+                <span class="plus" aria-hidden="true">+</span> Add another list
+            </button>
+            <div class="trello-add-list-form">
+                <input type="text" class="trello-add-list-input js-add-list-input" placeholder="Enter list name…" maxlength="512" autocomplete="off">
+                <div class="trello-card-composer-actions">
+                    <button type="button" class="trello-card-composer-submit js-add-list-submit">Add list</button>
+                    <button type="button" class="trello-card-composer-cancel js-add-list-cancel" aria-label="Cancel">&times;</button>
+                </div>
+            </div>
+        </div>
     </div>
-@endif
 </div>{{-- /.trello-board-stage --}}
 
 @include('admin.trello._card_modal')
@@ -450,27 +489,114 @@
     }
 
     // ── Drag & drop ─────────────────────────────────────────────
-    if (typeof Sortable !== 'undefined') {
-        board.querySelectorAll('.js-card-list').forEach((listEl) => {
-            Sortable.create(listEl, {
-                group: 'trello-cards',
-                animation: 150,
-                draggable: '.trello-card',
-                filter: '.js-empty-msg, .trello-list-footer, .trello-card-composer',
-                ghostClass: 'sortable-ghost',
-                dragClass: 'sortable-drag',
-                onStart() { dragged = true; panning = false; board.classList.remove('is-panning'); board.classList.add('is-dragging'); },
-                onEnd(evt) {
-                    board.classList.remove('is-dragging');
-                    refreshListUi(evt.from);
-                    refreshListUi(evt.to);
-                    setTimeout(() => { dragged = false; }, 50);
-                    if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
-                    persistMove(evt.item, evt.to);
-                },
-            });
+    /** Cards in a list can be dragged within it and to other lists (also used for newly added lists). */
+    function initCardSortable(listEl) {
+        if (typeof Sortable === 'undefined' || !listEl) return;
+        Sortable.create(listEl, {
+            group: 'trello-cards',
+            animation: 150,
+            draggable: '.trello-card',
+            filter: '.js-empty-msg, .trello-list-footer, .trello-card-composer',
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            onStart() { dragged = true; panning = false; board.classList.remove('is-panning'); board.classList.add('is-dragging'); },
+            onEnd(evt) {
+                board.classList.remove('is-dragging');
+                refreshListUi(evt.from);
+                refreshListUi(evt.to);
+                setTimeout(() => { dragged = false; }, 50);
+                if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+                persistMove(evt.item, evt.to);
+            },
         });
     }
+    board.querySelectorAll('.js-card-list').forEach(initCardSortable);
+
+    // ── "Add another list" (Trello-style) ───────────────────────
+    const addListTile = document.getElementById('trello-add-list');
+    const createListUrl = board.dataset.createListUrl || '';
+    // Lists we just created: a live snapshot taken before they existed must not trigger a reload
+    const freshListIds = new Set();
+
+    function listHtml(list) {
+        const id = escapeHtml(list.id);
+        return `<div class="trello-list" data-list-id="${id}">
+            <div class="trello-list-head">
+                <span class="trello-list-name">${escapeHtml(list.name)}</span>
+                <span class="text-muted js-list-count">0</span>
+            </div>
+            <div class="trello-list-body js-card-list" data-list-id="${id}">
+                <div class="trello-empty js-empty-msg">No cards — drop here</div>
+            </div>
+            <div class="trello-list-footer">
+                <button type="button" class="trello-add-card-btn js-add-card-open">
+                    <span class="plus" aria-hidden="true">+</span> Add a card
+                </button>
+                <div class="trello-card-composer">
+                    <textarea class="trello-card-composer-input js-add-card-input" rows="2" placeholder="Enter a title or paste a link"></textarea>
+                    <div class="trello-card-composer-actions">
+                        <button type="button" class="trello-card-composer-submit js-add-card-submit">Add card</button>
+                        <button type="button" class="trello-card-composer-cancel js-add-card-cancel" aria-label="Cancel">&times;</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function openAddList() {
+        if (!addListTile) return;
+        closeAddCardComposer();
+        addListTile.classList.add('is-open');
+        const input = addListTile.querySelector('.js-add-list-input');
+        input?.focus();
+    }
+
+    function closeAddList() {
+        if (!addListTile) return;
+        addListTile.classList.remove('is-open');
+        const input = addListTile.querySelector('.js-add-list-input');
+        if (input) input.value = '';
+    }
+
+    async function submitAddList() {
+        const input = addListTile?.querySelector('.js-add-list-input');
+        const btn = addListTile?.querySelector('.js-add-list-submit');
+        const name = (input?.value || '').trim();
+        if (!name) { input?.focus(); return; }
+        if (!createListUrl || btn?.disabled) return;
+        btn.disabled = true;
+        try {
+            const data = await api(createListUrl, { method: 'POST', json: { name } });
+            const list = data.list || {};
+            if (list.id && !board.querySelector(`.trello-list[data-list-id="${list.id}"]`)) {
+                freshListIds.add(list.id);
+                addListTile.insertAdjacentHTML('beforebegin', listHtml(list));
+                initCardSortable(board.querySelector(`.js-card-list[data-list-id="${list.id}"]`));
+            }
+            // Trello keeps the form open for the next list
+            input.value = '';
+            input.focus();
+            addListTile.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
+        } catch (err) {
+            toastError(err.message || 'Could not add list');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    addListTile?.addEventListener('click', (e) => {
+        if (e.target.closest('.js-add-list-open')) openAddList();
+        else if (e.target.closest('.js-add-list-cancel')) closeAddList();
+        else if (e.target.closest('.js-add-list-submit')) submitAddList();
+    });
+    addListTile?.querySelector('.js-add-list-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); submitAddList(); }
+        if (e.key === 'Escape') { e.preventDefault(); closeAddList(); }
+    });
+    // Click anywhere else closes it (like Trello)
+    document.addEventListener('mousedown', (e) => {
+        if (addListTile?.classList.contains('is-open') && !e.target.closest('#trello-add-list')) closeAddList();
+    });
 
     // ── Add card composer (Trello-style) ─────────────────────────
     function closeAddCardComposer(listEl) {
@@ -587,7 +713,7 @@
     function canStartPan(target) {
         if (!target || dragged) return false;
         // Don't steal card drag / buttons / links / composer
-        if (target.closest('.trello-card, a, button, input, textarea, select, .tc-icon-btn, .trello-list-footer')) return false;
+        if (target.closest('.trello-card, a, button, input, textarea, select, .tc-icon-btn, .trello-list-footer, .trello-add-list')) return false;
         return true;
     }
 
@@ -5253,8 +5379,11 @@
     }
 
     function applyLiveSnapshot(data) {
-        const remoteLists = (data.lists || []).map((l) => l.id).filter(Boolean).sort().join(',');
-        const localLists = [...board.querySelectorAll('.trello-list')].map((l) => l.dataset.listId).filter(Boolean).sort().join(',');
+        const remoteIds = (data.lists || []).map((l) => l.id).filter(Boolean);
+        remoteIds.forEach((id) => freshListIds.delete(id)); // Trello knows it now
+        const remoteLists = remoteIds.sort().join(',');
+        const localLists = [...board.querySelectorAll('.trello-list')].map((l) => l.dataset.listId)
+            .filter((id) => id && !freshListIds.has(id)).sort().join(',');
         if (remoteLists !== localLists) {
             window.location.reload();
             return;

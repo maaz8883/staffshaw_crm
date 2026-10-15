@@ -225,6 +225,7 @@ Route::prefix('admin')->group(function () {
 
             // Card detail actions (comments, checklists, labels, members, attachments…)
             Route::post('trello/teams/{team}/cards', [TrelloCardController::class, 'store'])->name('admin.trello.cards.store')->whereNumber('team');
+            Route::post('trello/teams/{team}/boards/{boardId}/lists', [TrelloCardController::class, 'storeList'])->name('admin.trello.lists.store')->whereNumber('team');
             Route::get('trello/teams/{team}/cards/{cardId}', [TrelloCardController::class, 'show'])->name('admin.trello.cards.show')->whereNumber('team');
             Route::put('trello/teams/{team}/cards/{cardId}', [TrelloCardController::class, 'update'])->name('admin.trello.cards.update')->whereNumber('team');
             Route::post('trello/teams/{team}/cards/{cardId}/comments', [TrelloCardController::class, 'comment'])->name('admin.trello.cards.comment')->whereNumber('team');

@@ -117,6 +117,34 @@ class TrelloCardController extends Controller
         ]);
     }
 
+    /** "Add another list" on a board. */
+    public function storeList(Request $request, Team $team, string $boardId): JsonResponse
+    {
+        $client = $this->clientFor($team);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:16384'],
+        ]);
+        $name = trim($data['name']);
+        if ($name === '') {
+            return response()->json(['ok' => false, 'message' => 'Enter a list name.'], 422);
+        }
+
+        try {
+            $list = $client->createList($boardId, $name);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'list' => [
+                'id' => (string) ($list['id'] ?? ''),
+                'name' => (string) ($list['name'] ?? $name),
+                'pos' => $list['pos'] ?? null,
+            ],
+        ]);
+    }
+
     public function store(Request $request, Team $team): JsonResponse
     {
         $client = $this->clientFor($team);
