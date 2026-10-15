@@ -270,25 +270,6 @@
         <span class="ms-2 text-muted small">{{ $team->name }} · {{ $integration->displayAccount() }}</span>
         <span class="trello-hint ms-2">Drag to move · click title to open card</span>
     </div>
-    <div class="d-flex gap-2">
-        @if(!empty($board['url']))
-            <a href="{{ $board['url'] }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Open in Trello</a>
-        @endif
-        @if($canManage)
-            <a href="{{ route('admin.trello.edit', $team) }}" class="btn btn-sm btn-outline-secondary">Connection</a>
-            @php
-                $syncBoards = \App\Support\TeamTrelloAccounts::syncBoardNames($team);
-                $syncConfirm = $syncBoards
-                    ? 'Import cards from board(s): '.implode(', ', $syncBoards).' as Customers for '.$team->name.'?'
-                    : 'Import all open Trello cards as Customers for '.$team->name.'?';
-            @endphp
-            <form method="POST" action="{{ route('admin.trello.sync-customers', $team) }}" class="d-inline"
-                  onsubmit="return confirm(@json($syncConfirm))">
-                @csrf
-                <button type="submit" class="btn btn-sm btn-success">Sync cards → Customers</button>
-            </form>
-        @endif
-    </div>
 </div>
 
 @if(empty($lists))

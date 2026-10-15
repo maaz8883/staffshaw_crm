@@ -41,29 +41,6 @@
                 <i class="bi bi-plug"></i> {{ $integration?->isReady() ? 'Update connection' : 'Connect Trello' }}
             </a>
         @endif
-        @if(\App\Support\AuthScope::isAdmin() && $integration?->isReady())
-            @php
-                $syncBoards = \App\Support\TeamTrelloAccounts::syncBoardNames($team);
-                $syncConfirm = $syncBoards
-                    ? 'Import cards from board(s): '.implode(', ', $syncBoards).' as Customers for '.$team->name.'?'
-                    : 'Import all open Trello cards as Customers for '.$team->name.'?';
-                $syncLabel = $syncBoards
-                    ? 'Sync '.implode(', ', $syncBoards).' → Customers'
-                    : 'Sync cards → Customers';
-            @endphp
-            <form method="POST" action="{{ route('admin.trello.sync-customers', $team) }}" class="d-inline"
-                  onsubmit="return confirm(@json($syncConfirm))">
-                @csrf
-                <button type="submit" class="btn btn-sm btn-success">
-                    <i class="bi bi-people"></i> {{ $syncLabel }}
-                </button>
-            </form>
-        @endif
-        @if(\App\Support\AuthScope::isAdmin())
-            <a href="{{ route('admin.trello.connections') }}" class="btn btn-sm btn-outline-secondary">
-                All team connections
-            </a>
-        @endif
     </div>
 </div>
 
