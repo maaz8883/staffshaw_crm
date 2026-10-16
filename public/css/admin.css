@@ -1055,7 +1055,11 @@ body {
     padding: 0 16px;
     z-index: 1100;
 }
-.topbar-logo { text-decoration: none; flex-shrink: 0; }
+.topbar-logo { text-decoration: none; flex-shrink: 0; display: inline-flex; align-items: center; }
+.topbar-logo-img { height: 28px; width: auto; display: block; }
+.topbar-logo-img.logo-on-dark { display: none; }
+[data-theme="dark"] .topbar-logo-img.logo-on-light { display: none; }
+[data-theme="dark"] .topbar-logo-img.logo-on-dark { display: block; }
 .topbar-mark {
     font-weight: 700;
     font-size: 18px;

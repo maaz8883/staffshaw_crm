@@ -26,7 +26,9 @@
 <body>
     <header class="topbar">
         <a class="topbar-logo" href="{{ route('admin.dashboard') }}">
-            <span class="topbar-mark">CRM</span>
+            {{-- Black logo on the light theme, white logo on the dark theme --}}
+            <img src="{{ asset('images/logo-dark.png') }}" alt="Tago" class="topbar-logo-img logo-on-light">
+            <img src="{{ asset('images/logo-light.png') }}" alt="Tago" class="topbar-logo-img logo-on-dark">
         </a>
         {{-- Searches customers / leads / sales: hidden for Production (they don't see those) --}}
         <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole('Production')) style="display:none" @endif>

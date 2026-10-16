@@ -13,10 +13,8 @@
 <body>
     <div class="login-shell">
         <div class="login-brand">
-            <div class="login-brand-mark" aria-hidden="true">
-                <i class="bi bi-shield-lock"></i>
-            </div>
-            <h1>StaffShaw CRM</h1>
+            <img src="{{ asset('images/logo-dark.png') }}" alt="Tago" class="login-logo">
+            <h1 class="visually-hidden">Tago CRM</h1>
             <p>Welcome back — sign in to continue</p>
         </div>
 

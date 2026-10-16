@@ -56,6 +56,13 @@ body::before {
     animation: fadeDown 0.5s ease-out;
 }
 
+.login-logo {
+    display: block;
+    height: 56px;
+    width: auto;
+    margin: 0 auto 0.75rem;
+}
+
 .login-brand-mark {
     display: inline-flex;
     align-items: center;
