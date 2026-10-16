@@ -298,7 +298,7 @@ class LeadController extends Controller
         // Fields can be missing from the request (e.g. Team is only shown to Admin / Manager)
         $validated['brand_id'] = ($validated['brand_id'] ?? null) ?: null;
         $validated['assigned_to'] = ($validated['assigned_to'] ?? null) ?: null;
-        $val idated['team_id'] = ($validated['team_id'] ?? null) ?: null;
+        $validated['team_id'] = ($validated['team_id'] ?? null) ?: null;
         $validated['follow_up_at'] = ($validated['follow_up_at'] ?? null) ?: null;
         $validated['lead_value'] = $validated['lead_value'] ?? 0;
         // Simplified form no longer edits these — do not wipe existing values on update.
