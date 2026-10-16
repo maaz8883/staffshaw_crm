@@ -404,7 +404,7 @@ class InvoiceController extends Controller
             'discount' => $discount,
             'adjustment' => $adjustment,
             'tax_total' => $tax,
-            'currency' => $validated['currency'] ?: 'USD',
+            'currency' => ($validated['currency'] ?? null) ?: 'USD',
             'client_name' => $client->name,
             'client_email' => $client->email,
             'client_phone' => $client->phone,

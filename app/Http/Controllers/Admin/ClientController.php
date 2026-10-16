@@ -348,7 +348,7 @@ class ClientController extends Controller
         );
 
         $validated['is_active'] = $request->boolean('is_active', true);
-        $validated['brand_id'] = $validated['brand_id'] ?: null;
+        $validated['brand_id'] = ($validated['brand_id'] ?? null) ?: null;
         if (! array_key_exists('currency', $validated) || ! $validated['currency']) {
             $validated['currency'] = 'USD';
         }

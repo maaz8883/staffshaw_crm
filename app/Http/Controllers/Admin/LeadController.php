@@ -295,10 +295,11 @@ class LeadController extends Controller
 
     private function leadPayload(array $validated): array
     {
-        $validated['brand_id'] = $validated['brand_id'] ?: null;
-        $validated['assigned_to'] = $validated['assigned_to'] ?: null;
-        $validated['team_id'] = $validated['team_id'] ?: null;
-        $validated['follow_up_at'] = $validated['follow_up_at'] ?: null;
+        // Fields can be missing from the request (e.g. Team is only shown to Admin / Manager)
+        $validated['brand_id'] = ($validated['brand_id'] ?? null) ?: null;
+        $validated['assigned_to'] = ($validated['assigned_to'] ?? null) ?: null;
+        $val idated['team_id'] = ($validated['team_id'] ?? null) ?: null;
+        $validated['follow_up_at'] = ($validated['follow_up_at'] ?? null) ?: null;
         $validated['lead_value'] = $validated['lead_value'] ?? 0;
         // Simplified form no longer edits these — do not wipe existing values on update.
         unset($validated['position'], $validated['website'], $validated['tags'], $validated['address'], $validated['city'], $validated['state'], $validated['zip'], $validated['country'], $validated['is_public']);
