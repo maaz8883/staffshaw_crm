@@ -21,7 +21,7 @@
 <div class="card">
     <div class="card-body">
         <p class="text-muted small mb-3">
-            Har parent team ke liye alag Trello API key + token.
+            Each team uses its own Trello API key + token.
             Staffshaw → <strong>sales.trello@staffshaw.com</strong>,
             Nextbyte → <strong>sales.nexbyte@staffshaw.com</strong>.
         </p>

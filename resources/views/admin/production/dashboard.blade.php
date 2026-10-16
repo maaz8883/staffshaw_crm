@@ -26,7 +26,7 @@
 
 @if($teams->isEmpty())
     <div class="alert alert-info">
-        Aap kisi team mein nahi hain, isliye koi Trello board nahi hai. Admin se apni team set karwayein.
+        You are not in a team yet, so there are no Trello boards to show. Ask an admin to add you to your team.
     </div>
 @else
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
@@ -81,7 +81,7 @@
                 <div class="card-header bg-transparent fw-semibold">My recent Trello activity</div>
                 <div class="card-body">
                     @if($myActivity->isEmpty())
-                        <div class="text-muted small">Abhi tak CRM se koi Trello kaam nahi kiya.</div>
+                        <div class="text-muted small">No Trello activity from the CRM yet.</div>
                     @else
                         <ul class="list-unstyled mb-0 pd-activity">
                             @foreach($myActivity as $log)
@@ -99,7 +99,7 @@
                 <div class="card-header bg-transparent fw-semibold">Team activity</div>
                 <div class="card-body">
                     @if($teamActivity->isEmpty())
-                        <div class="text-muted small">Team ki taraf se abhi koi activity nahi.</div>
+                        <div class="text-muted small">No activity from your team yet.</div>
                     @else
                         <ul class="list-unstyled mb-0 pd-activity">
                             @foreach($teamActivity as $log)
@@ -134,7 +134,7 @@
             const box = document.querySelector(`[data-list="${group}"]`);
             if (!box) return;
             if (!cards.length) {
-                box.innerHTML = '<div class="text-muted small">Koi card nahi 🎉</div>';
+                box.innerHTML = '<div class="text-muted small">No cards 🎉</div>';
                 return;
             }
             box.innerHTML = cards.map((c) => `

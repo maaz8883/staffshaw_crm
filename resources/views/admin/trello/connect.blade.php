@@ -17,20 +17,20 @@
         <div class="card mb-3">
             <div class="card-body">
                 <p class="text-muted small mb-3">
-                    Har team ka alag Trello account hota hai — API key aur token usi account se generate karein.
+                    Each team has its own Trello account — generate the API key and token while signed in to that account.
                     @if(!empty($suggestedEmail))
-                        <strong>{{ $team->name }}</strong> team ke liye account:
+                        Account for the <strong>{{ $team->name }}</strong> team:
                         <strong>{{ $suggestedEmail }}</strong>.
                     @endif
                 </p>
                 <ol class="small text-muted mb-0 ps-3">
-                    <li>Trello Power-Up / app se API key copy karein.</li>
+                    <li>Copy the API key from your Trello Power-Up / app.</li>
                     <li>
                         Token generate:
                         <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">trello.com/power-ups/admin</a>
                         → Authorization → Token link → Allow.
                     </li>
-                    <li>Key + token yahan paste karein. Save pe CRM account verify karega.</li>
+                    <li>Paste the key and token here. The CRM verifies the account when you save.</li>
                 </ol>
             </div>
         </div>

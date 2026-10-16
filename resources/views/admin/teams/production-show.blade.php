@@ -63,13 +63,13 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="8" class="text-muted small">Is team mein abhi koi member nahi.</td></tr>
+                    <tr><td colspan="8" class="text-muted small">No members in this team yet.</td></tr>
                 @endforelse
             </tbody>
         </table>
     </div>
     <div class="card-footer bg-transparent small text-muted">
-        Sirf CRM se kiya gaya kaam ginna jata hai. Seedha trello.com par shared account se kiya gaya kaam yahan nahi aata.
+        Only work done through the CRM is counted. Work done directly on trello.com with the shared account doesn't show up here.
     </div>
 </div>
 
@@ -77,7 +77,7 @@
     <div class="card-header bg-transparent fw-semibold">Recent team activity</div>
     <div class="card-body">
         @if($recent->isEmpty())
-            <div class="text-muted small">{{ $periodLabel }} mein koi Trello activity nahi.</div>
+            <div class="text-muted small">No Trello activity in {{ $periodLabel }}.</div>
         @else
             <ul class="list-unstyled mb-0 pt-activity">
                 @foreach($recent as $log)
