@@ -399,7 +399,7 @@ class ClientController extends Controller
     private function teamsForClientForm()
     {
         if (Auth::user()->hasRole([Role::ADMIN, Role::MANAGER])) {
-            return Team::query()->orderBy('name')->get(['id', 'name']);
+            return Team::query()->sales()->orderBy('name')->get(['id', 'name']);
         }
 
         if ($this->isTeamHead()) {

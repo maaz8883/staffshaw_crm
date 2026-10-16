@@ -20,7 +20,33 @@ class Team extends Model
         'sub_team_head_id',
         'name',
         'description',
+        'is_production',
     ];
+
+    protected $casts = [
+        'is_production' => 'boolean',
+    ];
+
+    protected static function booted(): void
+    {
+        // A sub-team always follows its main team (sub-teams of Production are production too)
+        static::saving(function (Team $team) {
+            if ($team->parent_team_id) {
+                $team->is_production = (bool) Team::query()->whereKey($team->parent_team_id)->value('is_production');
+            }
+        });
+        static::saved(function (Team $team) {
+            if (! $team->parent_team_id && $team->wasChanged('is_production')) {
+                Team::query()->where('parent_team_id', $team->id)->update(['is_production' => $team->is_production]);
+            }
+        });
+    }
+
+    /** Sales teams only (Staffshaw, Nextbyte…): production teams have no sales, targets or leads. */
+    public function scopeSales($query)
+    {
+        return $query->where('teams.is_production', false);
+    }
 
     public function company(): BelongsTo
     {

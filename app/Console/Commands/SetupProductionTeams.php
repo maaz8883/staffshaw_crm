@@ -68,6 +68,9 @@ class SetupProductionTeams extends Command
                 ['name' => 'Production', 'parent_team_id' => null],
                 ['company_id' => $company->id]
             );
+            if (! $production->is_production) {
+                $production->update(['is_production' => true]); // sub-teams follow (Team::saved)
+            }
             $trello[] = ['Production (main)', 'trello@staffshaw.com'];
 
             $head = $this->user(self::HEAD['email'], self::HEAD['name'], $production, $company, $roleId, $created, $skipped);

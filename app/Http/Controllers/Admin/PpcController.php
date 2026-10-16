@@ -25,7 +25,7 @@ class PpcController extends Controller
         $month = (int) $request->get('month', now()->month);
         $year  = (int) $request->get('year', now()->year);
 
-        $teamsQuery = Team::with(['company'])->orderBy('name');
+        $teamsQuery = Team::with(['company'])->sales()->orderBy('name');
         if (! $user->hasRole(Role::ADMIN)) {
             AuthScope::scopeByTeam($teamsQuery, 'id');
         }

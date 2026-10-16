@@ -199,7 +199,7 @@ class LeadController extends Controller
 
         $teamId = $lead->team_id ?: $user->team_id;
         if (! $teamId && AuthScope::isAdminOrManager()) {
-            $teamId = \App\Models\Team::query()->orderBy('id')->value('id');
+            $teamId = \App\Models\Team::query()->sales()->orderBy('id')->value('id');
         }
 
         if (! $teamId) {

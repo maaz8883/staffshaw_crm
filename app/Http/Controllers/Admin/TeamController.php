@@ -96,6 +96,7 @@ class TeamController extends Controller
             'team_head_id' => $validated['team_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
+            'is_production' => $request->boolean('is_production'),
         ]);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);
@@ -226,6 +227,7 @@ class TeamController extends Controller
             'team_head_id' => $validated['team_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
+            'is_production' => $request->boolean('is_production'),
         ]);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);

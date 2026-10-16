@@ -27,7 +27,7 @@ class TargetController extends Controller
         $user = Auth::user();
 
         if ($user->hasRole(['Admin', 'Manager'])) {
-            return Team::with(['company', 'users'])->orderBy('name')->get();
+            return Team::with(['company', 'users'])->sales()->orderBy('name')->get();
         }
 
         // Team head: only teams where they are the head
@@ -65,7 +65,7 @@ class TargetController extends Controller
         $withRelations = ['company', 'teamHead.role', 'users.role', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members', 'approvedProjectManagers.role'];
 
         if ($isAdmin) {
-            $teams = Team::with($withRelations)->orderBy('name')->get();
+            $teams = Team::with($withRelations)->sales()->orderBy('name')->get();
         } elseif ($isTeamHead) {
             $teams = Team::with($withRelations)
                 ->where('team_head_id', $authUser->id)

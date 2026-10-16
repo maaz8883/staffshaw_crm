@@ -117,6 +117,17 @@
     <textarea id="description" name="description" class="form-control" rows="3">{{ old('description', $team->description ?? '') }}</textarea>
 </div>
 
+<div class="mb-3 form-check">
+    <input type="checkbox" class="form-check-input" id="is_production" name="is_production" value="1"
+           @checked(old('is_production', $team->is_production ?? false))
+           @disabled(! empty($team?->parent_team_id))>
+    <label class="form-check-label" for="is_production">Production team</label>
+    <div class="form-text">
+        Trello work only (Design, Development, SEO…): kept out of Sales Performance, reports, leads and sales.
+        @if(! empty($team?->parent_team_id)) Sub-teams follow their main team. @endif
+    </div>
+</div>
+
 <script>
 (function() {
     let subHeadIndex = {{ isset($team) && $team->subTeamHeads ? $team->subTeamHeads->count() : 0 }};

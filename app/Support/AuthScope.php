@@ -255,7 +255,7 @@ class AuthScope
     /** Teams for dropdowns */
     public static function teamsForDropdown()
     {
-        $q = Team::query()->orderBy('name');
+        $q = Team::query()->sales()->orderBy('name');
 
         if (! self::isAdminOrManager()) {
             $ids = self::accessibleTeamIds();
@@ -270,6 +270,9 @@ class AuthScope
     {
         $q = User::query()->orderBy('name');
         self::scopeUsers($q);
+        // Sales dropdowns only (leads, sales, reports): no production people
+        $q->whereDoesntHave('role', fn ($r) => $r->where('name', Role::PRODUCTION))
+            ->whereDoesntHave('team', fn ($t) => $t->where('is_production', true));
 
         return $q->get();
     }

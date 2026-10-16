@@ -149,7 +149,8 @@ class DashboardController extends Controller
         // Top agents — only approved sales (exclude Admin & Manager roles)
         $topAgents = User::with(['team', 'company', 'role'])
             ->accountActive()
-            ->whereDoesntHave('role', fn (Builder $q) => $q->whereIn('name', [Role::ADMIN, Role::MANAGER]))
+            ->whereDoesntHave('role', fn (Builder $q) => $q->whereIn('name', [Role::ADMIN, Role::MANAGER, Role::PRODUCTION]))
+            ->whereDoesntHave('team', fn (Builder $q) => $q->where('is_production', true))
             ->get()
             ->map(function ($u) use ($month, $year) {
                 $u->total_sales = self::approved()->where('user_id', $u->id)->where('status', 'completed')->count();
@@ -285,7 +286,7 @@ class DashboardController extends Controller
             ->groupBy('team_id')
             ->map(fn ($rows) => $rows->map->user->filter()->unique('id')->values());
 
-        return Team::query()
+        return Team::query()->sales()
             ->with('company')
             ->orderBy('name')
             ->get()
@@ -771,7 +772,7 @@ class DashboardController extends Controller
         $currentMonthLabel = Carbon::createFromDate($year, $month, 1)->format('F Y');
 
         // PPC users only see their assigned team(s); Admin/Manager see all.
-        $teamsQuery = Team::with(['company'])->orderBy('name');
+        $teamsQuery = Team::with(['company'])->sales()->orderBy('name');
         if (! $user->hasRole([Role::ADMIN, Role::MANAGER])) {
             $teamIds = \App\Support\AuthScope::accessibleTeamIds();
             $teamsQuery->whereIn('id', $teamIds->isEmpty() ? [0] : $teamIds);

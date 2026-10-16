@@ -30,6 +30,7 @@ class TeamMembershipController extends Controller
         $user = Auth::user();
 
         $teams = Team::query()
+            ->sales()
             ->with('company')
             ->orderBy('name')
             ->get();
@@ -75,6 +76,7 @@ class TeamMembershipController extends Controller
     public function join(Team $team): RedirectResponse
     {
         $this->ensureProjectManager();
+        abort_if($team->is_production, 403, 'Production teams are not open to Project Managers.');
 
         $user = Auth::user();
 
