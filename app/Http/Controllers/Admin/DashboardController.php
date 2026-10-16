@@ -30,6 +30,12 @@ class DashboardController extends Controller
             return $this->adminDashboard($month, $year);
         }
 
+        // Production (Design, Development, SEO…): Trello work only — checked before team head,
+        // so a production team head also gets this instead of the sales dashboard
+        if ($user->hasRole(Role::PRODUCTION)) {
+            return app(ProductionDashboardController::class)->show();
+        }
+
         // Project Manager: scoped to their approved (joined) teams
         if ($user->hasRole(Role::PROJECT_MANAGER)) {
             return $this->projectManagerDashboard($user, $month, $year);

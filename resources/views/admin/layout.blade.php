@@ -28,7 +28,8 @@
         <a class="topbar-logo" href="{{ route('admin.dashboard') }}">
             <span class="topbar-mark">CRM</span>
         </a>
-        <div class="topbar-search" id="global-search">
+        {{-- Searches customers / leads / sales: hidden for Production (they don't see those) --}}
+        <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole('Production')) style="display:none" @endif>
             <i class="bi bi-search"></i>
             <input id="top-search" type="search" placeholder="Search people, customers, leads, sales..." autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results">
             <div id="global-search-results" class="global-search-dropdown" hidden role="listbox"></div>
@@ -59,11 +60,14 @@
                 $isAdminOrManager = auth()->user()?->hasRole(['Admin', 'Manager']);
                 $isPpc = auth()->user()?->hasRole('PPC');
                 $isProjectManager = auth()->user()?->hasRole('Project Manager');
+                // Production teams: Dashboard + Trello only (no customers / leads / sales)
+                $isProduction = auth()->user()?->hasRole('Production');
                 $isTeamHeadUser = \App\Models\Team::where('team_head_id', (int) auth()->id())->exists();
                 $headedTeamForNav = $isTeamHeadUser
                     ? \App\Models\Team::where('team_head_id', (int) auth()->id())->orderBy('name')->first()
                     : null;
-                $canReviewJoinRequests = ! $isProjectManager && ($isAdminOrManager || $isTeamHeadUser);
+                // Production team heads have no sales join requests / reports (those pages are sales-only)
+                $canReviewJoinRequests = ! $isProjectManager && ! $isProduction && ($isAdminOrManager || $isTeamHeadUser);
                 $pendingJoinRequestCount = 0;
                 if ($canReviewJoinRequests) {
                     $jrQuery = \App\Models\TeamMembership::where('status', \App\Models\TeamMembership::STATUS_PENDING);
@@ -91,6 +95,7 @@
             @endif
 
             @if(! $isPpc)
+            @if(! $isProduction)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Customers">
                     <i class="bi bi-people"></i> <span class="nav-label">Customers</span>
@@ -124,6 +129,7 @@
                     </li>
                 </ul>
             </li>
+            @endif
 
             @if($isAdmin)
             <li class="nav-item">
@@ -133,7 +139,7 @@
             </li>
             @endif
 
-            @if(! $isProjectManager)
+            @if(! $isProjectManager && ! $isProduction)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}" title="Sales Performance">
                     <i class="bi bi-graph-up"></i> <span class="nav-label">Sales Performance</span>
@@ -173,7 +179,7 @@
             </li>
             @endif
 
-            @if($isAdminOrManager || $isTeamHeadUser)
+            @if($isAdminOrManager || ($isTeamHeadUser && ! $isProduction))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}" href="{{ route('admin.reports.index') }}" title="Reports">
                     <i class="bi bi-graph-up-arrow"></i> <span class="nav-label">Reports</span>

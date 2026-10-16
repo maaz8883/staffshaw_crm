@@ -59,6 +59,9 @@ Route::prefix('admin')->group(function () {
     Route::middleware(['auth', 'active.account', 'single.session'])->group(function () {
 
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
+        Route::get('/production/overview', [\App\Http\Controllers\Admin\ProductionDashboardController::class, 'overview'])
+            ->middleware('role:Production,Admin,Manager')
+            ->name('admin.production.overview');
         Route::get('/search', GlobalSearchController::class)->name('admin.search');
 
         // All roles: notifications + profile
@@ -198,8 +201,8 @@ Route::prefix('admin')->group(function () {
             Route::post('targets/user/{team}/bulk',    [TargetController::class, 'bulkSetUserTargets'])->name('admin.targets.user.bulk');
         });
 
-        // ── Trello boards (view): Admin / Manager / Agent / Project Manager ───
-        Route::middleware('role:Admin,Agent,Manager,Project Manager')->group(function () {
+        // ── Trello boards (view): Admin / Manager / Agent / Project Manager / Production ───
+        Route::middleware('role:Admin,Agent,Manager,Project Manager,Production')->group(function () {
             Route::get('trello', [TrelloController::class, 'index'])->name('admin.trello.index');
             Route::get('trello/boards/{boardId}', [TrelloController::class, 'board'])->name('admin.trello.board');
             Route::get('trello/teams/{team}/boards/{boardId}/live', [TrelloController::class, 'live'])
@@ -300,7 +303,7 @@ Route::prefix('admin')->group(function () {
         });
 
         // ── Team show: PPC + Project Manager can view (scoped) ───────────────
-        Route::middleware('role:Admin,Agent,Manager,PPC,Project Manager')->group(function () {
+        Route::middleware('role:Admin,Agent,Manager,PPC,Project Manager,Production')->group(function () {
             Route::get('teams/{team}', [TeamController::class, 'show'])->name('admin.teams.show')->whereNumber('team');
         });
 

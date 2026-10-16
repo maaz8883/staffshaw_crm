@@ -52,6 +52,11 @@ class AuthScope
         return auth()->user()?->hasRole(Role::PPC) ?? false;
     }
 
+    public static function isProduction(): bool
+    {
+        return auth()->user()?->hasRole(Role::PRODUCTION) ?? false;
+    }
+
     /** Team IDs where the user is Team Head. */
     public static function headedTeamIds(): Collection
     {

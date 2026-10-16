@@ -130,6 +130,11 @@ class TeamController extends Controller
             abort(403);
         }
 
+        // Production teams have no sales targets: show members + their Trello work instead
+        if ($user->hasRole(\App\Models\Role::PRODUCTION)) {
+            return $this->productionTeamView($team);
+        }
+
         $team->load([
             'company', 
             'teamHead', 
@@ -370,5 +375,70 @@ class TeamController extends Controller
         }
 
         User::where('id', $team->team_head_id)->update($attrs);
+    }
+
+    /**
+     * "My Team" for production teams: members and a small work report built from the
+     * CRM's Trello activity log (who moved / created / completed / commented how much).
+     */
+    private function productionTeamView(Team $team): View
+    {
+        $periods = [
+            'week' => ['Last 7 days', now()->subDays(7)],
+            'month' => ['This month', now()->startOfMonth()],
+            '30d' => ['Last 30 days', now()->subDays(30)],
+        ];
+        $period = array_key_exists(request('period'), $periods) ? request('period') : 'week';
+        [$periodLabel, $since] = $periods[$period];
+
+        $teamIds = $team->subTeams()->pluck('id')->push($team->id);
+        $members = User::query()
+            ->with('role')
+            ->where(fn ($q) => $q->whereIn('team_id', $teamIds)->orWhere('id', $team->team_head_id))
+            ->orderBy('name')
+            ->get();
+
+        // One row per member per action kind, then pivot in PHP
+        $counts = \App\Models\TrelloActivityLog::query()
+            ->selectRaw('user_id, action, COUNT(*) as total, MAX(occurred_at) as last_at')
+            ->whereIn('user_id', $members->pluck('id'))
+            ->where('occurred_at', '>=', $since)
+            ->groupBy('user_id', 'action')
+            ->get()
+            ->groupBy('user_id');
+
+        $columns = [
+            'created' => ['card_created'],
+            'moved' => ['card_moved'],
+            'completed' => ['card_completed', 'checkitem_completed'],
+            'comments' => ['comment_added'],
+            'files' => ['attachment_added'],
+        ];
+        $report = $members->map(function (User $member) use ($counts, $columns, $team) {
+            $rows = $counts->get($member->id, collect());
+            $row = [
+                'user' => $member,
+                'is_head' => (int) $member->id === (int) $team->team_head_id,
+                'total' => (int) $rows->sum('total'),
+                'last_at' => $rows->max('last_at'),
+            ];
+            foreach ($columns as $key => $actions) {
+                $row[$key] = (int) $rows->whereIn('action', $actions)->sum('total');
+            }
+
+            return $row;
+        })->sortByDesc('total')->values();
+
+        $recent = \App\Models\TrelloActivityLog::query()
+            ->with('user:id,name')
+            ->whereIn('user_id', $members->pluck('id'))
+            ->where('occurred_at', '>=', $since)
+            ->latest('occurred_at')
+            ->limit(30)
+            ->get();
+
+        $team->load('teamHead');
+
+        return view('admin.teams.production-show', compact('team', 'report', 'recent', 'period', 'periods', 'periodLabel'));
     }
 }

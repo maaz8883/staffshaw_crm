@@ -40,7 +40,7 @@
                     @foreach($teams as $team)
                         @php $integ = $team->trelloIntegration; @endphp
                         <tr>
-                            <td class="fw-semibold">{{ $team->name }}</td>
+                            <td class="fw-semibold">{{ \App\Support\TeamTrelloAccounts::label($team) }}</td>
                             <td>{{ $team->company?->name ?? '—' }}</td>
                             <td>
                                 @if($integ?->isReady())

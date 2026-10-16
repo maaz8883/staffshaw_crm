@@ -15,6 +15,8 @@ class Role extends Model
     public const AGENT   = 'Agent';
     public const PPC     = 'PPC';
     public const PROJECT_MANAGER = 'Project Manager';
+    /** Production teams (Design, Development, SEO…): Trello + their own dashboard only, no sales data */
+    public const PRODUCTION = 'Production';
 
     protected $fillable = [
         'name',

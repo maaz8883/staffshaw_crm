@@ -645,6 +645,49 @@ class TrelloApiClient
         ]);
     }
 
+    /**
+     * Open cards + lists of many boards in one parallel round trip (production dashboard).
+     * A board that fails just comes back empty, so one bad board doesn't hide the rest.
+     *
+     * @param  list<string>  $boardIds
+     * @return array<string, array{cards: list<array<string, mixed>>, lists: list<array<string, mixed>>}>
+     */
+    public function boardsCardsAndLists(array $boardIds): array
+    {
+        $auth = ['key' => $this->apiKey, 'token' => $this->apiToken];
+        $responses = Http::pool(function (Pool $pool) use ($boardIds, $auth) {
+            foreach ($boardIds as $id) {
+                $pool->as('c_'.$id)->acceptJson()->timeout(25)->get(self::BASE.'/boards/'.$id.'/cards', $auth + [
+                    'filter' => 'open',
+                    'fields' => 'id,name,due,dueComplete,idList,idBoard,labels,dateLastActivity',
+                ]);
+                $pool->as('l_'.$id)->acceptJson()->timeout(25)->get(self::BASE.'/boards/'.$id.'/lists', $auth + [
+                    'filter' => 'open',
+                    'fields' => 'id,name',
+                ]);
+            }
+        });
+
+        $json = static function ($response): array {
+            if (! $response instanceof Response || $response->failed()) {
+                return [];
+            }
+            $data = $response->json();
+
+            return is_array($data) ? array_values($data) : [];
+        };
+
+        $out = [];
+        foreach ($boardIds as $id) {
+            $out[$id] = [
+                'cards' => $json($responses['c_'.$id] ?? null),
+                'lists' => $json($responses['l_'.$id] ?? null),
+            ];
+        }
+
+        return $out;
+    }
+
     /** Card a checklist belongs to. */
     public function checklistCardId(string $checklistId): ?string
     {

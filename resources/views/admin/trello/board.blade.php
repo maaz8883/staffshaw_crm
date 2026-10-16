@@ -5628,6 +5628,10 @@
         else startTickPoll();
     });
     bootLiveSync();
+
+    // Deep link (e.g. from the production dashboard): ?card=<id> opens that card
+    const deepLinkCard = new URLSearchParams(window.location.search).get('card');
+    if (deepLinkCard && /^[a-f0-9]{24}$/i.test(deepLinkCard)) openCard(deepLinkCard);
 })();
 </script>
 @endsection

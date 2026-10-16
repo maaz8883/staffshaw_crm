@@ -7,7 +7,7 @@ use App\Models\Team;
 use App\Models\TeamTrelloIntegration;
 use App\Services\Trello\TrelloActivityRecorder;
 use App\Services\Trello\TrelloApiClient;
-use App\Support\AuthScope;
+use App\Support\TeamTrelloAccounts;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -692,8 +692,8 @@ class TrelloCardController extends Controller
 
     private function clientFor(Team $team): TrelloApiClient
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        abort_if($team->parent_team_id !== null, 422, 'Use the main team for Trello.');
+        // Own Trello per team; a sub-team without one works in its parent's (TeamTrelloAccounts)
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         abort_unless($integration instanceof TeamTrelloIntegration && $integration->isReady(), 422, 'Trello is not connected.');

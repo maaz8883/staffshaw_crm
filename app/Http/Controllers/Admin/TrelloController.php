@@ -32,8 +32,7 @@ class TrelloController extends Controller
             abort(403, 'No team access for Trello.');
         }
 
-        $teamId = (int) $request->query('team', $teams->first()->id);
-        $team = $teams->firstWhere('id', $teamId) ?? $teams->first();
+        $team = $teams->firstWhere('id', (int) $request->query('team')) ?? $this->defaultTeam($teams);
 
         $integration = $team->trelloIntegration;
         $boards = [];
@@ -66,7 +65,7 @@ class TrelloController extends Controller
     {
         $teams = $this->accessibleParentTeams();
         $teamId = (int) $request->query('team');
-        $team = $teams->firstWhere('id', $teamId) ?? $teams->first();
+        $team = $teams->firstWhere('id', $teamId) ?? $this->defaultTeam($teams);
 
         if (! $team) {
             abort(403);
@@ -159,8 +158,7 @@ class TrelloController extends Controller
 
     public function live(Team $team, string $boardId): JsonResponse
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         if (! $integration?->isReady()) {
@@ -197,8 +195,7 @@ class TrelloController extends Controller
      */
     public function ensureLive(Team $team, string $boardId): JsonResponse
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         if (! $integration?->isReady()) {
@@ -245,8 +242,7 @@ class TrelloController extends Controller
      */
     public function tick(Team $team, string $boardId): JsonResponse
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         if (! $integration?->isReady()) {
@@ -348,8 +344,7 @@ class TrelloController extends Controller
 
     public function cover(Team $team, string $cardId, string $attachmentId, string $previewId): Response
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         abort_unless($integration?->isReady(), 404);
@@ -369,8 +364,7 @@ class TrelloController extends Controller
 
     public function moveCard(Request $request, Team $team, string $cardId): JsonResponse
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         if (! $integration?->isReady()) {
@@ -568,8 +562,7 @@ class TrelloController extends Controller
      */
     public function moveTargets(Request $request, Team $team): JsonResponse
     {
-        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
-        $this->assertParentTeam($team);
+        abort_unless(TeamTrelloAccounts::userCanUse($team), 403);
 
         $integration = $team->trelloIntegration;
         if (! $integration?->isReady()) {
@@ -598,9 +591,9 @@ class TrelloController extends Controller
     {
         abort_unless(AuthScope::isAdmin(), 403);
 
+        // Main teams and sub-teams: a sub-team can have its own Trello account
         $teams = Team::query()
-            ->with(['trelloIntegration', 'company:id,name'])
-            ->whereNull('parent_team_id')
+            ->with(['trelloIntegration', 'company:id,name', 'parentTeam:id,name'])
             ->orderBy('name')
             ->get();
 
@@ -615,7 +608,6 @@ class TrelloController extends Controller
     public function edit(Team $team): View
     {
         $this->assertCanManage($team);
-        $this->assertParentTeam($team);
 
         $integration = $team->trelloIntegration;
 
@@ -629,7 +621,6 @@ class TrelloController extends Controller
     public function store(Request $request, Team $team): RedirectResponse
     {
         $this->assertCanManage($team);
-        $this->assertParentTeam($team);
 
         $existing = $team->trelloIntegration;
         // Saved credentials that can't be decrypted (other APP_KEY) count as missing: ask for new ones
@@ -692,7 +683,6 @@ class TrelloController extends Controller
     public function destroy(Team $team): RedirectResponse
     {
         $this->assertCanManage($team);
-        $this->assertParentTeam($team);
 
         $integration = $team->trelloIntegration;
         if ($integration?->isReady()) {
@@ -749,7 +739,6 @@ class TrelloController extends Controller
     public function syncCustomers(Team $team): RedirectResponse
     {
         abort_unless(AuthScope::isAdmin(), 403);
-        $this->assertParentTeam($team);
 
         try {
             $stats = app(TrelloCardToClientSync::class)->syncTeam($team);
@@ -785,23 +774,21 @@ class TrelloController extends Controller
     /** @return \Illuminate\Support\Collection<int, Team> */
     private function accessibleParentTeams()
     {
-        $query = Team::query()
-            ->with('trelloIntegration')
-            ->whereNull('parent_team_id')
-            ->orderBy('name');
+        // Own Trello per team, sub-teams without one use their parent's (see TeamTrelloAccounts)
+        return TeamTrelloAccounts::teamsForUser();
+    }
 
-        if (! AuthScope::isAdminOrManager()) {
-            $ids = AuthScope::accessibleTeamIds();
-            // Include parent of accessible sub-teams so members still see the parent Trello account.
-            $parentIds = Team::query()
-                ->whereIn('id', $ids)
-                ->whereNotNull('parent_team_id')
-                ->pluck('parent_team_id');
-            $ids = $ids->merge($parentIds)->unique()->values();
-            $query->whereIn('id', $ids->isEmpty() ? [0] : $ids);
-        }
-
-        return $query->get();
+    /**
+     * Team opened when none is picked: a connected main team first (e.g. Staffshaw), so Admin /
+     * Manager don't land on an unconnected department just because it sorts first by name.
+     *
+     * @param  \Illuminate\Support\Collection<int, Team>  $teams
+     */
+    private function defaultTeam($teams): ?Team
+    {
+        return $teams->first(fn (Team $t) => $t->parent_team_id === null && $t->trelloIntegration?->isReady())
+            ?? $teams->first(fn (Team $t) => $t->trelloIntegration?->isReady())
+            ?? $teams->first();
     }
 
     private function canManageTeam(Team $team): bool
@@ -813,10 +800,5 @@ class TrelloController extends Controller
     private function assertCanManage(Team $team): void
     {
         abort_unless($this->canManageTeam($team), 403);
-    }
-
-    private function assertParentTeam(Team $team): void
-    {
-        abort_if($team->parent_team_id !== null, 422, 'Connect Trello on the main team, not a sub-team.');
     }
 }

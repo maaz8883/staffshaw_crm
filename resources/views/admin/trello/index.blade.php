@@ -24,6 +24,17 @@
         background: linear-gradient(135deg, #0079bf, #026aa7);
     }
     .trello-meta { font-size: 12px; color: var(--text-muted); }
+    /* Workspace groups (like Trello's "Your workspaces") */
+    .trello-ws { margin-bottom: 28px; }
+    .trello-ws-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .trello-ws-icon {
+        width: 32px; height: 32px; border-radius: 6px; flex: 0 0 32px;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: #fff; font-weight: 700; font-size: 15px;
+    }
+    .trello-ws-name { font-weight: 700; font-size: 16px; margin: 0; }
+    .trello-ws-count { font-size: 12px; color: var(--text-muted); }
+    .trello-board-search { max-width: 280px; }
 </style>
 
 <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
@@ -31,7 +42,7 @@
         <label class="small text-muted mb-0">Team</label>
         <select name="team" class="form-select form-select-sm" style="width:auto;min-width:200px" onchange="this.form.submit()">
             @foreach($teams as $t)
-                <option value="{{ $t->id }}" @selected((int) $team->id === (int) $t->id)>{{ $t->name }}</option>
+                <option value="{{ $t->id }}" @selected((int) $team->id === (int) $t->id)>{{ \App\Support\TeamTrelloAccounts::label($t) }}</option>
             @endforeach
         </select>
     </form>
@@ -85,29 +96,77 @@
     @if(empty($boards) && ! $error)
         <div class="card"><div class="card-body text-muted text-center py-5">No open boards on this Trello account.</div></div>
     @else
-        <div class="row g-3">
-            @foreach($boards as $board)
-                @php
-                    $bg = data_get($board, 'prefs.backgroundColor') ?: '#0079bf';
-                    $bgImage = data_get($board, 'prefs.backgroundImageScaled.0.url')
-                        ?: data_get($board, 'prefs.backgroundImage');
-                @endphp
-                <div class="col-sm-6 col-lg-4 col-xl-3">
-                    <div class="trello-board-card">
-                        <a href="{{ route('admin.trello.board', ['boardId' => $board['id'], 'team' => $team->id]) }}">
-                            <div class="trello-board-swatch"
-                                 style="@if($bgImage) background:url('{{ $bgImage }}') center/cover no-repeat; @else background:{{ $bg }}; @endif"></div>
-                            <div class="p-3">
-                                <div class="fw-semibold mb-1 text-truncate">{{ $board['name'] }}</div>
-                                <div class="trello-meta text-truncate">
-                                    {{ data_get($board, 'organization.displayName') ?: 'Personal / Workspace' }}
-                                </div>
-                            </div>
-                        </a>
-                    </div>
+        @php
+            // Group boards by Trello workspace (A–Z), boards without a workspace last
+            $personal = 'Personal boards';
+            $workspaces = collect($boards)
+                ->groupBy(fn ($b) => data_get($b, 'organization.displayName') ?: $personal)
+                ->map(fn ($group) => $group->sortBy(fn ($b) => mb_strtolower($b['name'] ?? ''))->values())
+                ->sortBy(fn ($group, $name) => ($name === $personal ? '1' : '0').mb_strtolower($name));
+            $wsColors = ['#579dff', '#4bce97', '#f87168', '#9f8fef', '#fea362', '#6cc3e0', '#e774bb', '#94c748'];
+        @endphp
+
+        @if(count($boards) > 8)
+            <div class="mb-3">
+                <input type="search" id="trello-board-filter" class="form-control form-control-sm trello-board-search"
+                       placeholder="Search boards…" autocomplete="off">
+            </div>
+        @endif
+
+        @foreach($workspaces as $wsName => $wsBoards)
+            <section class="trello-ws" data-ws>
+                <div class="trello-ws-head">
+                    <span class="trello-ws-icon" style="background:{{ $wsColors[crc32($wsName) % count($wsColors)] }}">
+                        {{ mb_strtoupper(mb_substr($wsName, 0, 1)) }}
+                    </span>
+                    <h6 class="trello-ws-name">{{ $wsName }}</h6>
+                    <span class="trello-ws-count">{{ $wsBoards->count() }} board{{ $wsBoards->count() === 1 ? '' : 's' }}</span>
                 </div>
-            @endforeach
-        </div>
+                <div class="row g-3">
+                    @foreach($wsBoards as $board)
+                        @php
+                            $bg = data_get($board, 'prefs.backgroundColor') ?: '#0079bf';
+                            $bgImage = data_get($board, 'prefs.backgroundImageScaled.0.url')
+                                ?: data_get($board, 'prefs.backgroundImage');
+                        @endphp
+                        <div class="col-sm-6 col-lg-4 col-xl-3" data-board-name="{{ mb_strtolower($board['name'] ?? '') }}">
+                            <div class="trello-board-card">
+                                <a href="{{ route('admin.trello.board', ['boardId' => $board['id'], 'team' => $team->id]) }}">
+                                    <div class="trello-board-swatch"
+                                         style="@if($bgImage) background:url('{{ $bgImage }}') center/cover no-repeat; @else background:{{ $bg }}; @endif"></div>
+                                    <div class="p-3">
+                                        <div class="fw-semibold text-truncate">{{ $board['name'] }}</div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </section>
+        @endforeach
+        <div class="text-muted small d-none" id="trello-board-empty">No board matches your search.</div>
+
+        <script>
+        (function () {
+            const input = document.getElementById('trello-board-filter');
+            if (!input) return;
+            input.addEventListener('input', () => {
+                const q = input.value.trim().toLowerCase();
+                let any = false;
+                document.querySelectorAll('[data-ws]').forEach((ws) => {
+                    let shown = 0;
+                    ws.querySelectorAll('[data-board-name]').forEach((col) => {
+                        const hit = !q || col.dataset.boardName.includes(q);
+                        col.classList.toggle('d-none', !hit);
+                        if (hit) shown++;
+                    });
+                    ws.classList.toggle('d-none', shown === 0); // hide workspaces with no match
+                    if (shown) any = true;
+                });
+                document.getElementById('trello-board-empty').classList.toggle('d-none', any);
+            });
+        })();
+        </script>
     @endif
 @endif
 @endsection
