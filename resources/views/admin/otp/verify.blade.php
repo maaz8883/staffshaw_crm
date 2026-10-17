@@ -7,7 +7,7 @@
     <title>Enter OTP</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{{ asset('css/admin-login.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/admin-login.css') }}?v={{ @filemtime(public_path('css/admin-login.css')) }}">
     <style>
         .otp-timer { font-size: 2rem; font-weight: 700; letter-spacing: 2px; }
         .otp-timer.warning { color: #d4860a; }

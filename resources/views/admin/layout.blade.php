@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/admin.css') }}?v={{ @filemtime(public_path('css/admin.css')) }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
@@ -27,8 +27,8 @@
     <header class="topbar">
         <a class="topbar-logo" href="{{ route('admin.dashboard') }}">
             {{-- Black logo on the light theme, white logo on the dark theme --}}
-            <img src="{{ asset('images/logo-dark.png') }}" alt="Tago" class="topbar-logo-img logo-on-light">
-            <img src="{{ asset('images/logo-light.png') }}" alt="Tago" class="topbar-logo-img logo-on-dark">
+            <img src="{{ asset('images/logo-dark.png') }}" alt="Tago" class="topbar-logo-img logo-on-light" height="28" style="height:28px;width:auto">
+            <img src="{{ asset('images/logo-light.png') }}" alt="Tago" class="topbar-logo-img logo-on-dark" height="28" style="height:28px;width:auto">
         </a>
         {{-- Searches customers / leads / sales: hidden for Production (they don't see those) --}}
         <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole('Production')) style="display:none" @endif>
