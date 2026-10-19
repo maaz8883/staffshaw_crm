@@ -659,11 +659,13 @@ class TrelloApiClient
             foreach ($boardIds as $id) {
                 $pool->as('c_'.$id)->acceptJson()->timeout(25)->get(self::BASE.'/boards/'.$id.'/cards', $auth + [
                     'filter' => 'open',
-                    'fields' => 'id,name,due,dueComplete,idList,idBoard,labels,dateLastActivity',
+                    'fields' => 'id,name,due,dueComplete,idList,idBoard,labels,dateLastActivity,idMembers',
+                    'members' => 'true',
+                    'member_fields' => 'fullName,initials',
                 ]);
                 $pool->as('l_'.$id)->acceptJson()->timeout(25)->get(self::BASE.'/boards/'.$id.'/lists', $auth + [
                     'filter' => 'open',
-                    'fields' => 'id,name',
+                    'fields' => 'id,name,pos',
                 ]);
             }
         });

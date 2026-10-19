@@ -61,13 +61,13 @@ class ProductionDashboardController extends Controller
             $request->session()->save();
         }
 
-        $cacheKey = 'production.overview.'.$team->id;
+        $cacheKey = 'production.overview.v3.'.$team->id;
         if ($request->boolean('refresh')) {
             Cache::forget($cacheKey); // "Refresh" button: always fetch from Trello
         }
 
         try {
-            $data = Cache::remember($cacheKey, 120, function () use ($integration, $team) {
+            $data = Cache::remember($cacheKey, 300, function () use ($integration, $team) {
                 return $this->buildOverview(TrelloApiClient::forIntegration($integration), $team);
             });
         } catch (RuntimeException $e) {
@@ -88,37 +88,108 @@ class ProductionDashboardController extends Controller
         $endOfWeek = $now->copy()->addDays(7)->endOfDay();
         $groups = ['overdue' => [], 'today' => [], 'week' => []];
         $openCards = 0;
+        $stages = ['todo' => 0, 'progress' => 0, 'review' => 0, 'hold' => 0, 'done' => 0];
+        $pipeline = [];
+        $attention = ['qa' => 0, 'revision' => 0, 'concern' => 0, 'client' => 0, 'hold' => 0];
+        $stale = [];
+        $staleBuckets = ['14_30' => 0, '30_60' => 0, '60_plus' => 0];
+        $members = [];
+        $hygiene = ['no_due' => 0, 'no_member' => 0];
+        $lateByBoard = [];
+        $lateAge = ['1_7' => 0, '8_30' => 0, '31_plus' => 0];
 
         foreach ($boards as $board) {
             $set = $byBoard[$board['id']] ?? ['cards' => [], 'lists' => []];
             $listNames = array_column($set['lists'], 'name', 'id');
-            $openCards += count($set['cards']);
+            $doneListId = self::doneListId($set['lists'], $set['cards']);
+            $listStage = [];
+            foreach ($set['lists'] as $l) {
+                $listStage[$l['id']] = $l['id'] === $doneListId ? 'done' : self::stageFor((string) ($l['name'] ?? ''));
+            }
+            $row = ['name' => $board['name'] ?? '', 'url' => route('admin.trello.board', ['boardId' => $board['id'], 'team' => $team->id]),
+                'todo' => 0, 'progress' => 0, 'review' => 0, 'hold' => 0, 'done' => 0];
 
             foreach ($set['cards'] as $card) {
-                if (empty($card['due']) || ! empty($card['dueComplete'])) {
+                $listId = $card['idList'] ?? '';
+                if (! isset($listStage[$listId])) {
+                    continue; // card sits in an archived list: hidden on Trello, so ignore it here too
+                }
+                $listName = $listNames[$listId] ?? '';
+                $stage = $listStage[$listId];
+                // Complete = due date ticked, or moved into the board's Completed / Done list
+                if (! empty($card['dueComplete']) || $stage === 'done') {
+                    $row['done']++;
+                    $stages['done']++;
+
+                    continue;
+                }
+                $row[$stage]++;
+                $stages[$stage]++;
+                $openCards++;
+                if ($a = self::attentionFor($listName)) {
+                    $attention[$a]++;
+                }
+                $url = route('admin.trello.board', ['boardId' => $board['id'], 'team' => $team->id, 'card' => $card['id']]);
+                $isLate = ! empty($card['due']) && Carbon::parse($card['due'])->lt($now);
+
+                // Who has how much open work
+                foreach ($card['members'] ?? [] as $m) {
+                    $members[$m['id']] ??= ['name' => $m['fullName'] ?? '', 'initials' => $m['initials'] ?? '', 'open' => 0, 'late' => 0];
+                    $members[$m['id']]['open']++;
+                    $members[$m['id']]['late'] += $isLate ? 1 : 0;
+                }
+                if ($stage !== 'hold') {
+                    $hygiene['no_member'] += empty($card['idMembers']) ? 1 : 0;
+                    $hygiene['no_due'] += empty($card['due']) ? 1 : 0;
+
+                    // Stuck: nothing happened on the card for 2+ weeks (on-hold cards are parked on purpose)
+                    $idle = ! empty($card['dateLastActivity']) ? (int) Carbon::parse($card['dateLastActivity'])->diffInDays($now) : 0;
+                    if ($idle >= 14) {
+                        $staleBuckets[$idle >= 60 ? '60_plus' : ($idle >= 30 ? '30_60' : '14_30')]++;
+                        $stale[] = ['name' => $card['name'] ?? '', 'board' => $board['name'] ?? '', 'list' => $listName, 'days' => $idle, 'url' => $url];
+                    }
+                }
+
+                if (empty($card['due'])) {
                     continue;
                 }
                 $due = Carbon::parse($card['due']);
-                $group = $due->lt($now) ? 'overdue' : ($due->lte($endOfToday) ? 'today' : ($due->lte($endOfWeek) ? 'week' : null));
+                $group = $isLate ? 'overdue' : ($due->lte($endOfToday) ? 'today' : ($due->lte($endOfWeek) ? 'week' : null));
                 if (! $group) {
                     continue;
                 }
-                $groups[$group][] = [
+                $entry = [
                     'id' => $card['id'],
                     'name' => $card['name'] ?? '',
                     'due' => $card['due'],
                     'board' => $board['name'] ?? '',
-                    'list' => $listNames[$card['idList'] ?? ''] ?? '',
+                    'board_id' => $board['id'],
+                    'list' => $listName,
                     'labels' => array_map(fn ($l) => ['name' => $l['name'] ?? '', 'color' => $l['color'] ?? null], $card['labels'] ?? []),
                     // Opens the card in the CRM board
-                    'url' => route('admin.trello.board', ['boardId' => $board['id'], 'team' => $team->id, 'card' => $card['id']]),
+                    'url' => $url,
                 ];
+                if ($isLate) {
+                    $days = max(1, (int) $due->diffInDays($now));
+                    $entry['days_late'] = $days;
+                    $lateAge[$days <= 7 ? '1_7' : ($days <= 30 ? '8_30' : '31_plus')]++;
+                    $lateByBoard[$board['id']] ??= ['id' => $board['id'], 'name' => $board['name'] ?? '', 'count' => 0];
+                    $lateByBoard[$board['id']]['count']++;
+                }
+                $groups[$group][] = $entry;
             }
+            $pipeline[] = $row;
         }
         foreach ($groups as &$cards) {
             usort($cards, fn ($a, $b) => strcmp($a['due'], $b['due']));
         }
         unset($cards);
+        usort($stale, fn ($a, $b) => $b['days'] <=> $a['days']);
+        usort($pipeline, fn ($a, $b) => ($b['todo'] + $b['progress'] + $b['review'] + $b['hold']) <=> ($a['todo'] + $a['progress'] + $a['review'] + $a['hold']));
+        $lateByBoard = array_values($lateByBoard);
+        usort($lateByBoard, fn ($a, $b) => $b['count'] <=> $a['count']);
+        $members = array_values($members);
+        usort($members, fn ($a, $b) => [$b['open'], $b['late']] <=> [$a['open'], $a['late']]);
 
         return [
             'counts' => [
@@ -129,12 +200,93 @@ class ProductionDashboardController extends Controller
                 'open_cards' => $openCards,
             ],
             'cards' => $groups,
+            'late_by_board' => $lateByBoard,
+            'late_age' => $lateAge,
+            'stages' => $stages,
+            'pipeline' => $pipeline,
+            'attention' => $attention,
+            'stale' => ['count' => count($stale), 'buckets' => $staleBuckets, 'cards' => array_slice($stale, 0, 60)],
+            'members' => array_slice($members, 0, 30),
+            'hygiene' => $hygiene,
             'boards' => array_map(fn ($b) => [
                 'name' => $b['name'] ?? '',
                 'url' => route('admin.trello.board', ['boardId' => $b['id'], 'team' => $team->id]),
             ], $boards),
             'generated_at' => $now->toIso8601String(),
         ];
+    }
+
+    /**
+     * Pipeline stage from a list's name (each board names its lists differently).
+     * Non-final "complete" lists ("development completed", "UI Design Complete") count as
+     * review: the work is done but the project isn't closed yet.
+     */
+    private static function stageFor(string $name): string
+    {
+        $n = mb_strtolower($name);
+
+        return match (true) {
+            (bool) preg_match('/hold|refund|reject/', $n) => 'hold',
+            (bool) preg_match('/\bqa\b|revision|review|approv|feedback|awaiting|concern|client|deliver|complet|compel|\bdone\b|closed|finali|publish|final files/', $n) => 'review',
+            (bool) preg_match('/\bnew\b|to ?do|brief|backlog|to be processed|mockup/', $n) => 'todo',
+            default => 'progress',
+        };
+    }
+
+    /** Lists that need someone's attention: QA, revisions, concerns, waiting on the client, on hold. */
+    private static function attentionFor(string $name): ?string
+    {
+        $n = mb_strtolower($name);
+
+        return match (true) {
+            (bool) preg_match('/\bqa\b/', $n) => 'qa',
+            (bool) preg_match('/revision/', $n) => 'revision',
+            (bool) preg_match('/concern/', $n) => 'concern',
+            (bool) preg_match('/feedback|awaiting|to client|deliver|on approval/', $n) => 'client',
+            (bool) preg_match('/hold/', $n) => 'hold',
+            default => null,
+        };
+    }
+
+    /**
+     * The board's "finished" list, among lists named like Completed / Done / Closed
+     * ("Task Compeled", "Project Completed / Closed", "Completed Tasks", "Done"…):
+     * - Trello's default trailing "To Do › Doing › Done" is ignored when the board has its own
+     *   completed list ("… Project Completed / Closed › To Do › Doing › Done").
+     * - Boards with several ("development completed" … "Project Completed") use the last one
+     *   that holds cards.
+     *
+     * @param  array<int, array<string, mixed>>  $lists
+     * @param  array<int, array<string, mixed>>  $cards
+     */
+    public static function doneListId(array $lists, array $cards = []): ?string
+    {
+        usort($lists, fn ($a, $b) => ($a['pos'] ?? 0) <=> ($b['pos'] ?? 0));
+        $name = fn ($l) => mb_strtolower(trim(preg_replace('/[^\pL\pN\s\/]+/u', '', (string) ($l['name'] ?? ''))));
+
+        $done = [];
+        $afterDefault = false; // past a "To Do" / "Doing" list
+        foreach ($lists as $l) {
+            $n = $name($l);
+            if (in_array($n, ['to do', 'todo', 'doing'], true)) {
+                $afterDefault = true;
+            }
+            if (preg_match('/complet|compel|\bdone\b|closed/i', $n)) {
+                $done[] = $l + ['_default' => $afterDefault && $n === 'done'];
+            }
+        }
+        $own = array_values(array_filter($done, fn ($l) => ! $l['_default']));
+        $done = $own ?: $done;
+        if (! $done) {
+            return null;
+        }
+
+        $counts = array_count_values(array_filter(array_column($cards, 'idList')));
+        $withCards = array_values(array_filter($done, fn ($l) => ($counts[$l['id']] ?? 0) > 0));
+
+        $pick = $withCards ?: $done;
+
+        return (string) $pick[count($pick) - 1]['id'];
     }
 
     /**
