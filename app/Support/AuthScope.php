@@ -271,7 +271,7 @@ class AuthScope
         $q = User::query()->orderBy('name');
         self::scopeUsers($q);
         // Sales dropdowns only (leads, sales, reports): no production people
-        $q->whereDoesntHave('role', fn ($r) => $r->where('name', Role::PRODUCTION))
+        $q->whereDoesntHave('role', fn ($r) => $r->whereIn('name', [Role::PRODUCTION, Role::PPC]))
             ->whereDoesntHave('team', fn ($t) => $t->where('is_production', true));
 
         return $q->get();

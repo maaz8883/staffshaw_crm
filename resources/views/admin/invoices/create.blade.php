@@ -12,9 +12,9 @@
     <div class="card mb-3"><div class="card-body">
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Customer <span class="text-danger">*</span></label>
+                <label class="form-label">Client <span class="text-danger">*</span></label>
                 <select name="client_id" id="invoice_client_id" class="form-select" required>
-                    <option value="">Select customer</option>
+                    <option value="">Select client</option>
                     @foreach($clients as $client)
                         <option value="{{ $client->id }}"
                             data-brand-id="{{ $client->brand_id }}"
@@ -26,7 +26,7 @@
             </div>
             <div class="col-md-6 mb-3">
                 <label class="form-label">Brand <span class="text-danger">*</span></label>
-                <select name="brand_id" id="invoice_brand_id" class="form-select" required>
+                <select name="brand_id" id="invoice_brand_id" class="form-select js-select2" required data-placeholder="Select brand">
                     <option value="">-- Select Brand --</option>
                     @foreach(($brands ?? []) as $brand)
                         <option value="{{ $brand->id }}" {{ (string) old('brand_id', $invoice->brand_id ?? '') === (string) $brand->id ? 'selected' : '' }}>
@@ -34,7 +34,7 @@
                         </option>
                     @endforeach
                 </select>
-                <div class="form-text">Defaults to the customer’s brand; you can change it for this invoice.</div>
+                <div class="form-text">Defaults to the client’s brand; you can change it for this invoice.</div>
             </div>
             <div class="col-md-3 mb-3">
                 <label class="form-label">Invoice Date <span class="text-danger">*</span></label>
@@ -150,6 +150,7 @@ document.getElementById('add-item')?.addEventListener('click', function () {
         const brandId = option?.getAttribute('data-brand-id') || '';
         if (brandId && brandSelect.querySelector('option[value="' + brandId + '"]')) {
             brandSelect.value = brandId;
+            if (window.jQuery) window.jQuery(brandSelect).trigger('change.select2'); // refresh the Select2 box
         }
     };
 

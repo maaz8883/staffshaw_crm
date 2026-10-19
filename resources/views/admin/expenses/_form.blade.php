@@ -22,7 +22,7 @@
         <input type="date" name="expense_date" class="form-control" required value="{{ old('expense_date', isset($expense) ? $expense->expense_date?->format('Y-m-d') : now()->toDateString()) }}">
     </div>
     <div class="col-md-4 mb-3">
-        <label class="form-label">Customer</label>
+        <label class="form-label">Client</label>
         <select name="client_id" class="form-select">
             <option value="">None</option>
             @foreach($clients as $client)
@@ -32,7 +32,7 @@
     </div>
     <div class="col-md-4 mb-3">
         <label class="form-label">Brand</label>
-        <select name="brand_id" class="form-select">
+        <select name="brand_id" class="form-select js-select2">
             <option value="">No Brand</option>
             @foreach($brands as $brand)
                 <option value="{{ $brand->id }}" {{ (string) old('brand_id', $expense->brand_id ?? '') === (string) $brand->id ? 'selected' : '' }}>{{ $brand->name }}</option>

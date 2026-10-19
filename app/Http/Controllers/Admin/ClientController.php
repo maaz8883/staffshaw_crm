@@ -168,7 +168,7 @@ class ClientController extends Controller
         $teamId = $this->resolveTeamIdForWrite($validated);
 
         if (! $teamId) {
-            return back()->withInput()->with('error', 'A team is required for this customer.');
+            return back()->withInput()->with('error', 'A team is required for this client.');
         }
 
         $client = Client::query()->create(array_merge($payload, [
@@ -279,7 +279,7 @@ class ClientController extends Controller
         if ($saleCount > 0 || $invoiceCount > 0 || $leadCount > 0) {
             return back()->with(
                 'error',
-                'Cannot delete this customer — linked records exist'
+                'Cannot delete this client — linked records exist'
                 . " (sales: {$saleCount}, invoices: {$invoiceCount}, leads: {$leadCount})."
             );
         }

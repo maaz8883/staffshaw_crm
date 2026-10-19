@@ -149,7 +149,7 @@ class DashboardController extends Controller
         // Top agents — only approved sales (exclude Admin & Manager roles)
         $topAgents = User::with(['team', 'company', 'role'])
             ->accountActive()
-            ->whereDoesntHave('role', fn (Builder $q) => $q->whereIn('name', [Role::ADMIN, Role::MANAGER, Role::PRODUCTION]))
+            ->whereDoesntHave('role', fn (Builder $q) => $q->whereIn('name', [Role::ADMIN, Role::MANAGER, Role::PRODUCTION, Role::PPC]))
             ->whereDoesntHave('team', fn (Builder $q) => $q->where('is_production', true))
             ->get()
             ->map(function ($u) use ($month, $year) {
@@ -276,7 +276,8 @@ class DashboardController extends Controller
             ->orderBy('name')
             ->get()
             // PMs belong via Team_Membership, not users.team_id (avoids stale home-team).
-            ->reject(fn (User $u) => $u->hasRole(Role::PROJECT_MANAGER))
+            // PPC / Production don't make sales, so they have no place in a sales table.
+            ->reject(fn (User $u) => $u->hasRole([Role::PROJECT_MANAGER, Role::PPC, Role::PRODUCTION]))
             ->groupBy('team_id');
 
         $pmsByTeam = TeamMembership::query()

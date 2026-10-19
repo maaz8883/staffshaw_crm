@@ -19,14 +19,8 @@ class EnsureAccountIsActive
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            $message = 'Your session has ended.';
-            if ($user->isPendingApproval()) {
-                $message = 'Your account is still pending approval.';
-            } elseif ($user->isAccountRejected()) {
-                $message = 'Your account is not active.';
-            }
-
-            return redirect()->route('admin.login')->withErrors(['email' => $message]);
+            // Also ends the session of a user banned while signed in
+            return redirect()->route('admin.login')->withErrors(['email' => $user->signInBlockedMessage() ?? 'Your session has ended.']);
         }
 
         return $next($request);

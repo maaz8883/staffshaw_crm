@@ -92,7 +92,7 @@
         <div class="kpi kpi-leads">
             <div class="kpi-label">Leads converted</div>
             <div class="kpi-value">{{ $crmOverview['converted'] }}<span style="font-size:14px;color:#94a3b8;font-weight:600"> / {{ $crmOverview['lead_total'] }}</span></div>
-            <div class="kpi-sub">Customers from pipeline</div>
+            <div class="kpi-sub">Clients from pipeline</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">

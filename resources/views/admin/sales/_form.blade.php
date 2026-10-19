@@ -17,7 +17,7 @@
 
     <div class="col-md-6 mb-3">
         <label for="brand_id" class="form-label">Brand <span class="text-danger">*</span></label>
-        <select id="brand_id" name="brand_id" class="form-select" required>
+        <select id="brand_id" name="brand_id" class="form-select js-select2" required data-placeholder="Select brand">
             <option value="">-- Select Brand --</option>
             @foreach($brands as $brand)
                 <option value="{{ $brand->id }}"

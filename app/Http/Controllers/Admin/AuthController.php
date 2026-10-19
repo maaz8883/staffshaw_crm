@@ -27,17 +27,11 @@ class AuthController extends Controller
         if (Auth::attempt($credentials, true)) {
             $user = Auth::user();
 
-            if (! $user->isAccountActive()) {
+            if ($blocked = $user->signInBlockedMessage()) {
                 Auth::logout();
                 $request->session()->regenerate();
 
-                if ($user->isPendingApproval()) {
-                    return back()->withErrors(['email' => 'Your account is pending approval.'])->onlyInput('email');
-                }
-                if ($user->isAccountRejected()) {
-                    return back()->withErrors(['email' => 'Your registration was not approved.'])->onlyInput('email');
-                }
-                return back()->withErrors(['email' => 'Your account cannot sign in.'])->onlyInput('email');
+                return back()->withErrors(['email' => $blocked])->onlyInput('email');
             }
 
             $request->session()->regenerate();
@@ -127,20 +121,8 @@ class AuthController extends Controller
                 ]);
             }
 
-            if (!$user->isAccountActive()) {
-                if ($user->isPendingApproval()) {
-                    return redirect()->route('admin.login')->withErrors([
-                        'email' => 'Your account is pending approval.',
-                    ]);
-                }
-                if ($user->isAccountRejected()) {
-                    return redirect()->route('admin.login')->withErrors([
-                        'email' => 'Your registration was not approved.',
-                    ]);
-                }
-                return redirect()->route('admin.login')->withErrors([
-                    'email' => 'Your account cannot sign in.',
-                ]);
+            if ($blocked = $user->signInBlockedMessage()) {
+                return redirect()->route('admin.login')->withErrors(['email' => $blocked]);
             }
 
             Auth::login($user, true);

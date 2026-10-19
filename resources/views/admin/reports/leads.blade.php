@@ -21,7 +21,7 @@
     </div>
     <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100"><div class="card-body">
-            <div class="text-muted small">Converted to customer</div>
+            <div class="text-muted small">Converted to client</div>
             <div class="fs-4 fw-semibold text-success">{{ number_format($converted) }}</div>
         </div></div>
     </div>

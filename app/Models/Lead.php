@@ -31,7 +31,7 @@ class Lead extends Model
         'contacted' => 'Contacted',
         'follow_up' => 'Follow Up',
         'proposal' => 'Proposal',
-        'customer' => 'Customer',
+        'customer' => 'Client',
         'lost' => 'Lost',
     ];
 

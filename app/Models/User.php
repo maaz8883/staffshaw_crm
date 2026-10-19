@@ -21,6 +21,9 @@ class User extends Authenticatable
 
     public const ACCOUNT_REJECTED = 'rejected';
 
+    /** Blocked by an admin: can't sign in (password or OTP) until unbanned. */
+    public const ACCOUNT_BANNED = 'banned';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -168,6 +171,23 @@ class User extends Authenticatable
     public function isAccountActive(): bool
     {
         return $this->account_status === self::ACCOUNT_ACTIVE;
+    }
+
+    public function isBanned(): bool
+    {
+        return $this->account_status === self::ACCOUNT_BANNED;
+    }
+
+    /** Why this account can't sign in (null when it can). */
+    public function signInBlockedMessage(): ?string
+    {
+        return match (true) {
+            $this->isAccountActive() => null,
+            $this->isBanned() => 'Your account has been banned. Contact your admin.',
+            $this->isPendingApproval() => 'Your account is pending approval.',
+            $this->isAccountRejected() => 'Your registration was not approved.',
+            default => 'Your account cannot sign in.',
+        };
     }
 
     public function isPendingApproval(): bool

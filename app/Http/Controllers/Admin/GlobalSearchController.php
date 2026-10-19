@@ -123,7 +123,7 @@ class GlobalSearchController extends Controller
             ->limit(5)
             ->get()
             ->map(fn (Client $c) => [
-                'type' => 'Customer',
+                'type' => 'Client',
                 'icon' => 'people',
                 'title' => $c->name,
                 'subtitle' => collect([$c->company_name, $c->email, $c->phone])->filter()->implode(' · '),

@@ -33,7 +33,7 @@
         {{-- Searches customers / leads / sales: hidden for Production (they don't see those) --}}
         <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole('Production')) style="display:none" @endif>
             <i class="bi bi-search"></i>
-            <input id="top-search" type="search" placeholder="Search people, customers, leads, sales..." autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results">
+            <input id="top-search" type="search" placeholder="Search people, clients, leads, sales..." autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results">
             <div id="global-search-results" class="global-search-dropdown" hidden role="listbox"></div>
         </div>
         <div class="topbar-actions">
@@ -99,8 +99,8 @@
             @if(! $isPpc)
             @if(! $isProduction)
             <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Customers">
-                    <i class="bi bi-people"></i> <span class="nav-label">Customers</span>
+                <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Clients">
+                    <i class="bi bi-people"></i> <span class="nav-label">Clients</span>
                 </a>
             </li>
             <li class="nav-item">
@@ -332,6 +332,31 @@
                             : $(document.body)
                     });
                 });
+                // Single searchable dropdowns (e.g. Brand)
+                $root.find('select.js-select2').each(function () {
+                    var el = this, $el = $(this);
+                    if ($el.hasClass('select2-hidden-accessible')) return;
+                    var $parent = $el.closest('.mb-3, .col-md-6, .col-md-4, .form-group, td, .card-body');
+                    var emptyOption = $el.find('option[value=""]').first();
+                    $el.select2({
+                        theme: 'bootstrap-5',
+                        width: '100%',
+                        placeholder: $el.data('placeholder') || (emptyOption.length ? emptyOption.text() : 'Select'),
+                        allowClear: !$el.prop('required') && emptyOption.length > 0,
+                        dropdownParent: $parent.length ? $parent : $(document.body)
+                    });
+                    // Select2 only fires jQuery events: pass a real "change" on to plain JS listeners
+                    $el.on('select2:select select2:clear', function () {
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                    // Type to search right away (jQuery 3.6+ no longer focuses the search box)
+                    $el.on('select2:open', function () {
+                        setTimeout(function () {
+                            var f = document.querySelector('.select2-container--open .select2-search__field');
+                            if (f) f.focus();
+                        }, 0);
+                    });
+                });
             }
             window.initCrmSelect2 = initSelect2;
             $(function () { initSelect2(document); });
@@ -359,9 +384,9 @@
                 text: text || undefined,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonColor: '#dc3545',
+                confirmButtonColor: form.dataset.swalColor || '#dc3545',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Yes, delete',
+                confirmButtonText: form.dataset.swalConfirm || 'Yes, delete',
                 cancelButtonText: 'Cancel',
                 reverseButtons: true
             }).then(function (result) {

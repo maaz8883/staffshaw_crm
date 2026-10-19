@@ -753,7 +753,7 @@ class TrelloController extends Controller
             : 'all boards';
 
         $msg = sprintf(
-            'Trello → Customers for %s (%s): %d created, %d updated, %d skipped (%d cards).',
+            'Trello → Clients for %s (%s): %d created, %d updated, %d skipped (%d cards).',
             $team->name,
             $boardLabel,
             $stats['created'],

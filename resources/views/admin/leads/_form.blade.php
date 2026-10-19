@@ -53,7 +53,7 @@
 
     <div class="col-md-4 mb-3">
         <label for="brand_id" class="form-label">Brand</label>
-        <select id="brand_id" name="brand_id" class="form-select">
+        <select id="brand_id" name="brand_id" class="form-select js-select2">
             <option value="">No Brand</option>
             @foreach(($brands ?? []) as $brand)
                 <option value="{{ $brand->id }}" {{ (string) old('brand_id', $lead->brand_id ?? '') === (string) $brand->id ? 'selected' : '' }}>{{ $brand->name }}</option>

@@ -48,11 +48,25 @@ class UserController extends Controller
         if ($request->filled('role_id')) {
             $query->where('role_id', $request->role_id);
         }
+        if ($request->filled('status')) {
+            $query->where('account_status', $request->status);
+        }
 
         return DataTables::eloquent($query)
             ->addColumn('role_name', fn (User $user) => e($user->role?->name ?? '-'))
             ->addColumn('team_name', fn (User $user) => e($user->team?->name ?? '-'))
             ->addColumn('company_name', fn (User $user) => e($user->company?->name ?? '-'))
+            ->addColumn('status_badge', function (User $user) {
+                [$label, $color] = match ($user->account_status) {
+                    User::ACCOUNT_ACTIVE => ['Active', 'success'],
+                    User::ACCOUNT_BANNED => ['Banned', 'danger'],
+                    User::ACCOUNT_PENDING => ['Pending', 'warning'],
+                    User::ACCOUNT_REJECTED => ['Rejected', 'secondary'],
+                    default => [ucfirst((string) $user->account_status), 'secondary'],
+                };
+
+                return '<span class="badge text-bg-'.$color.'">'.e($label).'</span>';
+            })
             ->addColumn('actions', function (User $user) {
                 $showUrl = route('admin.users.show', $user);
                 $editUrl = route('admin.users.edit', $user);
@@ -60,17 +74,58 @@ class UserController extends Controller
                 $csrf = csrf_field();
                 $method = method_field('DELETE');
 
+                // Ban / unban (never yourself)
+                $ban = '';
+                if ($user->id !== Auth::id()) {
+                    if ($user->isBanned()) {
+                        $ban = '<form action="'.route('admin.users.unban', $user).'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Unban '.e($user->name).'?" data-swal-text="They will be able to sign in again." data-swal-confirm="Yes, unban" data-swal-color="#198754">'
+                            .$csrf.'<button type="submit" class="btn btn-sm btn-outline-success">Unban</button></form>';
+                    } elseif ($user->isAccountActive()) {
+                        $ban = '<form action="'.route('admin.users.ban', $user).'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Ban '.e($user->name).'?" data-swal-text="They will be signed out and won&#39;t be able to sign in." data-swal-confirm="Yes, ban">'
+                            .$csrf.'<button type="submit" class="btn btn-sm btn-outline-dark">Ban</button></form>';
+                    }
+                }
+
                 return '
                     <a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>
                     <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>
+                    '.$ban.'
                     <form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this user?">
                         '.$csrf.$method.'
                         <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                     </form>
                 ';
             })
-            ->rawColumns(['actions'])
+            ->rawColumns(['actions', 'status_badge'])
             ->toJson();
+    }
+
+    /** Block the account: signs the user out everywhere and stops password / OTP sign-in. */
+    public function ban(User $user): RedirectResponse
+    {
+        abort_if($user->id === Auth::id(), 403, 'You cannot ban yourself.');
+        abort_unless($user->isAccountActive(), 422, 'Only active accounts can be banned.');
+
+        $user->forceFill([
+            'account_status' => User::ACCOUNT_BANNED,
+            'session_token' => null,
+            'remember_token' => \Illuminate\Support\Str::random(60), // kills "remember me" cookies
+        ])->save();
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_USER_UPDATED, "Banned user: {$user->name} ({$user->email})");
+
+        return back()->with('success', "{$user->name} has been banned and can no longer sign in.");
+    }
+
+    public function unban(User $user): RedirectResponse
+    {
+        abort_unless($user->isBanned(), 422, 'This account is not banned.');
+
+        $user->forceFill(['account_status' => User::ACCOUNT_ACTIVE])->save();
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_USER_UPDATED, "Unbanned user: {$user->name} ({$user->email})");
+
+        return back()->with('success', "{$user->name} has been unbanned and can sign in again.");
     }
 
     public function create(): View

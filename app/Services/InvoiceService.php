@@ -109,44 +109,76 @@ class InvoiceService
 
         return DB::transaction(function () use ($sale, $amount, $creator) {
             $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
-            $sale->loadMissing(['user', 'team', 'company', 'brand']);
-
             $newReceived = round((float) $sale->received_amount + $amount, 2);
-            $newBalance = round(max(0, (float) $sale->amount - $newReceived), 2);
 
-            $invoice = Invoice::query()->create([
-                'sale_id'         => $sale->id,
-                'client_id'       => $sale->client_id,
-                'invoice_number'  => $this->generateNumber(),
-                'issued_at'       => now()->toDateString(),
-                'amount'          => $amount,
-                'currency'        => 'USD',
-                'client_name'     => $sale->client_name,
-                'client_email'    => $sale->client_email,
-                'client_phone'    => $sale->client_phone,
-                'title'           => $sale->title,
-                'notes'           => $sale->notes,
-                'brand_id'        => $sale->brand_id,
-                'brand_name'      => $sale->brand?->name,
-                'agent_name'      => $sale->user?->name,
-                'team_name'       => $sale->team?->name,
-                'company_name'    => $sale->company?->name,
-                'sale_total'      => $sale->amount,
-                'sale_received'   => $newReceived,
-                'sale_balance'    => $newBalance,
-                'status'          => Invoice::STATUS_ISSUED,
-                'created_by'      => $creator->id,
-            ]);
-
+            $invoice = $this->writeReceipt($sale, $amount, $newReceived, $creator, now()->toDateString());
             $sale->update(['received_amount' => $newReceived]);
-
-            ActivityLogger::log($creator, UserActivityLog::TYPE_INVOICE_CREATED,
-                "Created invoice {$invoice->invoice_number} for sale #{$sale->id} (received \${$amount})",
-                ['invoice_id' => $invoice->id, 'sale_id' => $sale->id, 'amount' => $amount]
-            );
 
             return $invoice;
         });
+    }
+
+    /**
+     * The "Received amount" typed on the sale form is money already taken, but it only lands on the
+     * sale — no receipt. Once the sale is approved, issue a receipt for whatever part of it isn't
+     * covered by a receipt yet (received_amount stays as is: it already counts this money).
+     */
+    public function receiptForReceivedOnSale(Sale $sale, User $creator, ?string $issuedAt = null): ?Invoice
+    {
+        $sale = $sale->fresh();
+        if (! $sale || $sale->is_draft || ! $sale->isApproved() || $sale->is_refunded || $sale->status === Sale::STATUS_REFUNDED) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($sale, $creator, $issuedAt) {
+            $sale = Sale::query()->lockForUpdate()->findOrFail($sale->id);
+            $received = round((float) $sale->received_amount, 2);
+            $missing = round(min($received, (float) $sale->amount) - $this->invoicedTotal($sale), 2);
+            if ($missing <= 0) {
+                return null;
+            }
+
+            return $this->writeReceipt($sale, $missing, $received, $creator, $issuedAt ?? now()->toDateString());
+        });
+    }
+
+    /** Receipt row for money received against a sale (caller holds the sale lock). */
+    private function writeReceipt(Sale $sale, float $amount, float $receivedAfter, User $creator, string $issuedAt): Invoice
+    {
+        $sale->loadMissing(['user', 'team', 'company', 'brand']);
+        $newReceived = $receivedAfter;
+        $newBalance = round(max(0, (float) $sale->amount - $newReceived), 2);
+
+        $invoice = Invoice::query()->create([
+            'sale_id'         => $sale->id,
+            'client_id'       => $sale->client_id,
+            'invoice_number'  => $this->generateNumber(),
+            'issued_at'       => $issuedAt,
+            'amount'          => $amount,
+            'currency'        => 'USD',
+            'client_name'     => $sale->client_name,
+            'client_email'    => $sale->client_email,
+            'client_phone'    => $sale->client_phone,
+            'title'           => $sale->title,
+            'notes'           => $sale->notes,
+            'brand_id'        => $sale->brand_id,
+            'brand_name'      => $sale->brand?->name,
+            'agent_name'      => $sale->user?->name,
+            'team_name'       => $sale->team?->name,
+            'company_name'    => $sale->company?->name,
+            'sale_total'      => $sale->amount,
+            'sale_received'   => $newReceived,
+            'sale_balance'    => $newBalance,
+            'status'          => Invoice::STATUS_ISSUED,
+            'created_by'      => $creator->id,
+        ]);
+
+        ActivityLogger::log($creator, UserActivityLog::TYPE_INVOICE_CREATED,
+            "Created invoice {$invoice->invoice_number} for sale #{$sale->id} (received \${$amount})",
+            ['invoice_id' => $invoice->id, 'sale_id' => $sale->id, 'amount' => $amount]
+        );
+
+        return $invoice;
     }
 
     public function void(Invoice $invoice, User $user): Invoice

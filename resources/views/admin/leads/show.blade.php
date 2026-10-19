@@ -8,7 +8,7 @@
     <div class="mb-3">
         <a href="{{ route('admin.leads.edit', $lead) }}" class="btn btn-outline-warning btn-sm">Edit</a>
         @if($lead->client_id)
-            <a href="{{ route('admin.clients.show', $lead->client_id) }}" class="btn btn-outline-success btn-sm">View Customer</a>
+            <a href="{{ route('admin.clients.show', $lead->client_id) }}" class="btn btn-outline-success btn-sm">View Client</a>
             @if(!auth()->user()->hasRole('Admin'))
             <a href="{{ route('admin.sales.create', ['lead_id' => $lead->id, 'client_id' => $lead->client_id]) }}" class="btn btn-primary btn-sm">Create Sale</a>
             @endif
@@ -16,7 +16,7 @@
             <form action="{{ route('admin.leads.convert', $lead) }}" method="POST" class="d-inline">
                 @csrf
                 <button class="btn btn-success btn-sm" type="submit">
-                    {{ auth()->user()->hasRole('Admin') ? 'Convert to Customer' : 'Convert & Create Sale' }}
+                    {{ auth()->user()->hasRole('Admin') ? 'Convert to Client' : 'Convert & Create Sale' }}
                 </button>
             </form>
         @endif

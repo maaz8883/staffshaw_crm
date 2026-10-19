@@ -30,6 +30,11 @@ class OtpController extends Controller
         $email = $request->email;
         $user  = User::where('email', $email)->first();
 
+        // Banned / pending / rejected accounts don't get a code
+        if ($blocked = $user?->signInBlockedMessage()) {
+            return back()->withErrors(['email' => $blocked])->withInput();
+        }
+
         // Generate 6-digit OTP
         $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
@@ -114,6 +119,9 @@ class OtpController extends Controller
         $record->update(['used' => true]);
 
         $user = User::where('email', $request->email)->first();
+        if (! $user || ($blocked = $user->signInBlockedMessage())) {
+            return redirect()->route('admin.login')->withErrors(['email' => $blocked ?? 'Account not found.']);
+        }
         Auth::login($user, true);
         $request->session()->regenerate();
         AuthController::bindSession($user, $request);

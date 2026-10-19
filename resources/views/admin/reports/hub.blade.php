@@ -79,9 +79,9 @@
     }
     $groups = [
         'Sales & revenue' => $salesCards,
-        'Pipeline & customers' => [
+        'Pipeline & clients' => [
             ['route' => 'admin.reports.leads', 'icon' => 'funnel', 'title' => 'Leads report', 'desc' => 'Pipeline by status, source & conversion'],
-            ['route' => 'admin.reports.clients', 'icon' => 'people-fill', 'title' => 'Customers report', 'desc' => 'New customers and linked sales'],
+            ['route' => 'admin.reports.clients', 'icon' => 'people-fill', 'title' => 'Clients report', 'desc' => 'New clients and linked sales'],
         ],
         'Finance' => $financeCards,
     ];

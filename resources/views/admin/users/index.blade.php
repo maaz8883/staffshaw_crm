@@ -31,6 +31,14 @@
             @endforeach
         </select>
 
+        <select id="filter-status" class="form-select form-select-sm" style="width:auto">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="banned">Banned</option>
+            <option value="pending">Pending</option>
+            <option value="rejected">Rejected</option>
+        </select>
+
         <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>
     </div>
 
@@ -44,6 +52,7 @@
                     <th>Role</th>
                     @unless($singleCompany)<th>Company</th>@endunless
                     <th>Team</th>
+                    <th>Status</th>
                     <th class="text-end">Actions</th>
                 </tr>
                 </thead>
@@ -71,6 +80,7 @@
                         d.company_id = $('#filter-company').val() || '';
                         d.team_id    = $('#filter-team').val();
                         d.role_id    = $('#filter-role').val();
+                        d.status     = $('#filter-status').val();
                     }
                 },
                 columns: [
@@ -81,16 +91,17 @@
                     {data: 'company_name', name: 'company.name', orderable: false, searchable: false},
                     @endunless
                     {data: 'team_name',    name: 'team.name',    orderable: false, searchable: false},
+                    {data: 'status_badge', name: 'account_status', orderable: false, searchable: false},
                     {data: 'actions',      name: 'actions',      orderable: false, searchable: false, className: 'text-end'}
                 ]
             });
 
-            $('#filter-company, #filter-team, #filter-role').on('change', function () {
+            $('#filter-company, #filter-team, #filter-role, #filter-status').on('change', function () {
                 table.draw();
             });
 
             $('#btn-reset').on('click', function () {
-                $('#filter-company, #filter-team, #filter-role').val('');
+                $('#filter-company, #filter-team, #filter-role, #filter-status').val('');
                 table.draw();
             });
         });

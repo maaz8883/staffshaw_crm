@@ -509,6 +509,9 @@ class SaleController extends Controller
 
         $sale->update($payload);
 
+        // Money typed as "Received amount" on the sale form gets its receipt now
+        app(\App\Services\InvoiceService::class)->receiptForReceivedOnSale($sale, Auth::user());
+
         SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), true);
 
         // Log activity
@@ -818,7 +821,7 @@ class SaleController extends Controller
                 ->map(fn ($id) => (int) $id);
             if (! $allowedIds->contains((int) $clientId)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'client_id' => 'You cannot attach this customer to the sale.',
+                    'client_id' => 'You cannot attach this client to the sale.',
                 ]);
             }
 

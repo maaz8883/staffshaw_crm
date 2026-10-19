@@ -79,7 +79,7 @@
 
 <div class="card"><div class="card-body table-responsive">
     <table class="table table-hover mb-0">
-        <thead><tr><th>Date</th><th>Category</th><th>Customer</th><th>Amount</th><th>Tax</th><th>Billable</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Category</th><th>Client</th><th>Amount</th><th>Tax</th><th>Billable</th><th></th></tr></thead>
         <tbody>
         @forelse($list as $expense)
             <tr>

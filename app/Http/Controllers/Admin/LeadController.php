@@ -188,13 +188,13 @@ class LeadController extends Controller
             if ($isAdmin) {
                 return redirect()
                     ->route('admin.clients.show', $lead->client_id)
-                    ->with('success', 'Customer already exists for this lead.');
+                    ->with('success', 'Client already exists for this lead.');
             }
 
             return redirect()->route('admin.sales.create', [
                 'lead_id' => $lead->id,
                 'client_id' => $lead->client_id,
-            ])->with('success', 'Customer already exists — create a sale from this lead.');
+            ])->with('success', 'Client already exists — create a sale from this lead.');
         }
 
         $teamId = $lead->team_id ?: $user->team_id;
@@ -246,13 +246,13 @@ class LeadController extends Controller
         if ($isAdmin) {
             return redirect()
                 ->route('admin.clients.show', $client)
-                ->with('success', 'Lead converted to customer. Admins cannot create sales — assign an agent to create the sale.');
+                ->with('success', 'Lead converted to client. Admins cannot create sales — assign an agent to create the sale.');
         }
 
         return redirect()->route('admin.sales.create', [
             'lead_id' => $lead->id,
             'client_id' => $client->id,
-        ])->with('success', 'Lead converted to customer. Complete the sale below.');
+        ])->with('success', 'Lead converted to client. Complete the sale below.');
     }
 
     public function destroy(Lead $lead): RedirectResponse

@@ -6,19 +6,19 @@
 
 <div class="row">
     <div class="col-md-6 mb-3">
-        <label for="name" class="form-label">Customer Name <span class="text-danger">*</span></label>
+        <label for="name" class="form-label">Client Name <span class="text-danger">*</span></label>
         <input type="text" id="name" name="name" class="form-control" value="{{ old('name', $client->name ?? '') }}" required>
         <div class="form-text">Main name shown on sales and invoices.</div>
     </div>
     <div class="col-md-6 mb-3">
         <label for="company_name" class="form-label">Company (optional)</label>
         <input type="text" id="company_name" name="company_name" class="form-control" value="{{ old('company_name', $client->company_name ?? '') }}">
-        <div class="form-text">Business name if different from customer name.</div>
+        <div class="form-text">Business name if different from client name.</div>
     </div>
 
     <div class="col-md-4 mb-3">
         <label for="brand_id" class="form-label">Brand</label>
-        <select id="brand_id" name="brand_id" class="form-select">
+        <select id="brand_id" name="brand_id" class="form-select js-select2">
             <option value="">No Brand</option>
             @foreach(($brands ?? []) as $brand)
                 <option value="{{ $brand->id }}" {{ (string) old('brand_id', $client->brand_id ?? '') === (string) $brand->id ? 'selected' : '' }}>{{ $brand->name }}</option>
@@ -66,7 +66,7 @@
         <div class="form-check mb-2">
             <input type="hidden" name="is_active" value="0">
             <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {{ (string) old('is_active', ($client->is_active ?? true) ? '1' : '0') === '1' ? 'checked' : '' }}>
-            <label class="form-check-label" for="is_active">Active customer</label>
+            <label class="form-check-label" for="is_active">Active client</label>
         </div>
     </div>
 

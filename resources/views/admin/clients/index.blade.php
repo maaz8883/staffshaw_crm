@@ -7,14 +7,14 @@
 @section('content')
 
 <div class="row g-3 mb-3">
-    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Total Customers</div><div class="fs-5 fw-semibold">{{ $stats['total'] }}</div></div></div></div>
-    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Active Customers</div><div class="fs-5 fw-semibold">{{ $stats['active'] }}</div></div></div></div>
-    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Inactive Customers</div><div class="fs-5 fw-semibold">{{ $stats['inactive'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Total Clients</div><div class="fs-5 fw-semibold">{{ $stats['total'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Active Clients</div><div class="fs-5 fw-semibold">{{ $stats['active'] }}</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Inactive Clients</div><div class="fs-5 fw-semibold">{{ $stats['inactive'] }}</div></div></div></div>
     <div class="col-md-3"><div class="card"><div class="card-body py-3"><div class="text-muted small">Contacts</div><div class="fs-5 fw-semibold">{{ $stats['contacts'] }}</div></div></div></div>
 </div>
 
 <div class="mb-3">
-    <a href="{{ route('admin.clients.create') }}" class="btn btn-primary">New Customer</a>
+    <a href="{{ route('admin.clients.create') }}" class="btn btn-primary">New Client</a>
 </div>
 
 <div class="card">
