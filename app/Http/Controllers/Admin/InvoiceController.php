@@ -532,7 +532,7 @@ class InvoiceController extends Controller
         if ($subTeamHead) {
             $saleUser = User::find($sale->user_id);
 
-            if ($saleUser && $saleUser->sub_team_head_id === $subTeamHead->id) {
+            if ($saleUser && (int) $saleUser->sub_team_head_id === (int) $subTeamHead->id) {
                 return;
             }
         }

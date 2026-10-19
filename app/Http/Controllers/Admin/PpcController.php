@@ -114,7 +114,7 @@ class PpcController extends Controller
     {
         $user = Auth::user();
 
-        if (! $user->hasRole(Role::ADMIN) && $spending->user_id !== $user->id) {
+        if (! $user->hasRole(Role::ADMIN) && (int) $spending->user_id !== (int) $user->id) {
             abort(403);
         }
 

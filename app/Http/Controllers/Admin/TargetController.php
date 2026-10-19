@@ -253,7 +253,7 @@ class TargetController extends Controller
 
         // Make sure the sub-team head belongs to this team
         $subTeamHead = \App\Models\SubTeamHead::find($validated['sub_team_head_id']);
-        if ($subTeamHead->team_id !== $team->id) {
+        if ((int) $subTeamHead->team_id !== (int) $team->id) { // ids can arrive as strings from MySQL
             return back()->withErrors(['sub_team_head_id' => 'This sub-team head does not belong to the selected team.']);
         }
 

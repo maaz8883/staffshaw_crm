@@ -41,7 +41,7 @@ class SaleNotificationDispatcher
         // If seller belongs to a sub-team, notify their sub-team head
         if ($seller->sub_team_head_id) {
             $subTeamHead = \App\Models\SubTeamHead::find($seller->sub_team_head_id);
-            if ($subTeamHead && $subTeamHead->user_id !== $seller->id) {
+            if ($subTeamHead && (int) $subTeamHead->user_id !== (int) $seller->id) {
                 $subTeamHeadUser = User::find($subTeamHead->user_id);
                 if ($subTeamHeadUser) {
                     $recipients->push($subTeamHeadUser);
@@ -79,7 +79,7 @@ class SaleNotificationDispatcher
         // If agent belongs to a sub-team and decider is not the sub-team head, notify the sub-team head
         if ($agent && $agent->sub_team_head_id) {
             $subTeamHead = \App\Models\SubTeamHead::find($agent->sub_team_head_id);
-            if ($subTeamHead && $subTeamHead->user_id !== $decider->id) {
+            if ($subTeamHead && (int) $subTeamHead->user_id !== (int) $decider->id) {
                 $subTeamHeadUser = User::find($subTeamHead->user_id);
                 if ($subTeamHeadUser) {
                     $recipients->push($subTeamHeadUser);
@@ -117,7 +117,7 @@ class SaleNotificationDispatcher
         $sale->loadMissing('user');
         if ($sale->user && $sale->user->sub_team_head_id) {
             $subTeamHead = \App\Models\SubTeamHead::find($sale->user->sub_team_head_id);
-            if ($subTeamHead && $subTeamHead->user_id !== $editor->id) {
+            if ($subTeamHead && (int) $subTeamHead->user_id !== (int) $editor->id) {
                 $subTeamHeadUser = User::find($subTeamHead->user_id);
                 if ($subTeamHeadUser) {
                     $recipients->push($subTeamHeadUser);
