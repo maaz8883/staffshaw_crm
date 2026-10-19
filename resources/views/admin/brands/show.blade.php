@@ -6,7 +6,9 @@
 
 @section('content')
     <div class="mb-3">
+        @if(auth()->user()->hasRole('Admin'))
         <a href="{{ route('admin.brands.edit', $brand) }}" class="btn btn-outline-warning btn-sm">Edit</a>
+        @endif
         <a href="{{ route('admin.brands.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
     </div>
 
@@ -42,7 +44,7 @@
                                     <th>Fields</th>
                                     <th>Document</th>
                                     <th>Status</th>
-                                    @if(config('brief.builder_enabled'))
+                                    @if(config('brief.builder_enabled') && auth()->user()->hasRole('Admin'))
                                     <th>Builder</th>
                                     @endif
                                 </tr>
@@ -69,7 +71,7 @@
                                             <span class="badge bg-secondary">Inactive</span>
                                         @endif
                                     </td>
-                                    @if(config('brief.builder_enabled'))
+                                    @if(config('brief.builder_enabled') && auth()->user()->hasRole('Admin'))
                                     <td>
                                         <a href="{{ route('admin.brands.brief-forms.builder', [$brand, $form]) }}" class="btn btn-sm btn-outline-primary">Build Form</a>
                                     </td>

@@ -1,7 +1,7 @@
 @php
     $q = request()->query();
     $r = request()->route()?->getName();
-    $isAdminUser = auth()->user()?->hasRole('Admin');
+    $isAdminUser = auth()->user()?->hasRole(['Admin', 'Finance']); // expenses report
     $canViewOrgReports = $canViewOrgReports ?? auth()->user()?->hasRole(['Admin', 'Manager']);
     $items = [
         ['route' => 'admin.reports.index', 'label' => 'Overview', 'icon' => 'grid-3x3-gap'],
@@ -14,7 +14,7 @@
         ['route' => 'admin.reports.sales', 'label' => 'Sales', 'icon' => 'cash-stack'],
         ['route' => 'admin.reports.user', 'label' => 'Agents', 'icon' => 'person-badge'],
         ['route' => 'admin.reports.brands', 'label' => 'Brands', 'icon' => 'tags'],
-        ['route' => 'admin.reports.leads', 'label' => 'Leads', 'icon' => 'funnel'],
+        ...(auth()->user()?->hasRole('Finance') ? [] : [['route' => 'admin.reports.leads', 'label' => 'Leads', 'icon' => 'funnel']]),
         ['route' => 'admin.reports.clients', 'label' => 'Clients', 'icon' => 'people-fill'],
         ['route' => 'admin.reports.invoices', 'label' => 'Invoices', 'icon' => 'receipt'],
     ]);

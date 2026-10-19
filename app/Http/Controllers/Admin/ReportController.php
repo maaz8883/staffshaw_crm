@@ -39,7 +39,7 @@ class ReportController extends Controller
 
     private function canViewOrgReports(): bool
     {
-        return Auth::user()->hasRole([Role::ADMIN, Role::MANAGER]);
+        return AuthScope::seesAllMoney(); // Admin, Manager, Finance
     }
 
     /** Admin / Manager / Team Lead only — regular agents use Sales Performance. */
@@ -64,7 +64,7 @@ class ReportController extends Controller
         $user = Auth::user();
         $query = Sale::query()->select('sales.*');
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) {
             // all
         } elseif ($this->isTeamHead()) {
             $query->whereIn('team_id', $this->headedTeamIds());
@@ -407,6 +407,7 @@ class ReportController extends Controller
 
     public function leads(Request $request): View
     {
+        abort_if(AuthScope::isFinance(), 403, 'The leads report is for sales roles.');
         $ctx = $this->prepareSalesContext($request);
         $dateFrom = $ctx['dateFrom'];
         $dateTo = $ctx['dateTo'];
@@ -561,7 +562,7 @@ class ReportController extends Controller
 
     public function expenses(Request $request): View
     {
-        abort_unless(Auth::user()?->hasRole(Role::ADMIN), 403);
+        abort_unless(Auth::user()?->hasRole([Role::ADMIN, Role::FINANCE]), 403);
 
         $ctx = $this->prepareSalesContext($request);
         $dateFrom = $ctx['dateFrom'];
@@ -576,20 +577,18 @@ class ReportController extends Controller
         }
 
         $total = (float) (clone $query)->sum('amount');
-        $tax = (float) (clone $query)->sum('tax_amount');
         $billable = (float) (clone $query)->where('is_billable', true)->sum('amount');
         $nonBillable = (float) (clone $query)->where('is_billable', false)->sum('amount');
 
         $byCategory = (clone $query)
             ->toBase()
-            ->select('category', DB::raw('SUM(amount) as total'), DB::raw('SUM(tax_amount) as tax'), DB::raw('COUNT(*) as cnt'))
+            ->select('category', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as cnt'))
             ->groupBy('category')
             ->orderByDesc('total')
             ->get();
 
         return view('admin.reports.expenses', array_merge($ctx, [
             'total' => $total,
-            'tax' => $tax,
             'billable' => $billable,
             'nonBillable' => $nonBillable,
             'byCategory' => $byCategory,

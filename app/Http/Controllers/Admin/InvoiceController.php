@@ -7,11 +7,13 @@ use App\Models\Brand;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoicePayment;
+use App\Models\UserActivityLog;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\InvoiceService;
+use App\Services\ActivityLogger;
 use App\Support\AuthScope;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -133,6 +135,10 @@ class InvoiceController extends Controller
             return $invoice;
         });
 
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_INVOICE_CREATED,
+            'Created '.($draft ? 'draft ' : '')."invoice {$invoice->invoice_number} for {$invoice->client_name} (\$".number_format((float) $invoice->amount, 2).')',
+            ['invoice_id' => $invoice->id, 'amount' => (float) $invoice->amount]);
+
         return redirect()->route('admin.invoices.show', $invoice)
             ->with('success', 'Invoice ' . $invoice->invoice_number . ' created.');
     }
@@ -162,6 +168,11 @@ class InvoiceController extends Controller
             }
         });
 
+        $invoice->refresh();
+        ActivityLogger::log(Auth::user(), $status === Invoice::STATUS_ISSUED ? UserActivityLog::TYPE_INVOICE_ISSUED : UserActivityLog::TYPE_INVOICE_UPDATED,
+            ($status === Invoice::STATUS_ISSUED ? 'Updated and issued' : 'Updated draft')." invoice {$invoice->invoice_number} (\$".number_format((float) $invoice->amount, 2).')',
+            ['invoice_id' => $invoice->id, 'amount' => (float) $invoice->amount]);
+
         return redirect()->route('admin.invoices.show', $invoice)
             ->with('success', 'Invoice ' . $invoice->invoice_number . ' updated.');
     }
@@ -175,6 +186,9 @@ class InvoiceController extends Controller
         }
 
         $invoice->update(['status' => Invoice::STATUS_ISSUED]);
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_INVOICE_ISSUED,
+            "Issued invoice {$invoice->invoice_number} (\$".number_format((float) $invoice->amount, 2).')',
+            ['invoice_id' => $invoice->id, 'amount' => (float) $invoice->amount]);
 
         return redirect()->route('admin.invoices.show', $invoice)
             ->with('success', 'Invoice ' . $invoice->invoice_number . ' issued.');
@@ -214,6 +228,11 @@ class InvoiceController extends Controller
                 'sale_balance' => max(0, round((float) $invoice->amount - $paid, 2)),
             ]);
         });
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_PAYMENT_RECORDED,
+            'Recorded payment of $'.number_format((float) $validated['amount'], 2)." on invoice {$invoice->invoice_number}"
+                .(! empty($validated['payment_mode']) ? ' ('.$validated['payment_mode'].')' : ''),
+            ['invoice_id' => $invoice->id, 'amount' => (float) $validated['amount']]);
 
         return back()->with('success', 'Payment recorded.');
     }
@@ -306,7 +325,7 @@ class InvoiceController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) {
             return true;
         }
 
@@ -446,7 +465,7 @@ class InvoiceController extends Controller
         $query = Invoice::query()->with(['sale', 'payments']);
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) {
             return $query;
         }
 
@@ -488,7 +507,7 @@ class InvoiceController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) {
             return;
         }
 
@@ -523,6 +542,6 @@ class InvoiceController extends Controller
 
     private function canVoid(): bool
     {
-        return Auth::user()->hasRole([Role::ADMIN, Role::MANAGER]);
+        return AuthScope::seesAllMoney(); // Admin, Manager, Finance
     }
 }

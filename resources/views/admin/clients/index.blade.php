@@ -14,7 +14,7 @@
 </div>
 
 <div class="mb-3">
-    <a href="{{ route('admin.clients.create') }}" class="btn btn-primary">New Client</a>
+    @unless(auth()->user()->hasRole('Finance'))<a href="{{ route('admin.clients.create') }}" class="btn btn-primary">New Client</a>@endunless
 </div>
 
 <div class="card">

@@ -7,7 +7,7 @@
 @section('content')
 
 <div class="mb-3">
-    <a href="{{ route('admin.clients.edit', $client) }}" class="btn btn-outline-warning btn-sm">Edit</a>
+    @unless(auth()->user()->hasRole('Finance'))<a href="{{ route('admin.clients.edit', $client) }}" class="btn btn-outline-warning btn-sm">Edit</a>@endunless
     <a href="{{ route('admin.clients.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
 </div>
 

@@ -74,9 +74,11 @@ class UserController extends Controller
                 $csrf = csrf_field();
                 $method = method_field('DELETE');
 
+                $canTouch = $this->canManageAccount($user);
+
                 // Ban / unban (never yourself)
                 $ban = '';
-                if ($user->id !== Auth::id()) {
+                if ($user->id !== Auth::id() && $canTouch) {
                     if ($user->isBanned()) {
                         $ban = '<form action="'.route('admin.users.unban', $user).'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Unban '.e($user->name).'?" data-swal-text="They will be able to sign in again." data-swal-confirm="Yes, unban" data-swal-color="#198754">'
                             .$csrf.'<button type="submit" class="btn btn-sm btn-outline-success">Unban</button></form>';
@@ -86,15 +88,13 @@ class UserController extends Controller
                     }
                 }
 
-                return '
-                    <a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>
-                    <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>
-                    '.$ban.'
-                    <form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this user?">
-                        '.$csrf.$method.'
-                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                    </form>
-                ';
+                $edit = $canTouch ? '<a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>' : '';
+                // Deleting accounts stays with Admins
+                $delete = Auth::user()->hasRole(Role::ADMIN)
+                    ? '<form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this user?">'.$csrf.$method.'<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>'
+                    : '';
+
+                return '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a> '.$edit.' '.$ban.' '.$delete;
             })
             ->rawColumns(['actions', 'status_badge'])
             ->toJson();
@@ -104,6 +104,7 @@ class UserController extends Controller
     public function ban(User $user): RedirectResponse
     {
         abort_if($user->id === Auth::id(), 403, 'You cannot ban yourself.');
+        $this->guardAdminAccount($user);
         abort_unless($user->isAccountActive(), 422, 'Only active accounts can be banned.');
 
         $user->forceFill([
@@ -119,6 +120,7 @@ class UserController extends Controller
 
     public function unban(User $user): RedirectResponse
     {
+        $this->guardAdminAccount($user);
         abort_unless($user->isBanned(), 422, 'This account is not banned.');
 
         $user->forceFill(['account_status' => User::ACCOUNT_ACTIVE])->save();
@@ -128,10 +130,30 @@ class UserController extends Controller
         return back()->with('success', "{$user->name} has been unbanned and can sign in again.");
     }
 
+    /** Roles the signed-in user may give: IT can't make anyone an Admin. */
+    private function assignableRoles()
+    {
+        return Role::query()
+            ->when(! Auth::user()->hasRole(Role::ADMIN), fn ($q) => $q->where('name', '!=', Role::ADMIN))
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** IT manages every account except Admin ones. */
+    private function canManageAccount(User $user): bool
+    {
+        return Auth::user()->hasRole(Role::ADMIN) || ! $user->hasRole(Role::ADMIN);
+    }
+
+    private function guardAdminAccount(User $user): void
+    {
+        abort_unless($this->canManageAccount($user), 403, 'Only an Admin can change an Admin account.');
+    }
+
     public function create(): View
     {
-        $roles     = Role::query()->orderBy('name')->get();
-        $teams     = AuthScope::teamsForDropdown();
+        $roles     = $this->assignableRoles();
+        $teams     = Team::query()->orderBy('name')->get();
         $companies = AuthScope::isAgent()
             ? \App\Models\Company::where('id', auth()->user()->company_id)->get()
             : Company::query()->orderBy('name')->get();
@@ -145,7 +167,7 @@ class UserController extends Controller
             'name'             => 'required|string|max:255',
             'email'            => 'required|email|max:255|unique:users,email',
             'password'         => 'required|string|min:8|confirmed',
-            'role_id'          => 'nullable|exists:roles,id',
+            'role_id'          => ['nullable', Rule::in($this->assignableRoles()->pluck('id')->all())],
             'company_id'       => 'nullable|exists:companies,id',
             'team_id'          => 'nullable|exists:teams,id',
             'sub_team_id'      => 'nullable|exists:teams,id',
@@ -192,8 +214,9 @@ class UserController extends Controller
 
     public function edit(User $user): View
     {
-        $roles     = Role::query()->orderBy('name')->get();
-        $teams     = AuthScope::teamsForDropdown();
+        $this->guardAdminAccount($user);
+        $roles     = $this->assignableRoles();
+        $teams     = Team::query()->orderBy('name')->get();
         $companies = AuthScope::isAgent()
             ? \App\Models\Company::where('id', auth()->user()->company_id)->get()
             : Company::query()->orderBy('name')->get();
@@ -203,11 +226,12 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        $this->guardAdminAccount($user);
         $validated = $request->validate([
             'name'             => 'required|string|max:255',
             'email'            => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password'         => 'nullable|string|min:8|confirmed',
-            'role_id'          => 'nullable|exists:roles,id',
+            'role_id'          => ['nullable', Rule::in($this->assignableRoles()->pluck('id')->all())],
             'company_id'       => 'nullable|exists:companies,id',
             'team_id'          => 'nullable|exists:teams,id',
             'sub_team_id'      => 'nullable|exists:teams,id',

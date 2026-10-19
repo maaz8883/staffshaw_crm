@@ -140,7 +140,8 @@
         </div>
     </div>
 
-    {{-- ── Database Backup ── --}}
+    {{-- ── Database Backup (Admin only: a backup holds the whole database) ── --}}
+    @if(auth()->user()->hasRole('Admin'))
     <div class="col-12" id="backup">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -193,11 +194,13 @@
             </div>
         </div>
     </div>
+    @endif
 
 </div>
 @endsection
 
 @section('scripts')
+@if(auth()->user()->hasRole('Admin'))
 <script>
 (function () {
     function loadBackups() {
@@ -241,4 +244,5 @@
     loadBackups();
 })();
 </script>
+@endif
 @endsection

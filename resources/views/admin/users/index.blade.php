@@ -33,10 +33,10 @@
 
         <select id="filter-status" class="form-select form-select-sm" style="width:auto">
             <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="banned">Banned</option>
-            <option value="pending">Pending</option>
-            <option value="rejected">Rejected</option>
+            <option value="active" @selected(request('status') === 'active')>Active</option>
+            <option value="banned" @selected(request('status') === 'banned')>Banned</option>
+            <option value="pending" @selected(request('status') === 'pending')>Pending</option>
+            <option value="rejected" @selected(request('status') === 'rejected')>Rejected</option>
         </select>
 
         <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>

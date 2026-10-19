@@ -27,7 +27,7 @@ class PendingRegistrationController extends Controller
             ->with(['team', 'company', 'role'])
             ->orderByDesc('created_at');
 
-        if (auth()->user()->hasRole(Role::ADMIN)) {
+        if (auth()->user()->hasRole([Role::ADMIN, Role::IT])) {
             return $query;
         }
 
@@ -50,7 +50,7 @@ class PendingRegistrationController extends Controller
         }
 
         $auth = auth()->user();
-        if ($auth->hasRole(Role::ADMIN)) {
+        if ($auth->hasRole([Role::ADMIN, Role::IT])) {
             return true;
         }
 

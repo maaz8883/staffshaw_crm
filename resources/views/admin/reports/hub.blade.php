@@ -74,13 +74,13 @@
     $financeCards = [
         ['route' => 'admin.reports.invoices', 'icon' => 'receipt', 'title' => 'Invoices & payments', 'desc' => $canViewOrgReports ? 'AR invoices, receipts, paid vs open' : 'Team sale receipts & open balances'],
     ];
-    if (auth()->user()?->hasRole('Admin')) {
+    if (auth()->user()?->hasRole(['Admin', 'Finance'])) {
         $financeCards[] = ['route' => 'admin.reports.expenses', 'icon' => 'wallet2', 'title' => 'Expenses report', 'desc' => 'Spend by category, billable vs not'];
     }
     $groups = [
         'Sales & revenue' => $salesCards,
         'Pipeline & clients' => [
-            ['route' => 'admin.reports.leads', 'icon' => 'funnel', 'title' => 'Leads report', 'desc' => 'Pipeline by status, source & conversion'],
+            ...(auth()->user()?->hasRole('Finance') ? [] : [['route' => 'admin.reports.leads', 'icon' => 'funnel', 'title' => 'Leads report', 'desc' => 'Pipeline by status, source & conversion']]),
             ['route' => 'admin.reports.clients', 'icon' => 'people-fill', 'title' => 'Clients report', 'desc' => 'New clients and linked sales'],
         ],
         'Finance' => $financeCards,

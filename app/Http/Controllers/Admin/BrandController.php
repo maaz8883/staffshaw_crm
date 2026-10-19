@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandBriefForm;
+use App\Models\Role;
 use App\Services\BriefFormSchemaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -40,9 +42,14 @@ class BrandController extends Controller
                 $deleteUrl = route('admin.brands.destroy', $brand);
                 $csrf      = csrf_field();
                 $method    = method_field('DELETE');
+                $view = '<a href="' . $showUrl . '" class="btn btn-sm btn-outline-info">View</a>';
 
-                return '
-                    <a href="' . $showUrl . '" class="btn btn-sm btn-outline-info">View</a>
+                // IT can view / add brands; editing and deleting is Admin only
+                if (! Auth::user()->hasRole(Role::ADMIN)) {
+                    return $view;
+                }
+
+                return $view . '
                     <a href="' . $editUrl . '" class="btn btn-sm btn-outline-warning">Edit</a>
                     <form action="' . $deleteUrl . '" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this brand?">
                         ' . $csrf . $method . '
@@ -74,8 +81,9 @@ class BrandController extends Controller
         $brand = Brand::query()->create($validated);
         $this->syncBriefForms($brand, $request);
 
+        // IT can't edit brands: send them to the brand page instead
         return redirect()
-            ->route('admin.brands.edit', $brand)
+            ->route(Auth::user()->hasRole(Role::ADMIN) ? 'admin.brands.edit' : 'admin.brands.show', $brand)
             ->with('success', 'Brand created successfully.');
     }
 

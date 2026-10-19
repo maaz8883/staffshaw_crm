@@ -28,7 +28,7 @@ class GlobalSearchController extends Controller
         }
 
         $user = Auth::user();
-        if (! $user || $user->hasRole([Role::PPC, Role::PRODUCTION])) {
+        if (! $user || $user->hasRole([Role::PPC, Role::PRODUCTION, Role::IT, Role::FINANCE, Role::HR])) {
             return response()->json(['results' => []]);
         }
 

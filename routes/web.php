@@ -74,15 +74,20 @@ Route::prefix('admin')->group(function () {
         Route::put('/profile',          [ProfileController::class, 'updateProfile'])->name('admin.profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('admin.profile.password');
 
-        // ── Clients: any authenticated role (Admin, Manager, Team Head, Agent, Project Manager) ──
+        // ── Clients: Admin, Manager, Team Head, Agent, Project Manager (create / edit) ──
         Route::middleware('role:Admin,Manager,Agent,Project Manager')->group(function () {
+            Route::resource('clients', ClientController::class)->only(['create', 'store', 'edit', 'update', 'destroy'])->names([
+                'create' => 'admin.clients.create', 'store'  => 'admin.clients.store',
+                'edit'   => 'admin.clients.edit',   'update' => 'admin.clients.update',
+                'destroy'=> 'admin.clients.destroy',
+            ]);
+        });
+        // ── Clients list / view: + Finance (read-only, for billing) ──
+        Route::middleware('role:Admin,Manager,Agent,Project Manager,Finance')->group(function () {
             Route::get('clients/datatable',      [ClientController::class, 'datatable'])->name('admin.clients.datatable');
             Route::get('clients/{client}/lookup', [ClientController::class, 'lookup'])->name('admin.clients.lookup');
-            Route::resource('clients', ClientController::class)->names([
-                'index'  => 'admin.clients.index',  'create' => 'admin.clients.create',
-                'store'  => 'admin.clients.store',   'show'   => 'admin.clients.show',
-                'edit'   => 'admin.clients.edit',    'update' => 'admin.clients.update',
-                'destroy'=> 'admin.clients.destroy',
+            Route::resource('clients', ClientController::class)->only(['index', 'show'])->names([
+                'index' => 'admin.clients.index', 'show' => 'admin.clients.show',
             ]);
         });
 
@@ -100,9 +105,8 @@ Route::prefix('admin')->group(function () {
             Route::post('team-join-requests/{membership}/reject',  [TeamMembershipController::class, 'reject'])->name('admin.teams.join-requests.reject');
         });
 
-        // ── Admin only ───────────────────────────────────────────────────────
-        Route::middleware('role:Admin')->group(function () {
-
+        // ── Admin + IT + HR: user accounts (IT / HR never touch Admin accounts — see UserController) ──
+        Route::middleware('role:Admin,IT,HR')->group(function () {
             Route::get('users/datatable', [UserController::class, 'datatable'])->name('admin.users.datatable');
             Route::post('users/{user}/ban', [UserController::class, 'ban'])->name('admin.users.ban');
             Route::post('users/{user}/unban', [UserController::class, 'unban'])->name('admin.users.unban');
@@ -110,28 +114,45 @@ Route::prefix('admin')->group(function () {
                 'index' => 'admin.users.index', 'create' => 'admin.users.create',
                 'store' => 'admin.users.store', 'show'   => 'admin.users.show',
                 'edit'  => 'admin.users.edit',  'update' => 'admin.users.update',
-                'destroy' => 'admin.users.destroy',
+            ])->except(['destroy']);
+
+            Route::get('companies/{company}/teams', [CompanyController::class, 'teams'])->name('admin.companies.teams');
+
+            Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
+            Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');
+        });
+
+        // ── Admin + IT: setup (brands, registrations, settings) ──
+        Route::middleware('role:Admin,IT')->group(function () {
+            // IT can list, view and add brands; changing / deleting them and brief forms is Admin only
+            Route::get('brands/datatable', [BrandController::class, 'datatable'])->name('admin.brands.datatable');
+            Route::resource('brands', BrandController::class)->only(['index', 'create', 'store', 'show'])->names([
+                'index'  => 'admin.brands.index',
+                'create' => 'admin.brands.create',
+                'store'  => 'admin.brands.store',
+                'show'   => 'admin.brands.show',
             ]);
 
-            Route::get('companies/datatable',       [CompanyController::class, 'datatable'])->name('admin.companies.datatable');
-            Route::get('companies/{company}/teams', [CompanyController::class, 'teams'])->name('admin.companies.teams');
-            Route::resource('companies', CompanyController::class)->names([
-                'index' => 'admin.companies.index', 'create' => 'admin.companies.create',
-                'store' => 'admin.companies.store', 'edit'   => 'admin.companies.edit',
-                'update'=> 'admin.companies.update','destroy'=> 'admin.companies.destroy',
-            ])->except(['show']);
+            Route::get('pending-registrations',                  [PendingRegistrationController::class, 'index'])->name('admin.pending-registrations.index');
+            Route::post('pending-registrations/{user}/approve', [PendingRegistrationController::class, 'approve'])->name('admin.pending-registrations.approve');
+            Route::post('pending-registrations/{user}/reject',  [PendingRegistrationController::class, 'reject'])->name('admin.pending-registrations.reject');
 
-            Route::get('brands/datatable', [BrandController::class, 'datatable'])->name('admin.brands.datatable');
-            Route::resource('brands', BrandController::class)->names([
-                'index'   => 'admin.brands.index',
-                'create'  => 'admin.brands.create',
-                'store'   => 'admin.brands.store',
-                'show'    => 'admin.brands.show',
+            Route::get('settings',      [SettingController::class, 'index'])->name('admin.settings.index');
+            Route::put('settings/otp',  [SettingController::class, 'updateOtp'])->name('admin.settings.otp');
+            Route::put('settings/smtp', [SettingController::class, 'updateSmtp'])->name('admin.settings.smtp');
+        });
+
+        // ── Admin only ───────────────────────────────────────────────────────
+        Route::middleware('role:Admin')->group(function () {
+
+            Route::delete('users/{user}', [UserController::class, 'destroy'])->name('admin.users.destroy');
+            Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('admin.expenses.destroy');
+
+            Route::resource('brands', BrandController::class)->only(['edit', 'update', 'destroy'])->names([
                 'edit'    => 'admin.brands.edit',
                 'update'  => 'admin.brands.update',
                 'destroy' => 'admin.brands.destroy',
             ]);
-
             Route::post('brands/{brand}/brief-forms', [BrandController::class, 'storeBriefForm'])
                 ->name('admin.brands.brief-forms.store');
             Route::delete('brands/{brand}/brief-forms/{form}', [BrandController::class, 'destroyBriefForm'])
@@ -143,27 +164,28 @@ Route::prefix('admin')->group(function () {
             Route::get('brands/{brand}/brief-forms/{form}/builder/preview', [BriefFormBuilderController::class, 'preview'])
                 ->name('admin.brands.brief-forms.builder.preview');
 
-            Route::get('teams/{team}/sub-teams', [TeamController::class, 'subTeams'])->name('admin.teams.sub-teams');
-            Route::get('teams/{team}/sub-team-heads', [TeamController::class, 'subTeamHeads'])->name('admin.teams.sub-team-heads');
-
-            Route::get('pending-registrations',                  [PendingRegistrationController::class, 'index'])->name('admin.pending-registrations.index');
-            Route::post('pending-registrations/{user}/approve', [PendingRegistrationController::class, 'approve'])->name('admin.pending-registrations.approve');
-            Route::post('pending-registrations/{user}/reject',  [PendingRegistrationController::class, 'reject'])->name('admin.pending-registrations.reject');
-
-            Route::get('settings',      [SettingController::class, 'index'])->name('admin.settings.index');
-            Route::put('settings/otp',  [SettingController::class, 'updateOtp'])->name('admin.settings.otp');
-            Route::put('settings/smtp', [SettingController::class, 'updateSmtp'])->name('admin.settings.smtp');
+            Route::get('companies/datatable',       [CompanyController::class, 'datatable'])->name('admin.companies.datatable');
+            Route::resource('companies', CompanyController::class)->names([
+                'index' => 'admin.companies.index', 'create' => 'admin.companies.create',
+                'store' => 'admin.companies.store', 'edit'   => 'admin.companies.edit',
+                'update'=> 'admin.companies.update','destroy'=> 'admin.companies.destroy',
+            ])->except(['show']);
 
             Route::get('backup',                 [BackupController::class, 'index'])->name('admin.backup.index');
             Route::post('backup',                [BackupController::class, 'store'])->name('admin.backup.store');
             Route::get('backup/{file}/download', [BackupController::class, 'download'])->name('admin.backup.download');
             Route::delete('backup/{file}',       [BackupController::class, 'destroy'])->name('admin.backup.destroy');
 
+        });
+
+        // ── Admin + Finance + IT + HR: daily expenses ─────────────────────────
+        Route::middleware('role:Admin,Finance,IT,HR')->group(function () {
+            // Finance / IT add and edit expenses; deleting one stays with Admins (Admin only group)
             Route::resource('expenses', ExpenseController::class)->names([
                 'index' => 'admin.expenses.index', 'create' => 'admin.expenses.create',
                 'store' => 'admin.expenses.store', 'edit' => 'admin.expenses.edit',
-                'update' => 'admin.expenses.update', 'destroy' => 'admin.expenses.destroy',
-            ])->except(['show']);
+                'update' => 'admin.expenses.update',
+            ])->except(['show', 'destroy']);
         });
 
         // ── Admin + Manager: teams CRUD, activity ────────────────────────────
@@ -175,7 +197,9 @@ Route::prefix('admin')->group(function () {
                 'edit'  => 'admin.teams.edit',  'update' => 'admin.teams.update',
                 'destroy' => 'admin.teams.destroy',
             ])->except(['show']);
+        });
 
+        Route::middleware('role:Admin,Manager,IT')->group(function () {
             Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('admin.activity-logs.index');
             Route::get('activity-logs/datatable', [ActivityLogController::class, 'datatable'])->name('admin.activity-logs.datatable');
         });
@@ -263,21 +287,16 @@ Route::prefix('admin')->group(function () {
             Route::delete('trello/teams/{team}/connect', [TrelloController::class, 'destroy'])->name('admin.trello.destroy')->whereNumber('team');
         });
 
-        // ── Admin + Agent + Team Head + Project Manager: sales & invoices ────
-        // (Requirements 6, 7 — Project Manager gets scoped access via TeamMembership)
+        // ── Selling: Admin + Agent + Team Head + Project Manager (Requirements 6, 7) ──
+        // Registered before the view routes so sales/create isn't caught by sales/{sale}
         Route::middleware('role:Admin,Agent,Manager,Project Manager')->group(function () {
-            Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
-            Route::post('sales/{sale}/invoices',      [InvoiceController::class, 'store'])->name('admin.invoices.store');
-            Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
-            Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');
             Route::delete('sales/{sale}',             [SaleController::class, 'destroy'])->name('admin.sales.destroy');
-            Route::resource('sales', SaleController::class)->names([
-                'index'  => 'admin.sales.index',  'create' => 'admin.sales.create',
-                'store'  => 'admin.sales.store',  'show'   => 'admin.sales.show',
+            Route::resource('sales', SaleController::class)->only(['create', 'store', 'edit', 'update'])->names([
+                'create' => 'admin.sales.create', 'store'  => 'admin.sales.store',
                 'edit'   => 'admin.sales.edit',   'update' => 'admin.sales.update',
-            ])->except(['destroy']);
+            ]);
 
             Route::get('leads/datatable', [LeadController::class, 'datatable'])->name('admin.leads.datatable');
             Route::post('leads/{lead}/convert', [LeadController::class, 'convert'])->name('admin.leads.convert');
@@ -290,6 +309,17 @@ Route::prefix('admin')->group(function () {
             ]);
 
             Route::get('sales-performance', fn () => redirect()->route('admin.targets.index'))->name('admin.sales-performance.index');
+        });
+
+        // ── Sales (view, refunds, receipts) & invoices: + Finance (company-wide, see AuthScope::seesAllMoney) ──
+        Route::middleware('role:Admin,Agent,Manager,Project Manager,Finance')->group(function () {
+            Route::get('sales/datatable',             [SaleController::class, 'datatable'])->name('admin.sales.datatable');
+            Route::resource('sales', SaleController::class)->only(['index', 'show'])->names([
+                'index' => 'admin.sales.index', 'show' => 'admin.sales.show',
+            ]);
+            Route::post('sales/{sale}/invoices',      [InvoiceController::class, 'store'])->name('admin.invoices.store');
+            Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
+            Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');
 
             Route::get('invoices/create', [InvoiceController::class, 'create'])->name('admin.invoices.create');
             Route::post('invoices', [InvoiceController::class, 'storeStandalone'])->name('admin.invoices.store-standalone');
@@ -319,9 +349,11 @@ Route::prefix('admin')->group(function () {
             Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('admin.teams.members.destroy')->whereNumber(['team', 'user']);
         });
 
+        Route::middleware('role:Admin,PPC,Finance')->group(function () {
+            Route::get('ppc', [PpcController::class, 'index'])->name('admin.ppc.index');
+        });
         // ── PPC + Admin ──────────────────────────────────────────────────────
         Route::middleware('role:Admin,PPC')->group(function () {
-            Route::get('ppc',               [PpcController::class, 'index'])->name('admin.ppc.index');
             Route::post('ppc',              [PpcController::class, 'store'])->name('admin.ppc.store');
             Route::delete('ppc/{spending}', [PpcController::class, 'destroy'])->name('admin.ppc.destroy');
         });

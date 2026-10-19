@@ -14,7 +14,7 @@
 @endif
 
 <div class="mb-3 d-flex gap-2 flex-wrap align-items-end">
-    @if(!auth()->user()->hasRole('Admin'))
+    @if(! auth()->user()->hasRole(['Admin', 'Finance']))
     <a href="{{ route('admin.sales.create') }}" class="btn btn-primary">Add Sale</a>
     @endif
 

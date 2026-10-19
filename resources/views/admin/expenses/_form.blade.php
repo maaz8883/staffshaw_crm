@@ -10,12 +10,8 @@
         </datalist>
     </div>
     <div class="col-md-4 mb-3">
-        <label class="form-label">Amount <span class="text-danger">*</span></label>
+        <label class="form-label">Amount (Rs) <span class="text-danger">*</span></label>
         <input type="number" step="0.01" min="0" name="amount" class="form-control" required value="{{ old('amount', $expense->amount ?? '') }}">
-    </div>
-    <div class="col-md-4 mb-3">
-        <label class="form-label">Tax</label>
-        <input type="number" step="0.01" min="0" name="tax_amount" class="form-control" value="{{ old('tax_amount', $expense->tax_amount ?? 0) }}">
     </div>
     <div class="col-md-4 mb-3">
         <label class="form-label">Date <span class="text-danger">*</span></label>

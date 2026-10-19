@@ -51,8 +51,8 @@ class SaleController extends Controller
         $query = Sale::query()->with(['user', 'team', 'company', 'brand'])->select('sales.*')
             ->where('is_draft', false);
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
-            // Admin and Manager: all sales
+        if (AuthScope::seesAllMoney()) {
+            // Admin, Manager, Finance: all sales
         } elseif ($this->isProjectManager()) {
             // Requirement 6.1/6.2 — Project Manager: only sales from their approved (joined) teams
             $query->whereIn('team_id', $user->approvedTeamIds());
@@ -80,6 +80,12 @@ class SaleController extends Controller
         }
 
         return $query;
+    }
+
+    /** Refunds need the sale approver (Admin / Manager / Team Head); Finance only sees them. */
+    private function canToggleRefund(Sale $sale): bool
+    {
+        return $this->canApprove($sale);
     }
 
     private function canApprove(Sale $sale): bool
@@ -192,7 +198,7 @@ class SaleController extends Controller
             ->addColumn('sale_type_badge', fn (Sale $s) =>
                 '<span class="badge bg-' . self::saleTypeColor($s->sale_type) . '">' . e($s->saleTypeLabel()) . '</span>')
             ->addColumn('refund_toggle', function (Sale $sale) {
-                if (! $this->canApprove($sale)) {
+                if (! $this->canToggleRefund($sale)) {
                     return $sale->is_refunded
                         ? '<span class="badge bg-danger">Refunded</span>'
                         : '<span class="text-muted small">—</span>';
@@ -310,6 +316,7 @@ class SaleController extends Controller
     public function downloadBriefDocument(Sale $sale, BrandBriefForm $brandBriefForm)
     {
         $this->authorizeView($sale);
+        abort_if(Auth::user()->hasRole(Role::FINANCE), 403, 'Client briefs are not available to Finance.');
 
         $sale->loadMissing('brand');
 
@@ -406,7 +413,7 @@ class SaleController extends Controller
         $this->authorizeView($sale);
         $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices']);
 
-        $canToggleRefund = $this->canApprove($sale);
+        $canToggleRefund = $this->canToggleRefund($sale);
         $canEdit = $this->userCanEditSale($sale);
         $invoiceService = app(InvoiceService::class);
         $sale = $invoiceService->syncReceivedAmount($sale);
@@ -556,7 +563,7 @@ class SaleController extends Controller
 
     public function toggleRefund(Sale $sale): RedirectResponse
     {
-        if (! $this->canApprove($sale)) {
+        if (! $this->canToggleRefund($sale)) {
             abort(403);
         }
 
@@ -611,7 +618,7 @@ class SaleController extends Controller
     private function authorizeView(Sale $sale): void
     {
         $user = Auth::user();
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) return;
+        if (AuthScope::seesAllMoney()) return;
         if ((int) $sale->user_id === (int) $user->id) return;
 
         // Requirement 6.5 — Project Manager: only sales from their approved (joined) teams

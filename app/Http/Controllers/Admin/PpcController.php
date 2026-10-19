@@ -26,7 +26,7 @@ class PpcController extends Controller
         $year  = (int) $request->get('year', now()->year);
 
         $teamsQuery = Team::with(['company'])->sales()->orderBy('name');
-        if (! $user->hasRole(Role::ADMIN)) {
+        if (! $user->hasRole([Role::ADMIN, Role::FINANCE])) { // Finance reviews every team
             AuthScope::scopeByTeam($teamsQuery, 'id');
         }
 
@@ -46,14 +46,20 @@ class PpcController extends Controller
             ->with(['user', 'team'])
             ->latest();
 
-        if (! $user->hasRole(Role::ADMIN)) {
+        if (! $user->hasRole([Role::ADMIN, Role::FINANCE])) { // Finance reviews every team
             $teamIds = AuthScope::accessibleTeamIds();
             $spendingsQuery->whereIn('team_id', $teamIds->isEmpty() ? [0] : $teamIds);
         }
 
+        // Optional ?team= filter for the entries list (only teams this page shows)
+        $teamFilter = $request->filled('team') ? $teams->firstWhere('id', (int) $request->get('team')) : null;
+        if ($teamFilter) {
+            $spendingsQuery->where('team_id', $teamFilter->id);
+        }
+
         $spendings = $spendingsQuery->get();
 
-        return view('admin.ppc.index', compact('teams', 'spendings', 'totalSpending', 'month', 'year'));
+        return view('admin.ppc.index', compact('teams', 'spendings', 'totalSpending', 'month', 'year', 'teamFilter'));
     }
 
     public function store(Request $request): RedirectResponse

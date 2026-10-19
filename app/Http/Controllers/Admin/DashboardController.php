@@ -30,6 +30,16 @@ class DashboardController extends Controller
             return $this->adminDashboard($month, $year);
         }
 
+        // IT / HR: accounts overview (no sales data); HR gets expenses instead of brand setup
+        if ($user->hasRole([Role::IT, Role::HR])) {
+            return $this->itDashboard();
+        }
+
+        // Finance: cash in, money owed, spend and refunds across the company
+        if ($user->hasRole(Role::FINANCE)) {
+            return $this->financeDashboard($month, $year);
+        }
+
         // Production (Design, Development, SEO…): Trello work only — checked before team head,
         // so a production team head also gets this instead of the sales dashboard
         if ($user->hasRole(Role::PRODUCTION)) {
@@ -94,6 +104,118 @@ class DashboardController extends Controller
     }
 
     // ── Admin Dashboard ──────────────────────────────────────────────────────────
+
+    /**
+     * Finance: for the chosen month — sales booked, cash received (sale receipts + invoice payments),
+     * expenses, PPC spend, refunds and net; plus money still owed (sale balances, open invoices).
+     */
+    private function financeDashboard(int $month, int $year): View
+    {
+        $month = max(1, min(12, (int) request('month', $month)));
+        $year = max(2020, min(2100, (int) request('year', $year)));
+        $from = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        $to = $from->copy()->endOfMonth();
+        $range = [$from->toDateString(), $to->toDateString()];
+
+        $invoiceModel = \App\Models\Invoice::class;
+        $notVoid = fn ($q) => $q->where('status', '!=', \App\Models\Invoice::STATUS_VOID);
+
+        $booked = (float) self::approved()->whereBetween('sale_date', $range)->where('is_refunded', false)->sum('amount');
+        $salesCount = self::approved()->whereBetween('sale_date', $range)->where('is_refunded', false)->count();
+        $receiptsIn = (float) $invoiceModel::query()->whereNotNull('sale_id')->tap($notVoid)->whereBetween('issued_at', $range)->sum('amount');
+        $paymentsIn = (float) \App\Models\InvoicePayment::query()
+            ->whereBetween('paid_at', $range)
+            ->whereHas('invoice', $notVoid)
+            ->sum('amount');
+        $received = round($receiptsIn + $paymentsIn, 2);
+        $expenses = (float) \App\Models\Expense::query()->whereBetween('expense_date', $range)->sum('amount');
+        $ppc = (float) \App\Models\TeamPpcSpending::query()->where('month', $month)->where('year', $year)->sum('amount');
+        $refunds = Sale::query()->where('is_refunded', true)->whereBetween('refunded_at', [$from, $to]);
+        $refundTotal = (float) (clone $refunds)->sum('amount');
+
+        // Still owed: approved, not refunded sales not fully received + issued invoices with a balance
+        $openSales = self::approved()->where('is_refunded', false)->whereColumn('received_amount', '<', 'amount');
+        $saleBalance = (float) (clone $openSales)->sum(DB::raw('amount - received_amount'));
+        $topOpenSales = (clone $openSales)->with(['user:id,name', 'brand:id,name'])
+            ->orderByRaw('(amount - received_amount) desc')->limit(8)->get();
+
+        $openInvoices = $invoiceModel::query()->whereNull('sale_id')
+            ->where('status', \App\Models\Invoice::STATUS_ISSUED)
+            ->with('payments')->get()
+            ->filter(fn ($i) => $i->amountDue() > 0);
+        $overdue = $openInvoices->filter(fn ($i) => $i->due_date && $i->due_date->isPast())->sortBy('due_date')->values();
+
+        $recentReceipts = $invoiceModel::query()->whereNotNull('sale_id')->tap($notVoid)->latest('id')->limit(6)->get()
+            ->map(fn ($i) => ['when' => $i->issued_at, 'who' => $i->client_name, 'what' => $i->invoice_number, 'amount' => (float) $i->amount, 'url' => route('admin.invoices.show', $i)]);
+        $recentPayments = \App\Models\InvoicePayment::query()->with('invoice')->latest('id')->limit(6)->get()
+            ->filter(fn ($p) => $p->invoice)
+            ->map(fn ($p) => ['when' => $p->paid_at, 'who' => $p->invoice->client_name, 'what' => $p->invoice->invoice_number.($p->payment_mode ? ' · '.$p->payment_mode : ''), 'amount' => (float) $p->amount, 'url' => route('admin.invoices.show', $p->invoice)]);
+        $recent = $recentReceipts->concat($recentPayments)->sortByDesc(fn ($r) => optional($r['when'])->timestamp ?? 0)->take(8)->values();
+
+        return view('admin.finance.dashboard', [
+            'month' => $month,
+            'year' => $year,
+            'monthLabel' => $from->format('F Y'),
+            'stats' => [
+                'booked' => $booked,
+                'sales_count' => $salesCount,
+                'received' => $received,
+                'expenses' => $expenses,
+                'ppc' => $ppc,
+                // Expenses are in rupees, sales / PPC in USD: never subtract one from the other
+                'net' => round($received - $ppc, 2),
+                'refunds' => $refundTotal,
+                'refund_count' => (clone $refunds)->count(),
+                'sale_balance' => $saleBalance,
+                'invoice_balance' => (float) $openInvoices->sum(fn ($i) => $i->amountDue()),
+                'overdue_total' => (float) $overdue->sum(fn ($i) => $i->amountDue()),
+            ],
+            'overdue' => $overdue->take(8),
+            'topOpenSales' => $topOpenSales,
+            'recent' => $recent,
+        ]);
+    }
+
+    /** IT: who has access, what needs approval, brand setup gaps, recent sign-ins and account changes. */
+    private function itDashboard(): View
+    {
+        $byStatus = User::query()->select('account_status', DB::raw('COUNT(*) as c'))->groupBy('account_status')->pluck('c', 'account_status');
+        $monthRange = [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()];
+        $roles = Role::query()->withCount('users')->orderBy('name')->get();
+        $brands = \App\Models\Brand::query()->withCount('teams')->orderBy('name')->get();
+
+        $recentLogins = \App\Models\UserActivityLog::query()
+            ->with('user:id,name,email')
+            ->where('type', \App\Models\UserActivityLog::TYPE_LOGIN)
+            ->latest()->limit(12)->get();
+        $accountChanges = \App\Models\UserActivityLog::query()
+            ->with('user:id,name')
+            ->whereIn('type', [
+                \App\Models\UserActivityLog::TYPE_USER_CREATED,
+                \App\Models\UserActivityLog::TYPE_USER_UPDATED,
+                \App\Models\UserActivityLog::TYPE_USER_DELETED,
+            ])
+            ->latest()->limit(12)->get();
+
+        return view('admin.it.dashboard', [
+            'stats' => [
+                'total' => (int) $byStatus->sum(),
+                'active' => (int) ($byStatus[User::ACCOUNT_ACTIVE] ?? 0),
+                'pending' => (int) ($byStatus[User::ACCOUNT_PENDING] ?? 0),
+                'banned' => (int) ($byStatus[User::ACCOUNT_BANNED] ?? 0),
+                'brands' => $brands->count(),
+                'expenses_today' => (float) \App\Models\Expense::query()->whereDate('expense_date', now()->toDateString())->sum('amount'),
+                'expenses_month' => (float) \App\Models\Expense::query()->whereBetween('expense_date', $monthRange)->sum('amount'),
+            ],
+            'recentExpenses' => \App\Models\Expense::query()->whereBetween('expense_date', $monthRange)
+                ->orderByDesc('expense_date')->orderByDesc('id')->limit(10)->get(),
+            'roles' => $roles,
+            'brandsMissingLogo' => $brands->filter(fn ($b) => ! $b->image || ! is_file(public_path('storage/'.$b->image)))->values(),
+            'brandsWithoutTeam' => $brands->where('teams_count', 0)->values(),
+            'recentLogins' => $recentLogins,
+            'accountChanges' => $accountChanges,
+        ]);
+    }
 
     private function adminDashboard(int $month, int $year): View
     {

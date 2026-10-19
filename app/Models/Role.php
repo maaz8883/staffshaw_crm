@@ -17,6 +17,12 @@ class Role extends Model
     public const PROJECT_MANAGER = 'Project Manager';
     /** Production teams (Design, Development, SEO…): Trello + their own dashboard only, no sales data */
     public const PRODUCTION = 'Production';
+    /** IT: users (never Admins), brands, registrations, settings, backups, activity logs — no sales data */
+    public const IT = 'IT';
+    /** Finance: invoices, payments, refunds, expenses, financial reports — company-wide; sales read-only */
+    public const FINANCE = 'Finance';
+    /** HR: users (never Admins) and daily expenses */
+    public const HR = 'HR';
 
     protected $fillable = [
         'name',

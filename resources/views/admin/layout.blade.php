@@ -31,7 +31,7 @@
             <img src="{{ asset('images/logo-light.png') }}" alt="Tago" class="topbar-logo-img logo-on-dark" height="28" style="height:28px;width:auto">
         </a>
         {{-- Searches customers / leads / sales: hidden for Production (they don't see those) --}}
-        <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole('Production')) style="display:none" @endif>
+        <div class="topbar-search" id="global-search" @if(auth()->user()?->hasRole(['Production', 'IT', 'Finance', 'HR'])) style="display:none" @endif>
             <i class="bi bi-search"></i>
             <input id="top-search" type="search" placeholder="Search people, clients, leads, sales..." autocomplete="off" aria-autocomplete="list" aria-controls="global-search-results">
             <div id="global-search-results" class="global-search-dropdown" hidden role="listbox"></div>
@@ -64,6 +64,14 @@
                 $isProjectManager = auth()->user()?->hasRole('Project Manager');
                 // Production teams: Dashboard + Trello only (no customers / leads / sales)
                 $isProduction = auth()->user()?->hasRole('Production');
+                // IT: accounts and setup only (users, brands, registrations, settings, activity logs)
+                $isIt = auth()->user()?->hasRole('IT');
+                // Finance: sales (view) + invoices, expenses, PPC spend, reports — no leads / setup
+                $isFinance = auth()->user()?->hasRole('Finance');
+                $canManageAccounts = $isAdmin || $isIt;
+                // HR: users + daily expenses only
+                $isHr = auth()->user()?->hasRole('HR');
+                $canManageUsers = $canManageAccounts || $isHr;
                 $isTeamHeadUser = \App\Models\Team::where('team_head_id', (int) auth()->id())->exists();
                 $headedTeamForNav = $isTeamHeadUser
                     ? \App\Models\Team::where('team_head_id', (int) auth()->id())->orderBy('name')->first()
@@ -96,18 +104,21 @@
             </li>
             @endif
 
-            @if(! $isPpc)
+            @if(! $isPpc && ! $isIt && ! $isHr)
             @if(! $isProduction)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.clients.*') ? 'active' : '' }}" href="{{ route('admin.clients.index') }}" title="Clients">
                     <i class="bi bi-people"></i> <span class="nav-label">Clients</span>
                 </a>
             </li>
+            @unless($isFinance)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.leads.*') ? 'active' : '' }}" href="{{ route('admin.leads.index') }}" title="Leads">
                     <i class="bi bi-funnel"></i> <span class="nav-label">Leads</span>
                 </a>
             </li>
+            @endunless
+
 
             {{-- Only Sales is a toggle group (like Perfex) --}}
             <li class="nav-item nav-group">
@@ -133,15 +144,8 @@
             </li>
             @endif
 
-            @if($isAdmin)
-            <li class="nav-item">
-                <a class="nav-link {{ request()->routeIs('admin.expenses.*') ? 'active' : '' }}" href="{{ route('admin.expenses.index') }}" title="Expenses">
-                    <i class="bi bi-wallet2"></i> <span class="nav-label">Expenses</span>
-                </a>
-            </li>
-            @endif
 
-            @if(! $isProjectManager && ! $isProduction)
+            @if(! $isProjectManager && ! $isProduction && ! $isFinance)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.targets.*') ? 'active' : '' }}" href="{{ route('admin.targets.index') }}" title="Sales Performance">
                     <i class="bi bi-graph-up"></i> <span class="nav-label">Sales Performance</span>
@@ -149,11 +153,13 @@
             </li>
             @endif
 
+            @unless($isFinance)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.trello.*') ? 'active' : '' }}" href="{{ route('admin.trello.index') }}" title="Trello">
                     <i class="bi bi-kanban"></i> <span class="nav-label">Trello</span>
                 </a>
             </li>
+            @endunless
             @endif
 
             @if($isProjectManager)
@@ -164,7 +170,16 @@
             </li>
             @endif
 
-            @if($isPpc || $isAdmin)
+            {{-- Daily expenses: Admin, Finance, IT --}}
+            @if($isAdmin || $isFinance || $isIt || $isHr)
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.expenses.*') ? 'active' : '' }}" href="{{ route('admin.expenses.index') }}" title="Daily Expenses">
+                    <i class="bi bi-wallet2"></i> <span class="nav-label">Daily Expenses</span>
+                </a>
+            </li>
+            @endif
+
+            @if($isPpc || $isAdmin || $isFinance)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.ppc.*') ? 'active' : '' }}" href="{{ route('admin.ppc.index') }}" title="PPC Spending">
                     <i class="bi bi-megaphone"></i> <span class="nav-label">PPC Spending</span>
@@ -188,7 +203,7 @@
                 </a>
             </li>
             @endif
-            @if($isAdminOrManager)
+            @if($isAdminOrManager || $isIt)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.activity-logs.*') ? 'active' : '' }}" href="{{ route('admin.activity-logs.index') }}" title="Activity Logs">
                     <i class="bi bi-clock-history"></i> <span class="nav-label">Activity Logs</span>
@@ -196,12 +211,14 @@
             </li>
             @endif
 
-            @if($isAdmin)
+            @if($canManageUsers)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}" title="Users">
                     <i class="bi bi-people-fill"></i> <span class="nav-label">Users</span>
                 </a>
             </li>
+            @endif
+            @if($isAdmin)
             @unless($singleCompany)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.companies.*') ? 'active' : '' }}" href="{{ route('admin.companies.index') }}" title="Companies">
@@ -209,6 +226,8 @@
                 </a>
             </li>
             @endunless
+            @endif
+            @if($canManageAccounts)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.brands.*') ? 'active' : '' }}" href="{{ route('admin.brands.index') }}" title="Brands">
                     <i class="bi bi-building"></i> <span class="nav-label">Brands</span>
@@ -241,7 +260,7 @@
                 </a>
             </li>
 
-            @if($isAdmin)
+            @if($canManageAccounts)
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" href="{{ route('admin.settings.index') }}" title="Settings">
                     <i class="bi bi-gear"></i> <span class="nav-label">Settings</span>

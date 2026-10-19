@@ -41,6 +41,12 @@ class UserActivityLog extends Model
     public const TYPE_BACKUP_DELETED = 'backup_deleted';
     public const TYPE_INVOICE_CREATED = 'invoice_created';
     public const TYPE_INVOICE_VOIDED  = 'invoice_voided';
+    public const TYPE_INVOICE_UPDATED = 'invoice_updated';
+    public const TYPE_INVOICE_ISSUED  = 'invoice_issued';
+    public const TYPE_PAYMENT_RECORDED = 'payment_recorded';
+    public const TYPE_EXPENSE_CREATED = 'expense_created';
+    public const TYPE_EXPENSE_UPDATED = 'expense_updated';
+    public const TYPE_EXPENSE_DELETED = 'expense_deleted';
     public const TYPE_TRELLO = 'trello';
 
     public function user(): BelongsTo
@@ -76,6 +82,12 @@ class UserActivityLog extends Model
             self::TYPE_BACKUP_DELETED => 'danger',
             self::TYPE_INVOICE_CREATED => 'primary',
             self::TYPE_INVOICE_VOIDED  => 'warning',
+            self::TYPE_INVOICE_UPDATED => 'warning',
+            self::TYPE_INVOICE_ISSUED  => 'primary',
+            self::TYPE_PAYMENT_RECORDED => 'success',
+            self::TYPE_EXPENSE_CREATED => 'info',
+            self::TYPE_EXPENSE_UPDATED => 'warning',
+            self::TYPE_EXPENSE_DELETED => 'danger',
             self::TYPE_TRELLO          => 'info',
             default                   => 'light',
         };

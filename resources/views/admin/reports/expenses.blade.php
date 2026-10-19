@@ -16,25 +16,19 @@
     <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100"><div class="card-body">
             <div class="text-muted small">Total spend</div>
-            <div class="fs-4 fw-semibold">${{ number_format($total, 2) }}</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-        <div class="card border-0 shadow-sm h-100"><div class="card-body">
-            <div class="text-muted small">Tax</div>
-            <div class="fs-4 fw-semibold">${{ number_format($tax, 2) }}</div>
+            <div class="fs-4 fw-semibold">{{ \App\Models\Expense::money($total) }}</div>
         </div></div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100"><div class="card-body">
             <div class="text-muted small">Billable</div>
-            <div class="fs-4 fw-semibold text-info">${{ number_format($billable, 2) }}</div>
+            <div class="fs-4 fw-semibold text-info">{{ \App\Models\Expense::money($billable) }}</div>
         </div></div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="card border-0 shadow-sm h-100"><div class="card-body">
             <div class="text-muted small">Not billable</div>
-            <div class="fs-4 fw-semibold">${{ number_format($nonBillable, 2) }}</div>
+            <div class="fs-4 fw-semibold">{{ \App\Models\Expense::money($nonBillable) }}</div>
         </div></div>
     </div>
 </div>
@@ -49,7 +43,6 @@
                         <th>Category</th>
                         <th class="text-end">Entries</th>
                         <th class="text-end">Amount</th>
-                        <th class="text-end">Tax</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -57,8 +50,7 @@
                     <tr>
                         <td>{{ $row->category }}</td>
                         <td class="text-end">{{ $row->cnt }}</td>
-                        <td class="text-end">${{ number_format((float) $row->total, 2) }}</td>
-                        <td class="text-end">${{ number_format((float) $row->tax, 2) }}</td>
+                        <td class="text-end">{{ \App\Models\Expense::money($row->total) }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="4" class="text-muted text-center py-4">No expenses in this period.</td></tr>

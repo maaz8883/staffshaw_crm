@@ -52,6 +52,27 @@ class AuthScope
         return auth()->user()?->hasRole(Role::PPC) ?? false;
     }
 
+    public static function isHr(): bool
+    {
+        return auth()->user()?->hasRole(Role::HR) ?? false;
+    }
+
+    public static function isFinance(): bool
+    {
+        return auth()->user()?->hasRole(Role::FINANCE) ?? false;
+    }
+
+    /** Company-wide sales, invoices, clients and money reports: Admin, Manager, Finance. */
+    public static function seesAllMoney(): bool
+    {
+        return auth()->user()?->hasRole([Role::ADMIN, Role::MANAGER, Role::FINANCE]) ?? false;
+    }
+
+    public static function isIt(): bool
+    {
+        return auth()->user()?->hasRole(Role::IT) ?? false;
+    }
+
     public static function isProduction(): bool
     {
         return auth()->user()?->hasRole(Role::PRODUCTION) ?? false;
@@ -169,7 +190,7 @@ class AuthScope
     /** Scope users list */
     public static function scopeUsers(Builder $query): Builder
     {
-        if (self::isAdminOrManager()) {
+        if (self::isAdminOrManager() || self::isIt() || self::isHr() || self::isFinance()) { // IT / HR manage every account; Finance reports on everyone
             return $query;
         }
 
@@ -257,7 +278,7 @@ class AuthScope
     {
         $q = Team::query()->sales()->orderBy('name');
 
-        if (! self::isAdminOrManager()) {
+        if (! self::seesAllMoney()) {
             $ids = self::accessibleTeamIds();
             $q->whereIn('id', $ids->isEmpty() ? [0] : $ids);
         }
@@ -283,7 +304,7 @@ class AuthScope
      */
     public static function accessibleBrandIds(): Collection
     {
-        if (self::isAdminOrManager()) {
+        if (self::seesAllMoney()) { // Finance invoices any brand
             return Brand::query()->pluck('id');
         }
 
@@ -303,7 +324,7 @@ class AuthScope
             return true;
         }
 
-        if (self::isAdminOrManager()) {
+        if (self::seesAllMoney()) {
             return true;
         }
 

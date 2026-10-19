@@ -7,7 +7,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Expense extends Model
 {
-    public const CATEGORIES = ['Hosting', 'Marketing', 'Production Tools', 'Other'];
+    /** Suggestions in the form (any text is allowed): day-to-day office costs first. */
+    public const CATEGORIES = [
+        'Food & Refreshments', 'Transport & Fuel', 'Office Supplies', 'Utilities', 'Internet & Phone',
+        'Repairs & Maintenance', 'Hosting', 'Marketing', 'Production Tools', 'Other',
+    ];
+
+    /** Expenses are recorded in Pakistani rupees (sales / invoices stay in USD). */
+    public const CURRENCY = 'Rs';
+
+    /** "Rs 1,500" / "Rs 1,250.50" */
+    public static function money(float|int|string|null $amount): string
+    {
+        $v = round((float) $amount, 2);
+
+        return self::CURRENCY.' '.number_format($v, fmod($v, 1.0) == 0.0 ? 0 : 2);
+    }
 
     protected $fillable = [
         'category',

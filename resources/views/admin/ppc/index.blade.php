@@ -86,10 +86,18 @@
                 <div class="text-muted small mt-1">{{ $pct }}% of total</div>
                 @endif
                 <div class="mt-2">
+                    @if(auth()->user()->hasRole('Finance'))
+                        {{-- Finance only reviews spend: filter the entries below instead of opening the team page --}}
+                        <a href="{{ route('admin.ppc.index', ['month' => $month, 'year' => $year, 'team' => $team->id]) }}#ppc-entries"
+                           class="btn btn-sm w-100 {{ (int) ($teamFilter?->id ?? 0) === (int) $team->id ? 'btn-primary' : 'btn-outline-primary' }}">
+                            <i class="bi bi-list-ul"></i> View entries
+                        </a>
+                    @else
                     <a href="{{ route('admin.teams.show', $team) }}?month={{ $month }}&year={{ $year }}"
                        class="btn btn-sm btn-outline-primary w-100">
                         <i class="bi bi-plus-circle"></i> Add / View
                     </a>
+                    @endif
                 </div>
             </div>
         </div>
@@ -98,9 +106,12 @@
 </div>
 
 {{-- Full history --}}
-<div class="card border-0 shadow-sm">
-    <div class="card-header">
-        <i class="bi bi-clock-history"></i> All Entries — {{ $curMonth }}
+<div class="card border-0 shadow-sm" id="ppc-entries">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history"></i> {{ $teamFilter ? $teamFilter->name.' entries' : 'All Entries' }} — {{ $curMonth }}</span>
+        @if($teamFilter)
+            <a href="{{ route('admin.ppc.index', ['month' => $month, 'year' => $year]) }}#ppc-entries" class="small">Show all teams</a>
+        @endif
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">

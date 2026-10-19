@@ -240,6 +240,8 @@
     </div>
 </div>
 
+{{-- Client brief forms: project details, not needed by Finance --}}
+@unless(auth()->user()->hasRole('Finance'))
 <div class="card">
     <div class="card-body">
         <div class="row g-3">
@@ -343,4 +345,5 @@
         </div>
     </div>
 </div>
+@endunless
 @endsection

@@ -39,7 +39,7 @@ class ClientController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) { // Admin, Manager, Finance
             return null; // no restriction
         }
 
@@ -134,8 +134,12 @@ class ClientController extends Controller
                 $csrf = csrf_field();
                 $method = method_field('DELETE');
 
-                $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>
-                    <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>';
+                $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>';
+                // Finance only looks at clients (to bill them)
+                if (AuthScope::isFinance()) {
+                    return $html;
+                }
+                $html .= ' <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>';
 
                 if (Auth::user()->hasRole([Role::ADMIN, Role::MANAGER])) {
                     $html .= '
@@ -431,7 +435,7 @@ class ClientController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+        if (AuthScope::seesAllMoney()) {
             return;
         }
 
@@ -466,7 +470,7 @@ class ClientController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole([Role::ADMIN, Role::MANAGER]) || $this->isTeamHead() || $this->isProjectManager()) {
+        if (AuthScope::seesAllMoney() || $this->isTeamHead() || $this->isProjectManager()) {
             return;
         }
 
