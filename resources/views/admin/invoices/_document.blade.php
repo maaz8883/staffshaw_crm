@@ -23,7 +23,9 @@
 
     $logoSrc = null;
     // White / very light logos (made for dark sites) get a dark plate so they stay visible
-    $logoOnDark = (bool) $invoice->brand?->logoIsLight();
+    $logoPlate = $invoice->brand?->logoBackground(); // null | 'dark' | 'mid'
+    $logoOnDark = $logoPlate !== null;
+    $plateRgb = $logoPlate === 'mid' ? [107, 114, 128] : [17, 24, 39];
     if ($invoice->brand?->image) {
         $path = public_path('storage/'.$invoice->brand->image);
         if ($forPdf) {
@@ -34,7 +36,7 @@
                 $w = imagesx($img);
                 $h = imagesy($img);
                 $flat = imagecreatetruecolor($w, $h);
-                imagefill($flat, 0, 0, $logoOnDark ? imagecolorallocate($flat, 17, 24, 39) : imagecolorallocate($flat, 255, 255, 255));
+                imagefill($flat, 0, 0, $logoOnDark ? imagecolorallocate($flat, ...$plateRgb) : imagecolorallocate($flat, 255, 255, 255));
                 imagecopy($flat, $img, 0, 0, 0, 0, $w, $h);
                 ob_start();
                 imagejpeg($flat, null, 92);
@@ -56,6 +58,7 @@
     .inv-doc .inv-logo { max-height: 64px; max-width: 220px; }
     .inv-doc .inv-logo-plate { display: inline-block; background: #111827; border-radius: 10px; padding: 10px 16px; }
     .inv-doc .inv-logo-plate .inv-logo { max-height: 52px; display: block; }
+    .inv-doc .inv-logo-plate.mid { background: #6b7280; } /* black + white logos */
     .inv-doc .inv-brand { font-size: 22px; font-weight: 700; color: #111827; letter-spacing: -.01em; }
     .inv-doc .inv-site { font-size: 12px; color: #6b7280; margin-top: 6px; }
     .inv-doc .inv-title { font-size: 26px; font-weight: 700; letter-spacing: .14em; color: #111827; text-align: right; line-height: 1.1; }
@@ -107,7 +110,7 @@
                 <td style="width:58%">
                     @if($logoSrc)
                         @if($logoOnDark)
-                            <span class="inv-logo-plate"><img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}"></span>
+                            <span class="inv-logo-plate {{ $logoPlate === 'mid' ? 'mid' : '' }}"><img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}"></span>
                         @else
                             <img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}">
                         @endif

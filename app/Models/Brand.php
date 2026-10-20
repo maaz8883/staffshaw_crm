@@ -34,54 +34,75 @@ class Brand extends Model
     }
 
     /**
-     * True when the logo is mostly white / very light (made for dark backgrounds), so it
-     * would vanish on a white invoice and needs a dark plate behind it. Cached per file.
+     * Background the logo needs to be readable on a white invoice (cached per file):
+     *  - null    : fine on white (dark / colourful logos)
+     *  - 'dark'  : mostly white / very light parts (made for dark sites)
+     *  - 'mid'   : both black and white parts (e.g. black "amazing" + white "publishers") — a
+     *              mid-grey plate keeps both readable
      */
-    public function logoIsLight(): bool
+    public function logoBackground(): ?string
     {
         $path = $this->image ? public_path('storage/'.$this->image) : null;
         if (! $path || ! is_file($path)) {
-            return false;
+            return null;
         }
 
-        return \Illuminate\Support\Facades\Cache::rememberForever(
-            'brand-logo-light.'.md5($path.'|'.filemtime($path)),
-            fn () => self::imageIsLight($path)
+        $v = \Illuminate\Support\Facades\Cache::rememberForever(
+            'brand-logo-bg.'.md5($path.'|'.filemtime($path)),
+            fn () => self::imageBackground($path) ?? 'none'
         );
+
+        return in_array($v, ['dark', 'mid'], true) ? $v : null;
     }
 
-    /** Share of visible pixels that are near-white (light grey / white text, outlines). */
-    public static function imageIsLight(string $path): bool
+    /** True when the logo needs any plate (kept for older callers). */
+    public function logoIsLight(): bool
+    {
+        return $this->logoBackground() !== null;
+    }
+
+    /** Decide from the share of visible pixels that are near-white and near-black. */
+    public static function imageBackground(string $path): ?string
     {
         $img = function_exists('imagecreatefromstring') ? @imagecreatefromstring((string) file_get_contents($path)) : false;
         if (! $img) {
-            return false;
+            return null;
         }
         $w = imagesx($img);
         $h = imagesy($img);
         $step = max(1, (int) floor(sqrt(($w * $h) / 40000))); // ~40k samples at most
+        $samples = 0;
         $visible = 0;
         $light = 0;
+        $dark = 0;
         for ($y = 0; $y < $h; $y += $step) {
             for ($x = 0; $x < $w; $x += $step) {
+                $samples++;
                 $c = imagecolorat($img, $x, $y);
-                $alpha = ($c >> 24) & 0x7F; // 0 = opaque, 127 = transparent
-                if ($alpha > 90) {
+                if ((($c >> 24) & 0x7F) > 90) { // mostly transparent
                     continue;
                 }
                 $visible++;
                 $lum = 0.2126 * (($c >> 16) & 0xFF) + 0.7152 * (($c >> 8) & 0xFF) + 0.0722 * ($c & 0xFF);
                 if ($lum >= 215) {
                     $light++;
+                } elseif ($lum <= 70) {
+                    $dark++;
                 }
             }
         }
         imagedestroy($img);
 
-        // Logos with a solid white background have almost everything "light" but no
-        // transparency: those already work on white paper.
-        $hasTransparency = $visible < (int) ceil($w / $step) * (int) ceil($h / $step) * 0.98;
+        // A solid white background (no transparency) already looks right on white paper
+        if ($visible === 0 || $visible >= $samples * 0.98) {
+            return null;
+        }
+        $lightShare = $light / $visible;
+        $darkShare = $dark / $visible;
+        if ($lightShare < 0.10) {
+            return null;
+        }
 
-        return $hasTransparency && $visible > 0 && ($light / $visible) >= 0.30;
+        return $darkShare >= 0.10 ? 'mid' : 'dark';
     }
 }
