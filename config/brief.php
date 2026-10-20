@@ -13,4 +13,10 @@ return [
     */
     'builder_enabled' => env('BRIEF_FORM_BUILDER_ENABLED', false),
 
+    /*
+    | Brief Forms box (links, documents, answers) on the sale page. Hidden for now;
+    | set BRIEF_SHOW_ON_SALE=true in .env to bring it back (Finance never sees it).
+    */
+    'show_on_sale' => env('BRIEF_SHOW_ON_SALE', false),
+
 ];
