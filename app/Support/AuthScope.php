@@ -291,8 +291,10 @@ class AuthScope
     {
         $q = User::query()->orderBy('name');
         self::scopeUsers($q);
-        // Sales dropdowns only (leads, sales, reports): no production people
-        $q->whereDoesntHave('role', fn ($r) => $r->whereIn('name', [Role::PRODUCTION, Role::PPC]))
+        // Sales dropdowns only (leads, sales, reports): people who sell — agents (incl. team heads)
+        // and project managers, active accounts, not in production teams
+        $q->whereHas('role', fn ($r) => $r->whereIn('name', [Role::AGENT, Role::PROJECT_MANAGER]))
+            ->where('account_status', User::ACCOUNT_ACTIVE)
             ->whereDoesntHave('team', fn ($t) => $t->where('is_production', true));
 
         return $q->get();

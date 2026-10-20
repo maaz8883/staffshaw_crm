@@ -23,6 +23,10 @@
         <label for="assigned_to" class="form-label">Assigned</label>
         <select id="assigned_to" name="assigned_to" class="form-select">
             <option value="">-- Unassigned --</option>
+            {{-- Keep a lead's current assignee selectable even if they're no longer a sales user --}}
+            @if(isset($lead) && $lead->assigned_to && ! $users->contains('id', $lead->assigned_to) && $lead->assignedUser)
+                <option value="{{ $lead->assigned_to }}" selected>{{ $lead->assignedUser->name }}</option>
+            @endif
             @foreach($users as $user)
                 <option value="{{ $user->id }}" {{ (string) old('assigned_to', $lead->assigned_to ?? auth()->id()) === (string) $user->id ? 'selected' : '' }}>{{ $user->name }}</option>
             @endforeach
