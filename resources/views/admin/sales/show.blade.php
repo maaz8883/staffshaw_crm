@@ -12,7 +12,41 @@
     </a>
     @endif
     <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    @if($canDecide ?? false)
+        {{-- Pending sale: approver (Admin / Manager / Team Head) decides here too --}}
+        <form action="{{ route('admin.sales.approve', $sale) }}" method="POST" class="d-inline">
+            @csrf
+            <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check2-circle"></i> Approve</button>
+        </form>
+        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectSaleModal">
+            <i class="bi bi-x-circle"></i> Reject
+        </button>
+    @endif
 </div>
+
+@if($canDecide ?? false)
+<div class="modal fade" id="rejectSaleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="{{ route('admin.sales.reject', $sale) }}" class="modal-content">
+            @csrf
+            <div class="modal-header">
+                <h5 class="modal-title">Reject sale</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <label for="reject_note" class="form-label">Reason for rejection <span class="text-danger">*</span></label>
+                <textarea name="approval_note" id="reject_note" class="form-control" rows="3" required maxlength="500"
+                    placeholder="Explain why this sale is being rejected..."></textarea>
+                <div class="form-text">The agent sees this reason and can edit and resubmit the sale.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger">Reject sale</button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
 
 @if($sale->approval_status === \App\Models\Sale::APPROVAL_REJECTED && ($canEdit ?? false))
 <div class="alert alert-warning py-2">

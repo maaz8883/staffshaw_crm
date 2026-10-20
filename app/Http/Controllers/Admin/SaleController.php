@@ -414,6 +414,7 @@ class SaleController extends Controller
         $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices']);
 
         $canToggleRefund = $this->canToggleRefund($sale);
+        $canDecide = $this->canApprove($sale) && $sale->isPendingApproval(); // Approve / Reject buttons
         $canEdit = $this->userCanEditSale($sale);
         $invoiceService = app(InvoiceService::class);
         $sale = $invoiceService->syncReceivedAmount($sale);
@@ -425,6 +426,7 @@ class SaleController extends Controller
         return view('admin.sales.show', compact(
             'sale',
             'canToggleRefund',
+            'canDecide',
             'canEdit',
             'invoices',
             'billableRemaining',

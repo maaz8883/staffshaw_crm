@@ -316,7 +316,7 @@
 
     {{-- Live notification toast (near real-time via polling) --}}
     <div class="toast-container position-fixed bottom-0 end-0 p-3 live-notification-toast-wrap" style="z-index: 1080;">
-        <div id="js-live-notification-toast" class="toast align-items-center text-bg-light border-0 shadow" role="alert" aria-live="polite" aria-atomic="true">
+        <div id="js-live-notification-toast" class="toast align-items-center border shadow" role="alert" aria-live="polite" aria-atomic="true">
             <div class="d-flex">
                 <div class="toast-body">
                     <div class="fw-semibold small mb-1"><i class="bi bi-bell-fill text-primary me-1"></i> New notification</div>

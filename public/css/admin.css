@@ -1705,3 +1705,8 @@ select.js-select2-multi {
 [data-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single .select2-selection__placeholder {
     color: #8b92a5 !important;
 }
+
+/* Live notification toast: follow the theme (light text on dark card in dark mode) */
+.live-notification-toast-wrap .toast .toast-body,
+.live-notification-toast-wrap .toast .toast-body .small { color: var(--text-primary); }
+[data-theme="dark"] .live-notification-toast-wrap .toast .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
