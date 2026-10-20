@@ -26,6 +26,10 @@ class DashboardController extends Controller
         $month = now()->month;
         $year = now()->year;
 
+        // Targets carry forward month to month (save this month's, and a picked month's, carried targets)
+        \App\Support\TargetCarryForward::ensureMonth($month, $year);
+        \App\Support\TargetCarryForward::ensureMonth((int) request('month', $month), (int) request('year', $year));
+
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return $this->adminDashboard($month, $year);
         }

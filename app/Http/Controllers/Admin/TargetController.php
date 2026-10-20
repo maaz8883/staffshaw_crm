@@ -11,6 +11,7 @@ use App\Models\UserTarget;
 use App\Models\SubTeamHeadTarget;
 use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
+use App\Support\TargetCarryForward;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -57,6 +58,7 @@ class TargetController extends Controller
         $month    = (int) $request->get('month', now()->month);
         $year     = (int) $request->get('year', now()->year);
         $authUser = Auth::user();
+        TargetCarryForward::ensureMonth($month, $year);
 
         $isAdmin    = $authUser->hasRole(['Admin', 'Manager']);
         $isTeamHead = Team::where('team_head_id', $authUser->id)->exists();
@@ -115,11 +117,8 @@ class TargetController extends Controller
         $today = (float) $todayQuery->sum('amount');
 
         $teams->each(function (Team $team) use ($month, $year, $authUser, $isSubTeamHead, $achievedByUser) {
-            $team->currentTarget = TeamTarget::where([
-                'team_id' => $team->id,
-                'month'   => $month,
-                'year'    => $year,
-            ])->first();
+            // Target in force: this month's, else carried from the latest earlier month
+            $team->currentTarget = TargetCarryForward::effective(TeamTarget::class, ['team_id' => $team->id], $month, $year);
 
             if ($isSubTeamHead) {
                 $mySubHeadIds = \App\Models\SubTeamHead::where('user_id', $authUser->id)
@@ -138,33 +137,18 @@ class TargetController extends Controller
             }
 
             $team->subTeamHeads->each(function ($subHead) use ($team, $month, $year) {
-                $subHead->currentTarget = SubTeamHeadTarget::where([
-                    'sub_team_head_id' => $subHead->id,
-                    'team_id' => $team->id,
-                    'month'   => $month,
-                    'year'    => $year,
-                ])->first();
+                $subHead->currentTarget = TargetCarryForward::effective(SubTeamHeadTarget::class, ['sub_team_head_id' => $subHead->id, 'team_id' => $team->id], $month, $year);
             });
 
             $team->users->each(function ($user) use ($team, $month, $year, $achievedByUser) {
-                $user->currentTarget = UserTarget::where([
-                    'user_id' => $user->id,
-                    'team_id' => $team->id,
-                    'month'   => $month,
-                    'year'    => $year,
-                ])->first();
+                $user->currentTarget = TargetCarryForward::effective(UserTarget::class, ['user_id' => $user->id, 'team_id' => $team->id], $month, $year);
                 $user->month_achieved = (float) ($achievedByUser[$user->id] ?? 0);
             });
 
             if ($team->teamHead) {
                 $team->teamHead->month_achieved = (float) ($achievedByUser[$team->teamHead->id] ?? 0);
                 if (! isset($team->teamHead->currentTarget)) {
-                    $team->teamHead->currentTarget = UserTarget::where([
-                        'user_id' => $team->teamHead->id,
-                        'team_id' => $team->id,
-                        'month'   => $month,
-                        'year'    => $year,
-                    ])->first();
+                    $team->teamHead->currentTarget = TargetCarryForward::effective(UserTarget::class, ['user_id' => $team->teamHead->id, 'team_id' => $team->id], $month, $year);
                 }
             }
         });

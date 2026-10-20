@@ -51,9 +51,7 @@ class TeamMembershipController extends Controller
 
             // Only compute target/revenue for teams the PM has actually joined (approved).
             if ($membership?->status === TeamMembership::STATUS_APPROVED) {
-                $team->current_target = (float) (TeamTarget::where('team_id', $team->id)
-                    ->where('month', $month)->where('year', $year)
-                    ->value('target_amount') ?? 0);
+                $team->current_target = (float) (\App\Support\TargetCarryForward::effective(TeamTarget::class, ['team_id' => $team->id], $month, $year)?->target_amount ?? 0);
 
                 $team->current_revenue = (float) Sale::where('team_id', $team->id)
                     ->where('approval_status', Sale::APPROVAL_APPROVED)

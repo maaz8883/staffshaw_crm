@@ -8,6 +8,11 @@
 
 @php
     $monthLabel = \Carbon\Carbon::create()->month($month)->format('F') . ' ' . $year;
+    // Targets carry forward: label one that comes from an earlier month
+    $carriedFrom = fn ($t) => ($t && ((int) $t->month !== (int) $month || (int) $t->year !== (int) $year))
+        ? \Carbon\Carbon::create((int) $t->year, (int) $t->month, 1)->format('M Y') : null;
+    $carriedHint = fn ($t) => ($from = $carriedFrom($t))
+        ? '<div class="form-text small text-info" title="Saving sets it from '.$monthLabel.' onwards"><i class="bi bi-arrow-repeat"></i> From '.$from.'</div>' : '';
 @endphp
 
 <div class="row g-3 mb-3">
@@ -181,6 +186,7 @@
                                         form="team-target-{{ $team->id }}"
                                         value="{{ $team->currentTarget?->target_amount ?? '' }}" placeholder="0.00" required>
                                 </div>
+                                {!! $carriedHint($team->currentTarget) !!}
                             </td>
                             <td>
                                 <input type="text" name="notes" class="form-control form-control-sm"
@@ -224,6 +230,7 @@
                                         form="sub-target-{{ $team->id }}-{{ $subHead->id }}"
                                         value="{{ $subHead->currentTarget?->target_amount ?? '' }}" placeholder="0.00" required>
                                 </div>
+                                {!! $carriedHint($subHead->currentTarget) !!}
                             </td>
                             <td>
                                 <input type="text" name="notes" class="form-control form-control-sm"
@@ -296,6 +303,7 @@
                                             value="{{ $member->currentTarget?->target_amount ?? '' }}"
                                             placeholder="0.00">
                                     </div>
+                                    {!! $carriedHint($member->currentTarget) !!}
                                 </td>
                                 <td>
                                     <input type="text" class="form-control form-control-sm"

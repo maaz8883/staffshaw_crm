@@ -54,6 +54,7 @@ class CrmOverview
 
         $month = now()->month;
         $year = now()->year;
+        \App\Support\TargetCarryForward::ensureMonth($month, $year);
         $monthRevenue = (float) Sale::query()
             ->where('approval_status', Sale::APPROVAL_APPROVED)
             ->where('status', 'completed')

@@ -149,6 +149,7 @@ class TeamController extends Controller
 
         $month = (int) request()->get('month', now()->month);
         $year  = (int) request()->get('year', now()->year);
+        \App\Support\TargetCarryForward::ensureMonth($month, $year);
 
         // Current month's target for the team, its team head, every member, and each Project Manager.
         $team->currentTarget = \App\Models\TeamTarget::where('team_id', $team->id)
