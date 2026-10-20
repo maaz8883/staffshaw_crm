@@ -14,6 +14,11 @@ class EnsureAccountIsActive
     {
         $user = Auth::user();
 
+        // Read the status fresh, so a ban takes effect on the very next request
+        if ($user instanceof User) {
+            $user->account_status = User::query()->whereKey($user->getKey())->value('account_status') ?? $user->account_status;
+        }
+
         if ($user instanceof User && ! $user->isAccountActive()) {
             Auth::logout();
             $request->session()->invalidate();
