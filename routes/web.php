@@ -111,6 +111,7 @@ Route::prefix('admin')->group(function () {
             Route::get('users/datatable', [UserController::class, 'datatable'])->name('admin.users.datatable');
             Route::post('users/{user}/ban', [UserController::class, 'ban'])->name('admin.users.ban');
             Route::post('users/{user}/unban', [UserController::class, 'unban'])->name('admin.users.unban');
+            Route::post('users/{user}/password', [UserController::class, 'changePassword'])->name('admin.users.password');
             Route::resource('users', UserController::class)->names([
                 'index' => 'admin.users.index', 'create' => 'admin.users.create',
                 'store' => 'admin.users.store', 'show'   => 'admin.users.show',

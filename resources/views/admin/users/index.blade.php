@@ -59,6 +59,35 @@
             </table>
         </div>
     </div>
+
+    {{-- Set a new password (old passwords are stored hashed and can't be shown) --}}
+    <div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" class="modal-content" id="passwordForm">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Change password — <span id="passwordUserName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Current passwords can't be shown (they are stored encrypted). Set a new one and share it with the user privately.</p>
+                    <label class="form-label" for="newPassword">New password</label>
+                    <div class="input-group mb-2">
+                        <input type="password" class="form-control" id="newPassword" name="password" minlength="8" required autocomplete="new-password">
+                        <button type="button" class="btn btn-outline-secondary" id="togglePassword" title="Show / hide"><i class="bi bi-eye"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" id="copyPassword" title="Copy"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                    <input type="hidden" name="password_confirmation" id="newPasswordConfirm">
+                    <button type="button" class="btn btn-sm btn-link px-0" id="generatePassword"><i class="bi bi-magic"></i> Generate a strong password</button>
+                    <div class="form-text">At least 8 characters.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save password</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @push('styles')
@@ -103,6 +132,39 @@
             $('#btn-reset').on('click', function () {
                 $('#filter-company, #filter-team, #filter-role, #filter-status').val('');
                 table.draw();
+            });
+
+            // ── Change password popup ──
+            var pwModal = new bootstrap.Modal(document.getElementById('passwordModal'));
+            var pwInput = document.getElementById('newPassword');
+            $(document).on('click', '.js-change-password', function () {
+                document.getElementById('passwordForm').action = this.dataset.url;
+                document.getElementById('passwordUserName').textContent = this.dataset.name;
+                pwInput.value = '';
+                pwInput.type = 'password';
+                pwModal.show();
+                setTimeout(function () { pwInput.focus(); }, 300);
+            });
+            document.getElementById('togglePassword').addEventListener('click', function () {
+                pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+            });
+            document.getElementById('generatePassword').addEventListener('click', function () {
+                // 12 characters, no look-alikes (0/O, 1/l/I)
+                var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%';
+                var bytes = new Uint32Array(12);
+                window.crypto.getRandomValues(bytes);
+                pwInput.value = Array.from(bytes, function (b) { return chars[b % chars.length]; }).join('');
+                pwInput.type = 'text'; // show it so it can be copied
+            });
+            document.getElementById('copyPassword').addEventListener('click', function () {
+                if (!pwInput.value) return;
+                navigator.clipboard && navigator.clipboard.writeText(pwInput.value);
+                this.innerHTML = '<i class="bi bi-clipboard-check"></i>';
+                var btn = this;
+                setTimeout(function () { btn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
+            });
+            document.getElementById('passwordForm').addEventListener('submit', function () {
+                document.getElementById('newPasswordConfirm').value = pwInput.value;
             });
         });
     </script>

@@ -84,17 +84,21 @@ class UserController extends Controller
                             .$csrf.'<button type="submit" class="btn btn-sm btn-outline-success">Unban</button></form>';
                     } elseif ($user->isAccountActive()) {
                         $ban = '<form action="'.route('admin.users.ban', $user).'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Ban '.e($user->name).'?" data-swal-text="They will be signed out and won&#39;t be able to sign in." data-swal-confirm="Yes, ban">'
-                            .$csrf.'<button type="submit" class="btn btn-sm btn-outline-dark">Ban</button></form>';
+                            .$csrf.'<button type="submit" class="btn btn-sm btn-outline-secondary">Ban</button></form>';
                     }
                 }
 
                 $edit = $canTouch ? '<a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>' : '';
+                // New password (opens the popup on the Users page)
+                $password = $canTouch
+                    ? '<button type="button" class="btn btn-sm btn-outline-primary js-change-password" data-url="'.route('admin.users.password', $user).'" data-name="'.e($user->name).'">Password</button>'
+                    : '';
                 // Deleting accounts stays with Admins
                 $delete = Auth::user()->hasRole(Role::ADMIN)
                     ? '<form action="'.$deleteUrl.'" method="POST" class="d-inline js-admin-delete-form" data-swal-title="Delete this user?">'.$csrf.$method.'<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>'
                     : '';
 
-                return '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a> '.$edit.' '.$ban.' '.$delete;
+                return '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a> '.$edit.' '.$password.' '.$ban.' '.$delete;
             })
             ->rawColumns(['actions', 'status_badge'])
             ->toJson();
@@ -128,6 +132,25 @@ class UserController extends Controller
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_USER_UPDATED, "Unbanned user: {$user->name} ({$user->email})");
 
         return back()->with('success', "{$user->name} has been unbanned and can sign in again.");
+    }
+
+    /** Set a new password for a user (the old one can't be shown: passwords are stored hashed). */
+    public function changePassword(Request $request, User $user): RedirectResponse
+    {
+        $this->guardAdminAccount($user);
+
+        $validated = $request->validate([
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+            'remember_token' => \Illuminate\Support\Str::random(60), // "remember me" on other devices stops working
+        ])->save();
+
+        ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_USER_UPDATED, "Changed password for {$user->name} ({$user->email})");
+
+        return back()->with('success', "Password updated for {$user->name}. Share it with them privately.");
     }
 
     /** Roles the signed-in user may give: IT can't make anyone an Admin. */
