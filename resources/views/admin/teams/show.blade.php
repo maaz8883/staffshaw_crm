@@ -97,7 +97,7 @@
                 @php
                     $usersUnderSubHead = $team->users
                         ->where('sub_team_head_id', $subHead->id)
-                        ->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER));
+                        ->reject(fn ($u) => $u->hasRole([\App\Models\Role::PROJECT_MANAGER, \App\Models\Role::PPC]));
                 @endphp
                 @if($usersUnderSubHead->count() > 0)
                 <div class="mt-2 ps-4 border-start border-2 border-secondary">
@@ -152,7 +152,7 @@
         @php
             $usersWithoutSubHead = $team->users
                 ->whereNull('sub_team_head_id')
-                ->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER));
+                ->reject(fn ($u) => $u->hasRole([\App\Models\Role::PROJECT_MANAGER, \App\Models\Role::PPC]));
         @endphp
         @if($usersWithoutSubHead->count() > 0)
         <div class="mt-4 ps-4 border-start border-3 border-secondary">
@@ -178,7 +178,7 @@
         @endif
 
         @php
-            $hierarchyUserCount = $team->users->reject(fn ($u) => $u->hasRole(\App\Models\Role::PROJECT_MANAGER))->count();
+            $hierarchyUserCount = $team->users->reject(fn ($u) => $u->hasRole([\App\Models\Role::PROJECT_MANAGER, \App\Models\Role::PPC]))->count();
         @endphp
         @if($hierarchyUserCount === 0 && $team->approvedProjectManagers->count() === 0)
         <div class="text-muted text-center py-3">
