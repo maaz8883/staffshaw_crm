@@ -14,7 +14,7 @@
         .inv-doc .inv-summary .amt { font-size: 14px !important; }
         /* Tighter spacing so a normal invoice fits on one A4 page */
         .inv-doc .inv-pad { padding: 26px 34px 20px !important; }
-        .inv-doc .inv-rule { margin: 18px 0 16px !important; }
+        .inv-doc .inv-band { padding: 22px 34px !important; }
         .inv-doc .inv-items { margin-top: 20px !important; }
         .inv-doc .inv-items th { padding: 8px 12px !important; }
         .inv-doc .inv-items td { padding: 9px 12px !important; }

@@ -22,21 +22,23 @@
     $websiteLabel = $website ? preg_replace('#^https?://(www\.)?#i', '', rtrim($website, '/')) : null;
 
     $logoSrc = null;
-    // White / very light logos (made for dark sites) get a dark plate so they stay visible
-    $logoPlate = $invoice->brand?->logoBackground(); // null | 'dark' | 'mid'
-    $logoOnDark = $logoPlate !== null;
-    $plateRgb = $logoPlate === 'mid' ? [107, 114, 128] : [17, 24, 39];
+    // Header band colour follows the logo so every logo reads well:
+    // light band for normal logos, navy for white logos, slate for black + white logos
+    $band = match ($invoice->brand?->logoBackground()) { 'dark' => 'dark', 'mid' => 'mid', default => 'light' };
+    $bandRgb = ['light' => [241, 245, 249], 'dark' => [15, 23, 42], 'mid' => [100, 116, 139]][$band];
     if ($invoice->brand?->image) {
-        $path = public_path('storage/'.$invoice->brand->image);
+        // Margins trimmed so every logo shows at a proper size
+        $logoRel = $invoice->brand->trimmedLogo() ?? $invoice->brand->image;
+        $path = public_path('storage/'.$logoRel);
         if ($forPdf) {
             // dompdf can't read WEBP and sends transparent PNGs through Imagick (often broken on
-            // servers): flatten the logo onto white as a JPEG with GD
+            // servers): flatten the logo onto the band colour as a JPEG with GD
             $img = is_file($path) && function_exists('imagecreatefromstring') ? @imagecreatefromstring((string) file_get_contents($path)) : false;
             if ($img) {
                 $w = imagesx($img);
                 $h = imagesy($img);
                 $flat = imagecreatetruecolor($w, $h);
-                imagefill($flat, 0, 0, $logoOnDark ? imagecolorallocate($flat, ...$plateRgb) : imagecolorallocate($flat, 255, 255, 255));
+                imagefill($flat, 0, 0, imagecolorallocate($flat, ...$bandRgb));
                 imagecopy($flat, $img, 0, 0, 0, 0, $w, $h);
                 ob_start();
                 imagejpeg($flat, null, 92);
@@ -45,7 +47,7 @@
                 imagedestroy($flat);
             }
         } else {
-            $logoSrc = asset('storage/'.$invoice->brand->image);
+            $logoSrc = asset('storage/'.$logoRel);
         }
     }
 @endphp
@@ -53,22 +55,27 @@
     .inv-doc { background: #fff; color: #1f2937; font-size: 13px; line-height: 1.5; position: relative; }
     .inv-doc table { width: 100%; border-collapse: collapse; }
     .inv-doc td, .inv-doc th { vertical-align: top; padding: 0; border: 0; }
-    .inv-doc .inv-accent { height: 6px; background: #111827; }
     .inv-doc .inv-pad { padding: 34px 40px 30px; }
-    .inv-doc .inv-logo { max-height: 64px; max-width: 220px; }
-    .inv-doc .inv-logo-plate { display: inline-block; background: #111827; border-radius: 10px; padding: 10px 16px; }
-    .inv-doc .inv-logo-plate .inv-logo { max-height: 52px; display: block; }
-    .inv-doc .inv-logo-plate.mid { background: #6b7280; } /* black + white logos */
+    /* Branded header band */
+    .inv-doc .inv-band { padding: 30px 40px; }
+    .inv-doc .inv-band td { vertical-align: middle; }
+    .inv-doc .inv-band.light { background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+    .inv-doc .inv-band.dark { background: #0f172a; }
+    .inv-doc .inv-band.mid { background: #64748b; }
+    .inv-doc .inv-logo { max-height: 72px; max-width: 260px; display: block; }
+    .inv-doc .inv-band .inv-site { margin-top: 10px; }
+    .inv-doc .inv-band.dark .inv-title, .inv-doc .inv-band.mid .inv-title, .inv-doc .inv-band.dark .inv-brand, .inv-doc .inv-band.mid .inv-brand { color: #fff; }
+    .inv-doc .inv-band.dark .inv-site, .inv-doc .inv-band.dark .inv-number { color: #94a3b8; }
+    .inv-doc .inv-band.mid .inv-site, .inv-doc .inv-band.mid .inv-number { color: #e2e8f0; }
     .inv-doc .inv-brand { font-size: 22px; font-weight: 700; color: #111827; letter-spacing: -.01em; }
     .inv-doc .inv-site { font-size: 12px; color: #6b7280; margin-top: 6px; }
-    .inv-doc .inv-title { font-size: 26px; font-weight: 700; letter-spacing: .14em; color: #111827; text-align: right; line-height: 1.1; }
+    .inv-doc .inv-title { font-size: 28px; font-weight: 700; letter-spacing: .16em; color: #0f172a; text-align: right; line-height: 1.1; }
     .inv-doc .inv-number { text-align: right; color: #6b7280; font-size: 12px; margin-top: 6px; }
     .inv-doc .inv-pill { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-top: 10px; }
     .inv-doc .inv-pill.paid { background: #dcfce7; color: #166534; }
     .inv-doc .inv-pill.partial { background: #fef3c7; color: #92400e; }
     .inv-doc .inv-pill.due { background: #fee2e2; color: #991b1b; }
     .inv-doc .inv-pill.neutral { background: #e5e7eb; color: #374151; }
-    .inv-doc .inv-rule { border-top: 1px solid #e5e7eb; margin: 26px 0 22px; height: 0; }
     .inv-doc .inv-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #9ca3af; margin-bottom: 6px; }
     .inv-doc .inv-client { font-size: 15px; font-weight: 700; color: #111827; }
     .inv-doc .inv-muted { color: #6b7280; }
@@ -102,18 +109,13 @@
 </style>
 
 <div class="inv-doc">
-    <div class="inv-accent"></div>
-    <div class="inv-pad">
-        {{-- Brand + document title --}}
+    {{-- Brand header band --}}
+    <div class="inv-band {{ $band }}">
         <table>
             <tr>
-                <td style="width:58%">
+                <td style="width:60%">
                     @if($logoSrc)
-                        @if($logoOnDark)
-                            <span class="inv-logo-plate {{ $logoPlate === 'mid' ? 'mid' : '' }}"><img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}"></span>
-                        @else
-                            <img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}">
-                        @endif
+                        <img class="inv-logo" src="{{ $logoSrc }}" alt="{{ $invoice->brand_name }}">
                     @else
                         <div class="inv-brand">{{ $invoice->brand_name ?: 'Invoice' }}</div>
                     @endif
@@ -121,7 +123,7 @@
                         <div class="inv-site">{{ $websiteLabel }}</div>
                     @endif
                 </td>
-                <td style="width:42%; text-align:right">
+                <td style="width:40%; text-align:right">
                     <div class="inv-title">{{ $isReceipt ? 'RECEIPT' : 'INVOICE' }}</div>
                     @if($invoice->isVoid())
                         <div class="inv-void">VOID</div>
@@ -131,8 +133,9 @@
                 </td>
             </tr>
         </table>
+    </div>
 
-        <div class="inv-rule"></div>
+    <div class="inv-pad">
 
         {{-- Billed to + key dates --}}
         <table>
