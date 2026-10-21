@@ -90,6 +90,7 @@ Route::prefix('admin')->group(function () {
         Route::middleware('role:Admin,Manager,Agent,Project Manager,Finance')->group(function () {
             Route::get('clients/datatable',      [ClientController::class, 'datatable'])->name('admin.clients.datatable');
             Route::get('clients/{client}/lookup', [ClientController::class, 'lookup'])->name('admin.clients.lookup');
+            Route::get('clients/{client}/trello', [ClientController::class, 'trello'])->name('admin.clients.trello');
             Route::resource('clients', ClientController::class)->only(['index', 'show'])->names([
                 'index' => 'admin.clients.index', 'show' => 'admin.clients.show',
             ]);

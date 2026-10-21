@@ -70,7 +70,7 @@
                 <span class="small text-muted" id="pmt-proj-summary"></span>
             </div>
             <div class="card-body">
-                <div class="small text-muted mb-2">Your team's clients (sub-teams included) that are linked to a Trello card. Mine = clients you added or sold to. Late first, then by due date.</div>
+                <div class="small text-muted mb-2">Open projects of your team's clients (sub-teams included) that have a due date. Mine = clients you added or sold to. Late first, then by due date. Every project of a client is on the client's page.</div>
                 <div class="pmt-list">
                     <table class="table pmt-table mb-0">
                         <thead><tr><th>Client</th><th>List</th><th class="text-end">Due</th></tr></thead>
@@ -132,19 +132,18 @@
         document.querySelector('[data-scope-count="all"]').textContent = s.total ? `(${n(s.total)})` : '';
         document.querySelector('[data-scope-count="mine"]').textContent = s.mine ? `(${n(s.mine)})` : '';
         document.querySelectorAll('#pmt-scope [data-scope]').forEach((b) => b.classList.toggle('active', b.dataset.scope === scope));
-        const late = list.filter((p) => p.late).length, done = list.filter((p) => p.done).length;
-        document.getElementById('pmt-proj-summary').innerHTML = list.length
-            ? `${late ? `<span class="text-danger">${n(late)} late</span> · ` : ''}${n(done)} completed`
-            : '';
+        const late = list.filter((p) => p.late).length;
+        document.getElementById('pmt-proj-summary').innerHTML = late ? `<span class="text-danger">${n(late)} late</span>` : '';
         if (!list.length) {
-            box.innerHTML = `<tr><td colspan="3" class="text-muted">${scope === 'mine' ? 'None of your clients are' : 'No team clients are'} linked to a card on this team's boards yet.</td></tr>`;
+            box.innerHTML = `<tr><td colspan="3" class="text-muted">No open projects with a due date${scope === 'mine' ? ' for your clients' : ''}.</td></tr>`;
             return;
         }
         box.innerHTML = list.map((p) => {
-            const due = p.done ? '<span class="text-success fw-semibold">Completed</span>' : p.due ? `<span class="${p.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(p.due))}${p.late ? ' · late' : ''}</span>` : '<span class="opacity-50">—</span>';
+            const due = `<span class="${p.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(p.due))}${p.late ? ' · late' : ''}</span>`;
             return `<tr>
                 <td><a href="${esc(p.url)}" class="fw-semibold text-decoration-none">${esc(p.client)}</a>${p.mine && scope === 'all' ? ' <span class="badge bg-primary-subtle text-primary-emphasis">Mine</span>' : ''}
-                    <div class="small text-muted text-truncate" style="max-width:260px">${esc(p.board)}</div></td>
+                    <div class="small text-truncate" style="max-width:300px" title="${esc(p.card)}">${esc(p.card)}</div>
+                    <div class="small text-muted text-truncate" style="max-width:300px">${esc(p.board)}</div></td>
                 <td class="small">${esc(p.list)}</td>
                 <td class="text-end small">${due}</td>
             </tr>`;

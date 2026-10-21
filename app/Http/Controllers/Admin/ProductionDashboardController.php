@@ -112,31 +112,47 @@ class ProductionDashboardController extends Controller
             ->get();
         $index = $data['card_index'] ?? [];
         \App\Support\ClientTrelloLink::linkFromIndex($clients, $index);
-        $clients = $clients->filter(fn ($c) => $c->trello_card_id);
+        // Dashboard keeps it short: open projects with a due date only (everything per client is
+        // on the client page). A client can have a card per board (design, website…).
+        $byKey = [];
+        foreach ($index as $cardId => $card) {
+            if (($card['key'] ?? '') !== '') {
+                $byKey[$card['key']][] = $cardId;
+            }
+        }
+        $isMine = fn ($client) => (int) $client->created_by === (int) $user->id || in_array((int) $client->id, $mySaleClientIds, true);
+        $clients = $clients->sortByDesc($isMine); // same name twice → the PM's own client wins
         $now = Carbon::now();
         $projects = [];
+        $shown = [];
         foreach ($clients as $client) {
-            $c = $index[$client->trello_card_id] ?? null;
-            if (! $c) {
-                continue; // card archived or on another team's boards
+            $cardIds = $byKey[\App\Support\ClientTrelloLink::clientKey((string) $client->name)] ?? [];
+            if ($client->trello_card_id) {
+                $cardIds[] = $client->trello_card_id;
             }
-            $late = ! $c['done'] && $c['due'] && Carbon::parse($c['due'])->lt($now);
-            $projects[] = [
-                'client' => $client->name,
-                'mine' => (int) $client->created_by === (int) $user->id || in_array((int) $client->id, $mySaleClientIds, true),
-                'client_url' => route('admin.clients.show', $client->id),
-                'card' => $c['name'],
-                'board' => $c['board'],
-                'list' => $c['list'],
-                'done' => $c['done'],
-                'due' => $c['due'],
-                'late' => $late,
-                'url' => route('admin.trello.board', ['boardId' => $c['board_id'], 'team' => $team->id, 'card' => $client->trello_card_id]),
-            ];
+            foreach (array_unique($cardIds) as $cardId) {
+                $c = $index[$cardId] ?? null;
+                if (! $c || isset($shown[$cardId]) || $c['done'] || ! $c['due']) {
+                    continue; // archived / other team, already listed, completed, or no due date
+                }
+                $shown[$cardId] = true;
+                $late = ! $c['done'] && $c['due'] && Carbon::parse($c['due'])->lt($now);
+                $projects[] = [
+                    'client' => $client->name,
+                    'mine' => $isMine($client),
+                    'client_url' => route('admin.clients.show', $client->id),
+                    'card' => $c['name'],
+                    'board' => $c['board'],
+                    'list' => $c['list'],
+                    'done' => $c['done'],
+                    'due' => $c['due'],
+                    'late' => $late,
+                    'url' => route('admin.trello.board', ['boardId' => $c['board_id'], 'team' => $team->id, 'card' => $cardId]),
+                ];
+            }
         }
-        // Late first, then by due date (no due date after), completed last
-        $rank = fn ($p) => $p['late'] ? 0 : ($p['done'] ? 3 : ($p['due'] ? 1 : 2));
-        usort($projects, fn ($a, $b) => [$rank($a), (string) $a['due']] <=> [$rank($b), (string) $b['due']]);
+        // Late first (longest late on top), then the nearest due date
+        usort($projects, fn ($a, $b) => strcmp((string) $a['due'], (string) $b['due']));
 
         return response()->json([
             'ok' => true,
@@ -150,7 +166,6 @@ class ProductionDashboardController extends Controller
                 'total' => count($projects),
                 'mine' => count(array_filter($projects, fn ($p) => $p['mine'])),
                 'late' => count(array_filter($projects, fn ($p) => $p['late'])),
-                'done' => count(array_filter($projects, fn ($p) => $p['done'])),
             ],
             'generated_at' => $data['generated_at'],
         ]);

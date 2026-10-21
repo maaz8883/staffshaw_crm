@@ -190,6 +190,46 @@ class ClientController extends Controller
             ->with('success', 'Client added successfully.');
     }
 
+    /** All Trello projects (cards) of the client, for the client page (JSON, loaded after the page). */
+    public function trello(Request $request, Client $client): JsonResponse
+    {
+        $this->authorizeClient($client);
+        $client->loadMissing('team.parentTeam', 'team.trelloIntegration');
+        $team = \App\Support\ClientTrelloLink::trelloTeamFor($client->team);
+        if (! $team) {
+            return response()->json(['ok' => false, 'message' => 'Trello is not connected for this client\'s team.'], 404);
+        }
+        if ($request->hasSession()) {
+            $request->session()->save(); // don't hold the session lock while waiting on Trello
+        }
+
+        try {
+            $index = \App\Http\Controllers\Admin\ProductionDashboardController::overviewData($team, $request->boolean('refresh'))['card_index'] ?? [];
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $now = now();
+        $canOpen = Auth::user()->hasRole([Role::ADMIN, Role::MANAGER, Role::AGENT, Role::PROJECT_MANAGER, Role::PRODUCTION]);
+        $cards = [];
+        foreach (\App\Support\ClientTrelloLink::cardsFor($client, $index) as $cardId => $c) {
+            $cards[] = [
+                'name' => $c['name'],
+                'board' => $c['board'],
+                'list' => $c['list'],
+                'due' => $c['due'],
+                'done' => $c['done'],
+                'late' => ! $c['done'] && $c['due'] && \Illuminate\Support\Carbon::parse($c['due'])->lt($now),
+                'url' => $canOpen ? route('admin.trello.board', ['boardId' => $c['board_id'], 'team' => $team->id, 'card' => $cardId]) : null,
+            ];
+        }
+        // Open first (late, then nearest due, then no due date), completed last
+        $rank = fn ($c) => $c['done'] ? 3 : ($c['late'] ? 0 : ($c['due'] ? 1 : 2));
+        usort($cards, fn ($a, $b) => [$rank($a), (string) $a['due'], $a['board']] <=> [$rank($b), (string) $b['due'], $b['board']]);
+
+        return response()->json(['ok' => true, 'cards' => $cards]);
+    }
+
     public function show(Client $client): View
     {
         $this->authorizeClient($client);

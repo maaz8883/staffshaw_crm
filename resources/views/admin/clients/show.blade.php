@@ -62,6 +62,56 @@
 </div>
 @endif
 
+{{-- Trello projects: every card that carries the client's name (loaded after the page) --}}
+<div class="card border-0 shadow-sm mb-3" id="client-trello">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-kanban me-1"></i> Trello projects <span class="text-muted fw-normal small" id="ct-count"></span></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="ct-refresh"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead><tr><th>Project</th><th>Board</th><th>List</th><th class="text-end">Due</th></tr></thead>
+                <tbody id="ct-body"><tr><td colspan="4" class="text-muted small">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    const url = @json(route('admin.clients.trello', $client));
+    const body = document.getElementById('ct-body');
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const dueText = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    async function load(refresh = false) {
+        body.innerHTML = '<tr><td colspan="4" class="text-muted small">Loading…</td></tr>';
+        try {
+            const res = await fetch(url + (refresh ? '?refresh=1' : ''), { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.message || 'Could not load Trello projects');
+            const cards = data.cards || [];
+            document.getElementById('ct-count').textContent = cards.length ? `(${cards.length})` : '';
+            if (!cards.length) {
+                body.innerHTML = '<tr><td colspan="4" class="text-muted small">No Trello card carries this client\'s name.</td></tr>';
+                return;
+            }
+            body.innerHTML = cards.map((c) => {
+                const due = c.done ? '<span class="badge bg-success-subtle text-success-emphasis">Completed</span>'
+                    : (c.due ? `<span class="${c.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(c.due))}${c.late ? ' · late' : ''}</span>` : '<span class="text-muted">—</span>');
+                const name = c.url ? `<a href="${esc(c.url)}" class="text-decoration-none fw-semibold">${esc(c.name)}</a>` : `<span class="fw-semibold">${esc(c.name)}</span>`;
+                return `<tr><td>${name}</td><td class="small">${esc(c.board)}</td><td class="small">${esc(c.list)}</td><td class="text-end small">${due}</td></tr>`;
+            }).join('');
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="4" class="text-muted small">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    document.getElementById('ct-refresh').addEventListener('click', () => load(true));
+    load();
+})();
+</script>
+
 {{-- Summary cards --}}
 <div class="row g-3 mb-3">
     <div class="col-md-3">

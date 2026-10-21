@@ -89,6 +89,26 @@ class ClientTrelloLink
         return $linked;
     }
 
+    /**
+     * Every card of the client on a board snapshot: the linked card plus each card whose title
+     * carries the client's name (a client can have a design, a website, a book… card).
+     *
+     * @param  array<string, array<string, mixed>>  $index
+     * @return array<string, array<string, mixed>> card id → card
+     */
+    public static function cardsFor(Client $client, array $index): array
+    {
+        $key = self::clientKey((string) $client->name);
+        $cards = [];
+        foreach ($index as $cardId => $card) {
+            if ($cardId === $client->trello_card_id || ($key !== '' && ($card['key'] ?? '') === $key)) {
+                $cards[$cardId] = $card;
+            }
+        }
+
+        return $cards;
+    }
+
     /** Link one client right after it is saved (runs after the response, never blocks the save). */
     public static function linkLater(Client $client): void
     {
