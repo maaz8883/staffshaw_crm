@@ -432,7 +432,11 @@ class DashboardController extends Controller
                 $teamUsers = ($usersByTeam->get($tid) ?? collect())
                     ->concat($pmsByTeam->get($tid) ?? collect())
                     ->unique('id')
-                    ->sortBy('name')
+                    // Team Lead first, then agents, then Project Managers (A–Z within each)
+                    ->sortBy(fn (User $u) => [
+                        (int) $team->team_head_id === (int) $u->id ? 0 : ($u->hasRole(Role::PROJECT_MANAGER) ? 2 : 1),
+                        mb_strtolower($u->name),
+                    ])
                     ->values();
 
                 $members = $teamUsers
