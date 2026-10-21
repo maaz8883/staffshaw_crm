@@ -494,6 +494,9 @@ class DashboardController extends Controller
             ->with([
                 'isProjectManagerView' => true,
                 'hasJoinedTeams'       => $joinedTeamIds->isNotEmpty(),
+                // Trello section (loaded by AJAX)
+                'pmTrelloTeams'        => \App\Support\TeamTrelloAccounts::teamsForUser()->filter(fn ($t) => $t->trelloIntegration?->isReady())->values(),
+                'myTrelloActivity'     => \App\Models\TrelloActivityLog::query()->where('user_id', $user->id)->latest('occurred_at')->limit(8)->get(),
             ]);
     }
 

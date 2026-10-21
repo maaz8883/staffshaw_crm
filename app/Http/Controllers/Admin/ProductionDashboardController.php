@@ -61,7 +61,7 @@ class ProductionDashboardController extends Controller
             $request->session()->save();
         }
 
-        $cacheKey = 'production.overview.v3.'.$team->id;
+        $cacheKey = self::overviewCacheKey($team);
         if ($request->boolean('refresh')) {
             Cache::forget($cacheKey); // "Refresh" button: always fetch from Trello
         }
@@ -74,7 +74,97 @@ class ProductionDashboardController extends Controller
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
 
+        unset($data['card_index']); // only used server-side (PM dashboard)
+
         return response()->json(['ok' => true, 'team' => ['id' => $team->id, 'name' => $team->name]] + $data);
+    }
+
+    private static function overviewCacheKey(Team $team): string
+    {
+        return 'production.overview.v4.'.$team->id;
+    }
+
+    /**
+     * Project Manager dashboard: what needs the PM on the team's Trello (late / due today,
+     * waiting on client, revisions, stuck) plus where their own clients' projects stand.
+     */
+    public function projectManager(Request $request): JsonResponse
+    {
+        $teams = $this->trelloTeams()->filter(fn (Team $t) => $t->trelloIntegration?->isReady())->values();
+        $team = $teams->firstWhere('id', (int) $request->query('team')) ?? $teams->first();
+        if (! $team) {
+            return response()->json(['ok' => false, 'message' => 'Trello is not connected for your team.'], 404);
+        }
+        if ($request->hasSession()) {
+            $request->session()->save();
+        }
+        $cacheKey = self::overviewCacheKey($team);
+        if ($request->boolean('refresh')) {
+            Cache::forget($cacheKey);
+        }
+
+        try {
+            $data = Cache::remember($cacheKey, 300, function () use ($team) {
+                return $this->buildOverview(TrelloApiClient::forIntegration($team->trelloIntegration), $team);
+            });
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        // Clients this PM sold to or added, that are linked to a Trello card
+        $user = Auth::user();
+        $clientIds = \App\Models\Sale::query()->where('user_id', $user->id)->whereNotNull('client_id')->pluck('client_id');
+        $clients = \App\Models\Client::query()
+            ->whereNotNull('trello_card_id')
+            ->where(fn ($q) => $q->whereIn('id', $clientIds)->orWhere('created_by', $user->id))
+            ->get(['id', 'name', 'trello_card_id']);
+
+        $index = $data['card_index'] ?? [];
+        $now = Carbon::now();
+        $projects = [];
+        foreach ($clients as $client) {
+            $c = $index[$client->trello_card_id] ?? null;
+            if (! $c) {
+                continue; // card archived or on another team's boards
+            }
+            $late = ! $c['done'] && $c['due'] && Carbon::parse($c['due'])->lt($now);
+            $projects[] = [
+                'client' => $client->name,
+                'client_url' => route('admin.clients.show', $client->id),
+                'card' => $c['name'],
+                'board' => $c['board'],
+                'list' => $c['list'],
+                'stage' => $c['done'] ? 'done' : $c['stage'],
+                'attention' => $c['done'] ? null : $c['attention'],
+                'due' => $c['due'],
+                'late' => $late,
+                'idle' => $c['idle'],
+                'url' => route('admin.trello.board', ['boardId' => $c['board_id'], 'team' => $team->id, 'card' => $client->trello_card_id]),
+            ];
+        }
+        // Late first, then ones needing attention, then open, completed last
+        $rank = fn ($p) => $p['late'] ? 0 : ($p['attention'] ? 1 : ($p['stage'] === 'done' ? 3 : 2));
+        usort($projects, fn ($a, $b) => [$rank($a), $b['idle']] <=> [$rank($b), $a['idle']]);
+
+        return response()->json([
+            'ok' => true,
+            'team' => ['id' => $team->id, 'name' => $team->name],
+            'counts' => $data['counts'],
+            'attention' => $data['attention'],
+            'stale_count' => $data['stale']['count'],
+            'overdue' => array_slice($data['cards']['overdue'], 0, 40),
+            'today' => $data['cards']['today'],
+            'week' => array_slice($data['cards']['week'], 0, 40),
+            'stale' => array_slice($data['stale']['cards'], 0, 20),
+            'projects' => $projects,
+            'projects_summary' => [
+                'total' => count($projects),
+                'late' => count(array_filter($projects, fn ($p) => $p['late'])),
+                'attention' => count(array_filter($projects, fn ($p) => $p['attention'] && ! $p['late'])),
+                'done' => count(array_filter($projects, fn ($p) => $p['stage'] === 'done')),
+            ],
+            'generated_at' => $data['generated_at'],
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -97,6 +187,7 @@ class ProductionDashboardController extends Controller
         $hygiene = ['no_due' => 0, 'no_member' => 0];
         $lateByBoard = [];
         $lateAge = ['1_7' => 0, '8_30' => 0, '31_plus' => 0];
+        $cardIndex = []; // every visible card, for the PM dashboard's "my clients" list
 
         foreach ($boards as $board) {
             $set = $byBoard[$board['id']] ?? ['cards' => [], 'lists' => []];
@@ -116,6 +207,17 @@ class ProductionDashboardController extends Controller
                 }
                 $listName = $listNames[$listId] ?? '';
                 $stage = $listStage[$listId];
+                $cardIndex[$card['id']] = [
+                    'name' => $card['name'] ?? '',
+                    'board' => $board['name'] ?? '',
+                    'board_id' => $board['id'],
+                    'list' => $listName,
+                    'stage' => $stage,
+                    'attention' => self::attentionFor($listName),
+                    'due' => $card['due'] ?? null,
+                    'done' => ! empty($card['dueComplete']) || $stage === 'done',
+                    'idle' => ! empty($card['dateLastActivity']) ? (int) Carbon::parse($card['dateLastActivity'])->diffInDays($now) : 0,
+                ];
                 // Complete = due date ticked, or moved into the board's Completed / Done list
                 if (! empty($card['dueComplete']) || $stage === 'done') {
                     $row['done']++;
@@ -212,6 +314,7 @@ class ProductionDashboardController extends Controller
                 'name' => $b['name'] ?? '',
                 'url' => route('admin.trello.board', ['boardId' => $b['id'], 'team' => $team->id]),
             ], $boards),
+            'card_index' => $cardIndex,
             'generated_at' => $now->toIso8601String(),
         ];
     }

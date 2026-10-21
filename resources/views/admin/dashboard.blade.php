@@ -45,6 +45,10 @@
 </div>
 @else
 
+@if(isset($pmTrelloTeams) && $pmTrelloTeams->isNotEmpty())
+    @include('admin.partials.pm-trello')
+@endif
+
 {{-- Joined team cards with members --}}
 @forelse($teamDashboardCards as $card)
 <div class="card mb-4 border-0 shadow-sm">

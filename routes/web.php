@@ -63,6 +63,9 @@ Route::prefix('admin')->group(function () {
         Route::get('/production/overview', [\App\Http\Controllers\Admin\ProductionDashboardController::class, 'overview'])
             ->middleware('role:Production,Admin,Manager')
             ->name('admin.production.overview');
+        Route::get('/project-manager/trello', [\App\Http\Controllers\Admin\ProductionDashboardController::class, 'projectManager'])
+            ->middleware('role:Project Manager')
+            ->name('admin.pm.trello');
         Route::get('/search', GlobalSearchController::class)->name('admin.search');
 
         // All roles: notifications + profile
