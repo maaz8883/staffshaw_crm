@@ -50,12 +50,14 @@ class TeamMemberController extends Controller
             return back()->with('error', 'That user cannot be added to this team.');
         }
 
+        $oldTeamId = $user->team_id ? (int) $user->team_id : null;
         $user->update([
             'team_id' => $team->id,
             'company_id' => $team->company_id ?: $user->company_id,
             'sub_team_id' => null,
             'sub_team_head_id' => null,
         ]);
+        \App\Models\TeamMembership::syncProjectManagerTeam($user->fresh(), $oldTeamId, Auth::id());
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_TEAM_UPDATED,
             "Added {$user->name} to team {$team->name}"
@@ -123,6 +125,7 @@ class TeamMemberController extends Controller
             'sub_team_id' => null,
             'sub_team_head_id' => null,
         ]);
+        \App\Models\TeamMembership::syncProjectManagerTeam($user->fresh(), (int) $team->id, Auth::id());
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_TEAM_UPDATED,
             "Removed {$user->name} from team {$team->name}"

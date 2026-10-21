@@ -55,4 +55,27 @@ class TeamMembership extends Model
     {
         return $this->status === self::STATUS_REJECTED;
     }
+
+    /**
+     * Project Managers belong to teams through memberships, not users.team_id. When an admin
+     * puts a PM in a team (Users → create / edit), approve that membership right away, and drop
+     * the membership of the team they were moved out of (teams they joined themselves stay).
+     */
+    public static function syncProjectManagerTeam(User $user, ?int $oldTeamId, ?int $decidedBy): void
+    {
+        if (! $user->hasRole(Role::PROJECT_MANAGER)) {
+            return;
+        }
+        $newTeamId = $user->team_id ? (int) $user->team_id : null;
+
+        if ($oldTeamId && $oldTeamId !== $newTeamId) {
+            self::query()->where('user_id', $user->id)->where('team_id', $oldTeamId)->delete();
+        }
+        if ($newTeamId) {
+            self::query()->updateOrCreate(
+                ['user_id' => $user->id, 'team_id' => $newTeamId],
+                ['status' => self::STATUS_APPROVED, 'decided_by' => $decidedBy, 'decided_at' => now()]
+            );
+        }
+    }
 }

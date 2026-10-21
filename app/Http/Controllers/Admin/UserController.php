@@ -208,6 +208,7 @@ class UserController extends Controller
             'sub_team_head_id' => $validated['sub_team_head_id'] ?? null,
             'account_status'   => User::ACCOUNT_ACTIVE,
         ]);
+        \App\Models\TeamMembership::syncProjectManagerTeam($user, null, Auth::id()); // PM placed in a team = joined it
 
         // Log activity
         $user->load(['role', 'team', 'subTeam', 'subTeamHead', 'company']);
@@ -263,6 +264,7 @@ class UserController extends Controller
 
         $oldName = $user->name;
         $oldEmail = $user->email;
+        $oldTeamId = $user->team_id ? (int) $user->team_id : null;
 
         $payload = [
             'name'             => $validated['name'],
@@ -279,6 +281,7 @@ class UserController extends Controller
         }
 
         $user->update($payload);
+        \App\Models\TeamMembership::syncProjectManagerTeam($user->fresh(), $oldTeamId, Auth::id());
 
         // Log activity
         $user->load(['role', 'team', 'subTeam', 'subTeamHead', 'company']);
