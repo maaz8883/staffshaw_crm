@@ -446,6 +446,8 @@ class DashboardController extends Controller
                         $monthTarget = (float) ($userTargets[$mid] ?? 0);
                         $monthRev    = $stats ? (float) $stats->sale_amount : 0.0;
                         $isHead      = (int) $team->team_head_id === (int) $mid;
+                        // Project Managers can't be given a target: show "—", not $0
+                        $monthTarget = $member->hasRole(Role::PROJECT_MANAGER) ? null : $monthTarget;
 
                         return [
                             'id'                     => $mid,
@@ -456,7 +458,7 @@ class DashboardController extends Controller
                             'sale_amount'            => $monthRev,
                             'month_target'           => $monthTarget,
                             'month_revenue'          => $monthRev,
-                            'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
+                            'target_achievement_pct' => $monthTarget === null ? null : self::achievementPercent($monthRev, $monthTarget),
                         ];
                     })
                     ->values()
@@ -787,6 +789,7 @@ class DashboardController extends Controller
             $monthTarget = (float) ($userTargets[$mid] ?? 0);
             $monthRev = $stats ? (float) $stats->sale_amount : 0.0;
             $isSubHead = (int) $mid === (int) $user->id;
+            $monthTarget = $member->hasRole(Role::PROJECT_MANAGER) ? null : $monthTarget;
 
             return [
                 'id' => $mid,
@@ -799,7 +802,7 @@ class DashboardController extends Controller
                 'sale_amount' => $monthRev,
                 'month_target' => $monthTarget,
                 'month_revenue' => $monthRev,
-                'target_achievement_pct' => self::achievementPercent($monthRev, $monthTarget),
+                'target_achievement_pct' => $monthTarget === null ? null : self::achievementPercent($monthRev, $monthTarget),
             ];
         })->values();
 

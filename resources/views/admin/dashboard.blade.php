@@ -100,7 +100,7 @@
                         <td class="text-muted small">{{ $member['role_name'] }}</td>
                         <td class="text-center">{{ $member['sales_count'] }}</td>
                         <td class="text-end text-success">${{ number_format($member['sale_amount'], 0) }}</td>
-                        <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
+                        <td class="text-end">@if($member['month_target'] === null)<span class="text-muted" title="Project Managers don't get a target">—</span>@else${{ number_format($member['month_target'], 0) }}@endif</td>
                         <td class="text-center">
                             @if($member['target_achievement_pct'] !== null)
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $member['target_achievement_pct'] }}%</span>
@@ -253,7 +253,7 @@
                         <td class="text-muted small">{{ $member['role_name'] }}</td>
                         <td class="text-center">{{ $member['sales_count'] }}</td>
                         <td class="text-end text-success fw-semibold">${{ number_format($member['month_revenue'], 0) }}</td>
-                        <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
+                        <td class="text-end">@if($member['month_target'] === null)<span class="text-muted" title="Project Managers don't get a target">—</span>@else${{ number_format($member['month_target'], 0) }}@endif</td>
                         <td class="text-center">
                             @if($member['target_achievement_pct'] !== null)
                                 @php
@@ -634,7 +634,7 @@
                         <td class="text-muted small">{{ $member['role_name'] }}</td>
                         <td class="text-center">{{ $member['sales_count'] }}</td>
                         <td class="text-end text-success">${{ number_format($member['sale_amount'], 0) }}</td>
-                        <td class="text-end">${{ number_format($member['month_target'], 0) }}</td>
+                        <td class="text-end">@if($member['month_target'] === null)<span class="text-muted" title="Project Managers don't get a target">—</span>@else${{ number_format($member['month_target'], 0) }}@endif</td>
                         <td class="text-center">
                             @if($member['target_achievement_pct'] !== null)
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ $member['target_achievement_pct'] }}%</span>
@@ -985,7 +985,7 @@
                                         <td class="text-muted">{{ $m['role_name'] }}</td>
                                         <td class="text-center">{{ $m['sales_count'] }}</td>
                                         <td class="text-end">${{ number_format($m['sale_amount'], 0) }}</td>
-                                        <td class="text-end">${{ number_format($m['month_target'], 0) }}</td>
+                                        <td class="text-end">@if($m['month_target'] === null)<span class="text-muted" title="Project Managers don't get a target">—</span>@else${{ number_format($m['month_target'], 0) }}@endif</td>
                                         <td class="text-end">${{ number_format($m['month_revenue'], 0) }}</td>
                                         <td class="text-center">{{ $m['target_achievement_pct'] !== null ? $m['target_achievement_pct'].'%' : '—' }}</td>
                                     </tr>
