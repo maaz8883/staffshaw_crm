@@ -64,7 +64,7 @@
                     @csrf
                     <div class="mb-3">
                         <label class="form-label">User <span class="text-danger">*</span></label>
-                        <select name="user_id" class="form-select" required>
+                        <select name="user_id" class="form-select js-select2" required>
                             <option value="">-- Select user --</option>
                             @foreach($availableUsers as $u)
                                 <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>

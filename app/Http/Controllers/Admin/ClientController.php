@@ -68,6 +68,10 @@ class ClientController extends Controller
         if ($teamIds !== null) {
             $query->whereIn('team_id', $teamIds);
         }
+        // An agent works their own clients only (like leads): not every client of the team
+        if (AuthScope::seesOnlyOwnClients()) {
+            AuthScope::scopeOwnClients($query);
+        }
 
         return $query;
     }
@@ -438,6 +442,9 @@ class ClientController extends Controller
         }
 
         if (! $teamIds->contains($client->team_id)) {
+            abort(403);
+        }
+        if (AuthScope::seesOnlyOwnClients() && ! AuthScope::scopeOwnClients(Client::query()->whereKey($client->id))->exists()) {
             abort(403);
         }
     }

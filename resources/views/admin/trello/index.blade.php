@@ -40,7 +40,7 @@
 <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
     <form method="GET" action="{{ route('admin.trello.index') }}" class="d-flex gap-2 align-items-center flex-wrap">
         <label class="small text-muted mb-0">Team</label>
-        <select name="team" class="form-select form-select-sm" style="width:auto;min-width:200px" onchange="this.form.submit()">
+        <select name="team" class="form-select form-select-sm js-select2" data-width="220px" onchange="this.form.submit()">
             @foreach($teams as $t)
                 <option value="{{ $t->id }}" @selected((int) $team->id === (int) $t->id)>{{ \App\Support\TeamTrelloAccounts::label($t) }}</option>
             @endforeach

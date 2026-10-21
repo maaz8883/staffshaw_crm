@@ -28,7 +28,7 @@
     @if($showTeam)
     <div class="col-md-4 mb-3">
         <label for="team_id" class="form-label">Team <span class="text-danger">*</span></label>
-        <select id="team_id" name="team_id" class="form-select" required>
+        <select id="team_id" name="team_id" class="form-select js-select2" required>
             <option value="">-- Select Team --</option>
             @foreach($teams as $team)
                 <option value="{{ $team->id }}" {{ (string) old('team_id', $client->team_id ?? '') === (string) $team->id ? 'selected' : '' }}>{{ $team->name }}</option>

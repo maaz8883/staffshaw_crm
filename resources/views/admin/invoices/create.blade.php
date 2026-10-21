@@ -13,7 +13,7 @@
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Client <span class="text-danger">*</span></label>
-                <select name="client_id" id="invoice_client_id" class="form-select" required>
+                <select name="client_id" id="invoice_client_id" class="form-select js-select2" required>
                     <option value="">Select client</option>
                     @foreach($clients as $client)
                         <option value="{{ $client->id }}"

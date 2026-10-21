@@ -40,7 +40,7 @@
 
 <div class="mb-3">
     <label for="team_id" class="form-label">Team</label>
-    <select id="team_id" name="team_id" class="form-select">
+    <select id="team_id" name="team_id" class="form-select js-select2">
         <option value="">-- Select Team --</option>
         @if($singleCompany)
             @foreach($teams as $team)
@@ -122,8 +122,14 @@
             }
         }
 
+        // Team box is a Select2: redraw it after its options change
+        function refreshTeamSelect() {
+            if (window.jQuery) window.jQuery(teamSelect).trigger('change.select2');
+        }
+
         function loadTeams(companyId, preselectId) {
             teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
+            refreshTeamSelect();
             subTeamHeadSelect.innerHTML = '<option value="">-- No Sub-Team Head --</option>';
             subTeamHeadWrap.style.display = 'none';
             if (!companyId) return;
@@ -138,6 +144,7 @@
                         if (String(t.id) === String(preselectId)) opt.selected = true;
                         teamSelect.appendChild(opt);
                     });
+                    refreshTeamSelect();
                     if (preselectId && isAgent()) {
                         loadSubTeamHeads(preselectId, currentSubTeamHeadId);
                     }

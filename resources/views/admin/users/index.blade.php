@@ -17,7 +17,7 @@
         </select>
         @endunless
 
-        <select id="filter-team" class="form-select form-select-sm" style="width:auto">
+        <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px">
             <option value="">All Teams</option>
             @foreach($teams as $team)
                 <option value="{{ $team->id }}">{{ $team->name }}</option>

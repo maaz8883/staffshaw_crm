@@ -19,7 +19,7 @@
     </div>
     <div class="col-md-4 mb-3">
         <label class="form-label">Client</label>
-        <select name="client_id" class="form-select">
+        <select name="client_id" class="form-select js-select2">
             <option value="">None</option>
             @foreach($clients as $client)
                 <option value="{{ $client->id }}" {{ (string) old('client_id', $expense->client_id ?? '') === (string) $client->id ? 'selected' : '' }}>{{ $client->name }}</option>

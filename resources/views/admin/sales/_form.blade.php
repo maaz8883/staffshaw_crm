@@ -31,7 +31,7 @@
     @if(($isProjectManager ?? false) && !isset($sale))
     <div class="col-md-6 mb-3">
         <label for="team_id" class="form-label">Team <span class="text-danger">*</span></label>
-        <select id="team_id" name="team_id" class="form-select" required>
+        <select id="team_id" name="team_id" class="form-select js-select2" required>
             <option value="">-- Select a joined team --</option>
             @foreach($joinedTeams as $team)
                 <option value="{{ $team->id }}" {{ old('team_id') == $team->id ? 'selected' : '' }}>
@@ -45,7 +45,7 @@
 
     <div class="col-md-6 mb-3">
         <label for="client_id" class="form-label">Existing Client</label>
-        <select id="client_id" name="client_id" class="form-select">
+        <select id="client_id" name="client_id" class="form-select js-select2">
             <option value="">-- New client (fill in below) --</option>
             @foreach($clients ?? [] as $c)
                 <option value="{{ $c->id }}"

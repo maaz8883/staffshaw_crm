@@ -31,7 +31,7 @@
             @if($showTeam)
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Team</label>
-                <select name="team_id" class="form-select form-select-sm" style="min-width: 140px">
+                <select name="team_id" class="form-select form-select-sm js-select2" data-width="180px">
                     <option value="">All teams</option>
                     @foreach($teams ?? [] as $t)
                         <option value="{{ $t->id }}" @selected(($filters['team_id'] ?? '') == $t->id)>{{ $t->name }}</option>
@@ -42,7 +42,7 @@
             @if($showAgent && !($isAgent ?? false) && ($users ?? collect())->isNotEmpty())
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Agent</label>
-                <select name="user_id" class="form-select form-select-sm" style="min-width: 140px">
+                <select name="user_id" class="form-select form-select-sm js-select2" data-width="180px">
                     <option value="">All agents</option>
                     @foreach($users as $u)
                         <option value="{{ $u->id }}" @selected(($filters['user_id'] ?? '') == $u->id)>{{ $u->name }}</option>

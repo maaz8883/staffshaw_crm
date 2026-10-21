@@ -185,9 +185,12 @@ class TeamController extends Controller
         $totalSpending = $spendings->sum('amount');
 
         $canManageMembers = $user->hasRole(\App\Models\Role::ADMIN);
+        // PPC spend is a business cost: Admin, Manager, Finance, PPC and this team's lead only
+        $canSeePpc = $user->hasRole([\App\Models\Role::ADMIN, \App\Models\Role::MANAGER, \App\Models\Role::FINANCE, \App\Models\Role::PPC])
+            || (int) $team->team_head_id === (int) $user->id;
 
         return view('admin.teams.show', compact(
-            'team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc', 'canManageMembers'
+            'team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc', 'canManageMembers', 'canSeePpc'
         ));
     }
 

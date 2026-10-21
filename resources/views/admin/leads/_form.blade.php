@@ -21,7 +21,7 @@
     </div>
     <div class="col-md-4 mb-3">
         <label for="assigned_to" class="form-label">Assigned</label>
-        <select id="assigned_to" name="assigned_to" class="form-select">
+        <select id="assigned_to" name="assigned_to" class="form-select js-select2">
             <option value="">-- Unassigned --</option>
             {{-- Keep a lead's current assignee selectable even if they're no longer a sales user --}}
             @if(isset($lead) && $lead->assigned_to && ! $users->contains('id', $lead->assigned_to) && $lead->assignedUser)
@@ -67,7 +67,7 @@
     @if($isAdminOrManager)
     <div class="col-md-4 mb-3">
         <label for="team_id" class="form-label">Team</label>
-        <select id="team_id" name="team_id" class="form-select">
+        <select id="team_id" name="team_id" class="form-select js-select2">
             <option value="">-- No Team --</option>
             @foreach($teams as $team)
                 <option value="{{ $team->id }}" {{ (string) old('team_id', $lead->team_id ?? '') === (string) $team->id ? 'selected' : '' }}>{{ $team->name }}</option>

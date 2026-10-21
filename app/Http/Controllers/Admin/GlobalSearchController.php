@@ -303,5 +303,8 @@ class GlobalSearchController extends Controller
         }
 
         $query->where($column, $user->team_id ?: 0);
+        if (\App\Support\AuthScope::seesOnlyOwnClients()) {
+            \App\Support\AuthScope::scopeOwnClients($query); // agent: own clients only
+        }
     }
 }

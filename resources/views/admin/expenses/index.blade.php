@@ -82,13 +82,13 @@
                     <details class="mb-3">
                         <summary class="small text-muted">More: client, brand, billable</summary>
                         <div class="mt-2">
-                            <select name="client_id" class="form-select form-select-sm mb-2">
+                            <select name="client_id" class="form-select form-select-sm mb-2 js-select2">
                                 <option value="">No client</option>
                                 @foreach($clients as $client)
                                     <option value="{{ $client->id }}" @selected((string) old('client_id') === (string) $client->id)>{{ $client->name }}</option>
                                 @endforeach
                             </select>
-                            <select name="brand_id" class="form-select form-select-sm mb-2">
+                            <select name="brand_id" class="form-select form-select-sm mb-2 js-select2">
                                 <option value="">No brand</option>
                                 @foreach($brands as $brand)
                                     <option value="{{ $brand->id }}" @selected((string) old('brand_id') === (string) $brand->id)>{{ $brand->name }}</option>

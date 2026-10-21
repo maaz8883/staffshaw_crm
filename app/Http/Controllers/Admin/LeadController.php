@@ -112,6 +112,9 @@ class LeadController extends Controller
         if (AuthScope::seesOnlyOwnLeads()) {
             $validated['assigned_to'] = auth()->id(); // otherwise the agent would lose the lead they just made
         }
+        if (! $this->canAssignTo($validated['assigned_to'] ?? null)) {
+            return back()->withInput()->withErrors(['assigned_to' => 'You can only assign leads to members of your team.']);
+        }
         if ($message = $this->duplicateMessage($validated)) {
             return back()->withInput()->withErrors(['duplicate' => $message]);
         }
@@ -181,6 +184,9 @@ class LeadController extends Controller
         }
         if (AuthScope::seesOnlyOwnLeads()) {
             $validated['assigned_to'] = auth()->id(); // agents can't hand their lead to someone else
+        }
+        if (! $this->canAssignTo($validated['assigned_to'] ?? null, $lead)) {
+            return back()->withInput()->withErrors(['assigned_to' => 'You can only assign leads to members of your team.']);
         }
         if ($message = $this->duplicateMessage($validated, $lead->id)) {
             return back()->withInput()->withErrors(['duplicate' => $message]);
@@ -281,6 +287,23 @@ class LeadController extends Controller
         $lead->delete();
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead deleted successfully.');
+    }
+
+    /**
+     * Assignee must be someone the user may pick in the form (their team's sellers); the form
+     * only lists those, this stops a hand-made request from handing a lead outside the team.
+     * Keeping the lead's current assignee is always fine.
+     */
+    private function canAssignTo(mixed $userId, ?Lead $lead = null): bool
+    {
+        if (! $userId || AuthScope::isAdminOrManager() || (int) $userId === (int) auth()->id()) {
+            return true;
+        }
+        if ($lead && (int) $lead->assigned_to === (int) $userId) {
+            return true;
+        }
+
+        return AuthScope::usersForDropdown()->contains('id', (int) $userId);
     }
 
     /**

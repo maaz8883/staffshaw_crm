@@ -189,7 +189,8 @@
 </div>
 @endif
 
-{{-- PPC Spending Section --}}
+{{-- PPC Spending Section: marketing cost, not for agents / PMs --}}
+@if($canSeePpc)
 <div class="card border-0 shadow-sm">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-graph-up"></i> PPC Spending</span>
@@ -299,5 +300,6 @@
         </div>
     </div>
 </div>
+@endif
 
 @endsection

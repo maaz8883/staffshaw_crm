@@ -359,7 +359,7 @@
                     var emptyOption = $el.find('option[value=""]').first();
                     $el.select2({
                         theme: 'bootstrap-5',
-                        width: '100%',
+                        width: $el.data('width') || '100%', // filter bars set a fixed data-width
                         placeholder: $el.data('placeholder') || (emptyOption.length ? emptyOption.text() : 'Select'),
                         allowClear: !$el.prop('required') && emptyOption.length > 0,
                         dropdownParent: $parent.length ? $parent : $(document.body)

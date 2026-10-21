@@ -10,7 +10,7 @@
         <form id="filter-form" class="row g-2 align-items-end">
             <div class="col-sm-4">
                 <label class="form-label small mb-1">User</label>
-                <select name="user_id" id="filter-user" class="form-select form-select-sm">
+                <select name="user_id" id="filter-user" class="form-select form-select-sm js-select2">
                     <option value="">All Users</option>
                     @foreach($users as $u)
                         <option value="{{ $u->id }}">{{ $u->name }}</option>

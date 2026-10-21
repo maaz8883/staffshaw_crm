@@ -22,7 +22,7 @@
 
 <div class="mb-3">
     <label for="team_head_id" class="form-label">Team Head</label>
-    <select id="team_head_id" name="team_head_id" class="form-select">
+    <select id="team_head_id" name="team_head_id" class="form-select js-select2">
         <option value="">-- No Team Head --</option>
         @foreach($allUsers as $user)
             <option value="{{ $user->id }}" {{ old('team_head_id', $team->team_head_id ?? '') == $user->id ? 'selected' : '' }}>

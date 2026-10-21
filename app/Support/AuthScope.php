@@ -255,6 +255,23 @@ class AuthScope
         return $query->where('assigned_to', auth()->id());
     }
 
+    /** Plain agent (not head / sub-head / PM / admin): sees and edits only their own clients. */
+    public static function seesOnlyOwnClients(): bool
+    {
+        return self::seesOnlyOwnLeads() && ! self::isProjectManager();
+    }
+
+    /** Own clients: ones the user added, or sold to. */
+    public static function scopeOwnClients(Builder $query, string $table = 'clients'): Builder
+    {
+        $userId = (int) auth()->id();
+
+        return $query->where(function (Builder $q) use ($userId, $table) {
+            $q->where("{$table}.created_by", $userId)
+                ->orWhereIn("{$table}.id", \App\Models\Sale::query()->where('user_id', $userId)->whereNotNull('client_id')->select('client_id'));
+        });
+    }
+
     /** Project Manager or plain agent (not head / sub-head / admin): sees and works only their own leads. */
     public static function seesOnlyOwnLeads(): bool
     {
