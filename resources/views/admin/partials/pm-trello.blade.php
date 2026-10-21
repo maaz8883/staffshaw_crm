@@ -11,7 +11,6 @@
     .pmt-table { font-size: 13px; }
     .pmt-table td, .pmt-table th { padding: 7px 8px; vertical-align: middle; }
     .pmt-table a { color: inherit; }
-    .pmt-stage { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
     .pmt-activity li { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--bs-border-color, rgba(0,0,0,.08)); }
     .pmt-activity li:last-child { border-bottom: 0; }
     .pmt-activity .when { font-size: 11px; opacity: .65; }
@@ -45,11 +44,8 @@
         ['overdue', 'Late', '#dc3545'],
         ['today', 'Due today', '#e0a800'],
         ['week', 'Due in next 7 days', '#0d6efd'],
-        ['client', 'Waiting on client', '#579dff'],
-        ['revision', 'Revisions / QA', '#fea362'],
-        ['stale', 'Stuck 14+ days', '#8590a2'],
     ] as [$key, $label, $color])
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-4">
             <div class="card border-0 shadow-sm h-100 pmt-tile" style="border-left:4px solid {{ $color }} !important">
                 <div class="card-body">
                     <div class="text-muted small">{{ $label }}</div>
@@ -68,11 +64,11 @@
                 <span class="small text-muted" id="pmt-proj-summary"></span>
             </div>
             <div class="card-body">
-                <div class="small text-muted mb-2">Clients you sold to or added, linked to a Trello card. Late and needs-attention first.</div>
+                <div class="small text-muted mb-2">Clients you sold to or added, linked to a Trello card. Late first, then by due date.</div>
                 <div class="pmt-list">
                     <table class="table pmt-table mb-0">
-                        <thead><tr><th>Client</th><th>Stage</th><th>List</th><th class="text-end">Due</th></tr></thead>
-                        <tbody id="pmt-projects"><tr><td colspan="4" class="text-muted">Loading…</td></tr></tbody>
+                        <thead><tr><th>Client</th><th>List</th><th class="text-end">Due</th></tr></thead>
+                        <tbody id="pmt-projects"><tr><td colspan="3" class="text-muted">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -85,7 +81,6 @@
                     <li class="nav-item"><button type="button" class="nav-link active" data-tab="overdue">Late <span data-pmt-tab="overdue"></span></button></li>
                     <li class="nav-item"><button type="button" class="nav-link" data-tab="today">Today <span data-pmt-tab="today"></span></button></li>
                     <li class="nav-item"><button type="button" class="nav-link" data-tab="week">Next 7 days <span data-pmt-tab="week"></span></button></li>
-                    <li class="nav-item"><button type="button" class="nav-link" data-tab="stale">Stuck <span data-pmt-tab="stale"></span></button></li>
                 </ul>
             </div>
             <div class="card-body pmt-list" id="pmt-cards"><div class="text-muted small">Loading…</div></div>
@@ -116,8 +111,6 @@
     const boardsBase = @json(route('admin.trello.index'));
     const teamSel = document.getElementById('pmt-team');
     const firstTeam = @json($pmTrelloTeams->first()->id);
-    const STAGES = { todo: ['To do', '#8590a2'], progress: ['In progress', '#579dff'], review: ['Review / client', '#c99a00'], hold: ['On hold', '#f87168'], done: ['Completed', '#22a06b'] };
-    const ATTN = { qa: 'QA pending', revision: 'Revision', concern: 'Concern', client: 'Waiting on client', hold: 'On hold' };
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     const n = (v) => Number(v || 0).toLocaleString('en-US');
     const dueText = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric' });
@@ -129,19 +122,17 @@
         const list = data.projects || [];
         const s = data.projects_summary || {};
         document.getElementById('pmt-proj-summary').innerHTML = s.total
-            ? `${n(s.total)} projects${s.late ? ` · <span class="text-danger">${n(s.late)} late</span>` : ''}${s.attention ? ` · ${n(s.attention)} need attention` : ''} · ${n(s.done)} completed`
+            ? `${n(s.total)} projects${s.late ? ` · <span class="text-danger">${n(s.late)} late</span>` : ''} · ${n(s.done)} completed`
             : '';
         if (!list.length) {
-            box.innerHTML = '<tr><td colspan="4" class="text-muted">None of your clients are linked to a card on this team\'s boards yet.</td></tr>';
+            box.innerHTML = '<tr><td colspan="3" class="text-muted">None of your clients are linked to a card on this team\'s boards yet.</td></tr>';
             return;
         }
         box.innerHTML = list.map((p) => {
-            const [label, color] = STAGES[p.stage] || STAGES.progress;
-            const due = p.due ? `<span class="${p.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(p.due))}${p.late ? ' · late' : ''}</span>` : '<span class="opacity-50">—</span>';
+            const due = p.done ? '<span class="text-success fw-semibold">Completed</span>' : p.due ? `<span class="${p.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(p.due))}${p.late ? ' · late' : ''}</span>` : '<span class="opacity-50">—</span>';
             return `<tr>
                 <td><a href="${esc(p.url)}" class="fw-semibold text-decoration-none">${esc(p.client)}</a>
-                    <div class="small text-muted text-truncate" style="max-width:260px">${esc(p.board)}${p.idle >= 14 && p.stage !== 'done' ? ` · <span style="color:#fea362">${n(p.idle)}d idle</span>` : ''}</div></td>
-                <td><span class="pmt-stage" style="background:${color}">${label}</span>${p.attention ? `<div class="small mt-1">${esc(ATTN[p.attention] || '')}</div>` : ''}</td>
+                    <div class="small text-muted text-truncate" style="max-width:260px">${esc(p.board)}</div></td>
                 <td class="small">${esc(p.list)}</td>
                 <td class="text-end small">${due}</td>
             </tr>`;
@@ -154,8 +145,7 @@
         document.querySelectorAll('#pmt-tabs [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
         if (!cards.length) { box.innerHTML = '<div class="text-muted small">No cards 🎉</div>'; return; }
         box.innerHTML = cards.map((c) => {
-            const right = tab === 'stale' ? `<span style="color:#fea362">${n(c.days)}d idle</span>`
-                : (tab === 'overdue' ? `<span class="text-danger">${n(c.days_late)}d late</span>` : esc(dueText(c.due)));
+            const right = tab === 'overdue' ? `<span class="text-danger">${n(c.days_late)}d late</span>` : esc(dueText(c.due));
             return `<a class="pmt-card" href="${esc(c.url)}">
                 <div class="d-flex justify-content-between gap-2"><div class="name">${esc(c.name)}</div><div class="due">${right}</div></div>
                 <div class="meta mt-1">${esc(c.board)}${c.list ? ' · ' + esc(c.list) : ''}</div>
@@ -175,11 +165,10 @@
             const json = await res.json().catch(() => ({}));
             if (!res.ok || json.ok === false) throw new Error(json.message || 'Could not load Trello data');
             data = json;
-            const c = data.counts || {}, a = data.attention || {};
+            const c = data.counts || {};
             const set = (k, v) => { const el = document.querySelector(`[data-pmt="${k}"]`); if (el) el.textContent = n(v); };
             set('overdue', c.overdue); set('today', c.today); set('week', c.week);
-            set('client', a.client); set('revision', (a.revision || 0) + (a.qa || 0)); set('stale', data.stale_count);
-            const tabCount = { overdue: c.overdue, today: c.today, week: c.week, stale: data.stale_count };
+            const tabCount = { overdue: c.overdue, today: c.today, week: c.week };
             Object.entries(tabCount).forEach(([k, v]) => { const el = document.querySelector(`[data-pmt-tab="${k}"]`); if (el) el.textContent = v ? `(${n(v)})` : ''; });
             renderProjects();
             renderCards();

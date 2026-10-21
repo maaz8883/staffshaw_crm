@@ -85,8 +85,8 @@ class ProductionDashboardController extends Controller
     }
 
     /**
-     * Project Manager dashboard: what needs the PM on the team's Trello (late / due today,
-     * waiting on client, revisions, stuck) plus where their own clients' projects stand.
+     * Project Manager dashboard: the team's late / due-soon Trello cards plus where their own
+     * clients' projects stand. Due dates only — list names differ per board, so no stages here.
      */
     public function projectManager(Request $request): JsonResponse
     {
@@ -134,34 +134,28 @@ class ProductionDashboardController extends Controller
                 'card' => $c['name'],
                 'board' => $c['board'],
                 'list' => $c['list'],
-                'stage' => $c['done'] ? 'done' : $c['stage'],
-                'attention' => $c['done'] ? null : $c['attention'],
+                'done' => $c['done'],
                 'due' => $c['due'],
                 'late' => $late,
-                'idle' => $c['idle'],
                 'url' => route('admin.trello.board', ['boardId' => $c['board_id'], 'team' => $team->id, 'card' => $client->trello_card_id]),
             ];
         }
-        // Late first, then ones needing attention, then open, completed last
-        $rank = fn ($p) => $p['late'] ? 0 : ($p['attention'] ? 1 : ($p['stage'] === 'done' ? 3 : 2));
-        usort($projects, fn ($a, $b) => [$rank($a), $b['idle']] <=> [$rank($b), $a['idle']]);
+        // Late first, then by due date (no due date after), completed last
+        $rank = fn ($p) => $p['late'] ? 0 : ($p['done'] ? 3 : ($p['due'] ? 1 : 2));
+        usort($projects, fn ($a, $b) => [$rank($a), (string) $a['due']] <=> [$rank($b), (string) $b['due']]);
 
         return response()->json([
             'ok' => true,
             'team' => ['id' => $team->id, 'name' => $team->name],
             'counts' => $data['counts'],
-            'attention' => $data['attention'],
-            'stale_count' => $data['stale']['count'],
             'overdue' => array_slice($data['cards']['overdue'], 0, 40),
             'today' => $data['cards']['today'],
             'week' => array_slice($data['cards']['week'], 0, 40),
-            'stale' => array_slice($data['stale']['cards'], 0, 20),
             'projects' => $projects,
             'projects_summary' => [
                 'total' => count($projects),
                 'late' => count(array_filter($projects, fn ($p) => $p['late'])),
-                'attention' => count(array_filter($projects, fn ($p) => $p['attention'] && ! $p['late'])),
-                'done' => count(array_filter($projects, fn ($p) => $p['stage'] === 'done')),
+                'done' => count(array_filter($projects, fn ($p) => $p['done'])),
             ],
             'generated_at' => $data['generated_at'],
         ]);
@@ -212,11 +206,8 @@ class ProductionDashboardController extends Controller
                     'board' => $board['name'] ?? '',
                     'board_id' => $board['id'],
                     'list' => $listName,
-                    'stage' => $stage,
-                    'attention' => self::attentionFor($listName),
                     'due' => $card['due'] ?? null,
                     'done' => ! empty($card['dueComplete']) || $stage === 'done',
-                    'idle' => ! empty($card['dateLastActivity']) ? (int) Carbon::parse($card['dateLastActivity'])->diffInDays($now) : 0,
                 ];
                 // Complete = due date ticked, or moved into the board's Completed / Done list
                 if (! empty($card['dueComplete']) || $stage === 'done') {
