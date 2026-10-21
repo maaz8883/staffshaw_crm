@@ -60,11 +60,17 @@
     <div class="col-xl-7">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="fw-semibold">My clients' projects</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-semibold">Clients' projects</span>
+                    <div class="btn-group btn-group-sm" id="pmt-scope">
+                        <button type="button" class="btn btn-outline-primary active" data-scope="all">Team <span data-scope-count="all"></span></button>
+                        <button type="button" class="btn btn-outline-primary" data-scope="mine">Mine <span data-scope-count="mine"></span></button>
+                    </div>
+                </div>
                 <span class="small text-muted" id="pmt-proj-summary"></span>
             </div>
             <div class="card-body">
-                <div class="small text-muted mb-2">Clients you sold to or added, linked to a Trello card. Late first, then by due date.</div>
+                <div class="small text-muted mb-2">Your team's clients (sub-teams included) that are linked to a Trello card. Mine = clients you added or sold to. Late first, then by due date.</div>
                 <div class="pmt-list">
                     <table class="table pmt-table mb-0">
                         <thead><tr><th>Client</th><th>List</th><th class="text-end">Due</th></tr></thead>
@@ -116,22 +122,28 @@
     const dueText = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric' });
     let data = null;
     let tab = 'overdue';
+    let scope = 'all';
 
     function renderProjects() {
         const box = document.getElementById('pmt-projects');
-        const list = data.projects || [];
+        const all = data.projects || [];
+        const list = scope === 'mine' ? all.filter((p) => p.mine) : all;
         const s = data.projects_summary || {};
-        document.getElementById('pmt-proj-summary').innerHTML = s.total
-            ? `${n(s.total)} projects${s.late ? ` · <span class="text-danger">${n(s.late)} late</span>` : ''} · ${n(s.done)} completed`
+        document.querySelector('[data-scope-count="all"]').textContent = s.total ? `(${n(s.total)})` : '';
+        document.querySelector('[data-scope-count="mine"]').textContent = s.mine ? `(${n(s.mine)})` : '';
+        document.querySelectorAll('#pmt-scope [data-scope]').forEach((b) => b.classList.toggle('active', b.dataset.scope === scope));
+        const late = list.filter((p) => p.late).length, done = list.filter((p) => p.done).length;
+        document.getElementById('pmt-proj-summary').innerHTML = list.length
+            ? `${late ? `<span class="text-danger">${n(late)} late</span> · ` : ''}${n(done)} completed`
             : '';
         if (!list.length) {
-            box.innerHTML = '<tr><td colspan="3" class="text-muted">None of your clients are linked to a card on this team\'s boards yet.</td></tr>';
+            box.innerHTML = `<tr><td colspan="3" class="text-muted">${scope === 'mine' ? 'None of your clients are' : 'No team clients are'} linked to a card on this team's boards yet.</td></tr>`;
             return;
         }
         box.innerHTML = list.map((p) => {
             const due = p.done ? '<span class="text-success fw-semibold">Completed</span>' : p.due ? `<span class="${p.late ? 'text-danger fw-semibold' : ''}">${esc(dueText(p.due))}${p.late ? ' · late' : ''}</span>` : '<span class="opacity-50">—</span>';
             return `<tr>
-                <td><a href="${esc(p.url)}" class="fw-semibold text-decoration-none">${esc(p.client)}</a>
+                <td><a href="${esc(p.url)}" class="fw-semibold text-decoration-none">${esc(p.client)}</a>${p.mine && scope === 'all' ? ' <span class="badge bg-primary-subtle text-primary-emphasis">Mine</span>' : ''}
                     <div class="small text-muted text-truncate" style="max-width:260px">${esc(p.board)}</div></td>
                 <td class="small">${esc(p.list)}</td>
                 <td class="text-end small">${due}</td>
@@ -182,6 +194,12 @@
         }
     }
 
+    document.getElementById('pmt-scope').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-scope]');
+        if (!b || !data) return;
+        scope = b.dataset.scope;
+        renderProjects();
+    });
     document.getElementById('pmt-tabs').addEventListener('click', (e) => {
         const b = e.target.closest('[data-tab]');
         if (!b || !data) return;

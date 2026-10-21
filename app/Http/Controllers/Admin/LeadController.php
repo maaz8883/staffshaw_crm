@@ -242,6 +242,7 @@ class LeadController extends Controller
         ]);
 
         TrelloClientDispatcher::dispatch($client->fresh());
+        \App\Support\ClientTrelloLink::linkLater($client);
 
         if ($isAdmin) {
             return redirect()

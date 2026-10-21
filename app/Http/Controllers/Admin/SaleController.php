@@ -879,6 +879,7 @@ class SaleController extends Controller
             'is_active'  => true,
             'currency'   => 'USD',
         ]);
+        \App\Support\ClientTrelloLink::linkLater($client);
 
         return $client->id;
     }

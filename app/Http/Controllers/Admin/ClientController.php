@@ -44,7 +44,7 @@ class ClientController extends Controller
         }
 
         if ($this->isProjectManager()) {
-            return $user->approvedTeamIds();
+            return $user->approvedTeamIdsWithSubTeams();
         }
 
         if ($this->isTeamHead()) {
@@ -183,6 +183,7 @@ class ClientController extends Controller
 
         $this->syncPrimaryContact($client, $validated);
         TrelloClientDispatcher::dispatch($client->fresh());
+        \App\Support\ClientTrelloLink::linkLater($client);
 
         return redirect()
             ->route('admin.clients.show', $client)
@@ -259,6 +260,7 @@ class ClientController extends Controller
         $this->syncPrimaryContact($client, $validated);
 
         TrelloClientDispatcher::dispatch($client->fresh());
+        \App\Support\ClientTrelloLink::linkLater($client); // e.g. name corrected to match the card
 
         return redirect()
             ->route('admin.clients.show', $client)

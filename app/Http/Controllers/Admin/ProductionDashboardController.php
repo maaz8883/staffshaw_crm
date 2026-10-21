@@ -61,15 +61,9 @@ class ProductionDashboardController extends Controller
             $request->session()->save();
         }
 
-        $cacheKey = self::overviewCacheKey($team);
-        if ($request->boolean('refresh')) {
-            Cache::forget($cacheKey); // "Refresh" button: always fetch from Trello
-        }
-
         try {
-            $data = Cache::remember($cacheKey, 300, function () use ($integration, $team) {
-                return $this->buildOverview(TrelloApiClient::forIntegration($integration), $team);
-            });
+            // "Refresh" button: always fetch from Trello
+            $data = self::overviewData($team, $request->boolean('refresh'));
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
@@ -79,9 +73,15 @@ class ProductionDashboardController extends Controller
         return response()->json(['ok' => true, 'team' => ['id' => $team->id, 'name' => $team->name]] + $data);
     }
 
-    private static function overviewCacheKey(Team $team): string
+    /** The team's boards snapshot (cached 5 min; shared by the production and PM dashboards). */
+    public static function overviewData(Team $team, bool $refresh = false): array
     {
-        return 'production.overview.v4.'.$team->id;
+        $key = 'production.overview.v5.'.$team->id;
+        if ($refresh) {
+            Cache::forget($key);
+        }
+
+        return Cache::remember($key, 300, fn () => app(self::class)->buildOverview(TrelloApiClient::forIntegration($team->trelloIntegration), $team));
     }
 
     /**
@@ -98,28 +98,21 @@ class ProductionDashboardController extends Controller
         if ($request->hasSession()) {
             $request->session()->save();
         }
-        $cacheKey = self::overviewCacheKey($team);
-        if ($request->boolean('refresh')) {
-            Cache::forget($cacheKey);
-        }
-
         try {
-            $data = Cache::remember($cacheKey, 300, function () use ($team) {
-                return $this->buildOverview(TrelloApiClient::forIntegration($team->trelloIntegration), $team);
-            });
+            $data = self::overviewData($team, $request->boolean('refresh'));
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
 
-        // Clients this PM sold to or added, that are linked to a Trello card
+        // Clients of the PM's teams (and their sub-teams); ones without a card get linked by name now
         $user = Auth::user();
-        $clientIds = \App\Models\Sale::query()->where('user_id', $user->id)->whereNotNull('client_id')->pluck('client_id');
+        $mySaleClientIds = \App\Models\Sale::query()->where('user_id', $user->id)->whereNotNull('client_id')->pluck('client_id')->map(fn ($id) => (int) $id)->all();
         $clients = \App\Models\Client::query()
-            ->whereNotNull('trello_card_id')
-            ->where(fn ($q) => $q->whereIn('id', $clientIds)->orWhere('created_by', $user->id))
-            ->get(['id', 'name', 'trello_card_id']);
-
+            ->whereIn('team_id', $user->approvedTeamIdsWithSubTeams())
+            ->get();
         $index = $data['card_index'] ?? [];
+        \App\Support\ClientTrelloLink::linkFromIndex($clients, $index);
+        $clients = $clients->filter(fn ($c) => $c->trello_card_id);
         $now = Carbon::now();
         $projects = [];
         foreach ($clients as $client) {
@@ -130,6 +123,7 @@ class ProductionDashboardController extends Controller
             $late = ! $c['done'] && $c['due'] && Carbon::parse($c['due'])->lt($now);
             $projects[] = [
                 'client' => $client->name,
+                'mine' => (int) $client->created_by === (int) $user->id || in_array((int) $client->id, $mySaleClientIds, true),
                 'client_url' => route('admin.clients.show', $client->id),
                 'card' => $c['name'],
                 'board' => $c['board'],
@@ -154,6 +148,7 @@ class ProductionDashboardController extends Controller
             'projects' => $projects,
             'projects_summary' => [
                 'total' => count($projects),
+                'mine' => count(array_filter($projects, fn ($p) => $p['mine'])),
                 'late' => count(array_filter($projects, fn ($p) => $p['late'])),
                 'done' => count(array_filter($projects, fn ($p) => $p['done'])),
             ],
@@ -162,7 +157,7 @@ class ProductionDashboardController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function buildOverview(TrelloApiClient $client, Team $team): array
+    public function buildOverview(TrelloApiClient $client, Team $team): array
     {
         $boards = array_values(array_filter($client->boards(), fn ($b) => empty($b['closed'])));
         $byBoard = $client->boardsCardsAndLists(array_column($boards, 'id'));
@@ -205,7 +200,9 @@ class ProductionDashboardController extends Controller
                     'name' => $card['name'] ?? '',
                     'board' => $board['name'] ?? '',
                     'board_id' => $board['id'],
+                    'list_id' => $listId,
                     'list' => $listName,
+                    'key' => \App\Support\ClientTrelloLink::cardKey((string) ($card['name'] ?? '')),
                     'due' => $card['due'] ?? null,
                     'done' => ! empty($card['dueComplete']) || $stage === 'done',
                 ];

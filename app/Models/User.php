@@ -128,6 +128,18 @@ class User extends Authenticatable
             ->pluck('team_id');
     }
 
+    /** Joined teams plus their sub-teams (a sub-team agent's clients belong to the sub-team). */
+    public function approvedTeamIdsWithSubTeams(): \Illuminate\Support\Collection
+    {
+        $ids = $this->approvedTeamIds()->map(fn ($id) => (int) $id);
+        if ($ids->isEmpty()) {
+            return $ids;
+        }
+
+        return $ids->merge(Team::query()->whereIn('parent_team_id', $ids)->pluck('id')->map(fn ($id) => (int) $id))
+            ->unique()->values();
+    }
+
     /**
      * Keep users.team_id in sync with Team_Membership for Project Managers.
      * Primary home team = most recently approved membership (or null if none).
