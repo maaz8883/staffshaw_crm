@@ -92,7 +92,8 @@ class LeadController extends Controller
 
     public function create(): View
     {
-        $users = AuthScope::usersForDropdown();
+        // An agent can only assign leads to themselves
+        $users = AuthScope::seesOnlyOwnLeads() ? collect([auth()->user()]) : AuthScope::usersForDropdown();
         $teams = AuthScope::teamsForDropdown();
         $brands = AuthScope::brandsForDropdown();
 
@@ -107,6 +108,12 @@ class LeadController extends Controller
         if (! AuthScope::isAdminOrManager()) {
             $validated['team_id'] = auth()->user()->team_id;
             $validated['assigned_to'] = $validated['assigned_to'] ?: auth()->id();
+        }
+        if (AuthScope::seesOnlyOwnLeads()) {
+            $validated['assigned_to'] = auth()->id(); // otherwise the agent would lose the lead they just made
+        }
+        if ($message = $this->duplicateMessage($validated)) {
+            return back()->withInput()->withErrors(['duplicate' => $message]);
         }
 
         Lead::query()->create($validated);
@@ -156,7 +163,8 @@ class LeadController extends Controller
     public function edit(Lead $lead): View
     {
         $this->authorizeLead($lead);
-        $users = AuthScope::usersForDropdown();
+        // An agent can only assign leads to themselves
+        $users = AuthScope::seesOnlyOwnLeads() ? collect([auth()->user()]) : AuthScope::usersForDropdown();
         $teams = AuthScope::teamsForDropdown();
         $brands = AuthScope::brandsForDropdown();
 
@@ -170,6 +178,12 @@ class LeadController extends Controller
 
         if (! AuthScope::isAdminOrManager()) {
             $validated['team_id'] = $lead->team_id ?: auth()->user()->team_id;
+        }
+        if (AuthScope::seesOnlyOwnLeads()) {
+            $validated['assigned_to'] = auth()->id(); // agents can't hand their lead to someone else
+        }
+        if ($message = $this->duplicateMessage($validated, $lead->id)) {
+            return back()->withInput()->withErrors(['duplicate' => $message]);
         }
 
         $lead->update($validated);
@@ -267,6 +281,64 @@ class LeadController extends Controller
         $lead->delete();
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead deleted successfully.');
+    }
+
+    /**
+     * One person = one lead: block a lead whose email or phone is already on another lead (any
+     * team, any agent), so two agents don't chase the same client. A name alone isn't checked —
+     * different people share names. Agents / PMs aren't told whose lead it is.
+     */
+    private function duplicateMessage(array $data, ?int $ignoreId = null): ?string
+    {
+        $email = mb_strtolower(trim((string) ($data['email'] ?? '')));
+        $phone = self::phoneKey($data['phone'] ?? null);
+        if ($email === '' && $phone === null) {
+            return null;
+        }
+
+        $match = null;
+        $field = null;
+        if ($email !== '') {
+            $match = Lead::query()->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                ->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))->first();
+            $field = $match ? 'email' : null;
+        }
+        if (! $match && $phone !== null) {
+            // Phones are stored in any format ("+1 (555) 010-2030"), so compare digits in PHP
+            Lead::query()->whereNotNull('phone')->where('phone', '!=', '')
+                ->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))
+                ->select(['id', 'name', 'phone', 'assigned_to'])
+                ->lazyById(500)
+                ->each(function (Lead $lead) use ($phone, &$match) {
+                    if (self::phoneKey($lead->phone) === $phone) {
+                        $match = $lead;
+
+                        return false;
+                    }
+                });
+            $field = $match ? 'phone' : null;
+        }
+        if (! $match) {
+            return null;
+        }
+
+        $match->loadMissing('assignedUser:id,name');
+        if ((int) $match->assigned_to === (int) auth()->id()) {
+            return "You already have a lead with this {$field}: {$match->name}. Open that lead instead of adding a new one.";
+        }
+        if (AuthScope::seesOnlyOwnLeads()) {
+            return "A lead with this {$field} already exists and belongs to another team member. Ask your team lead if this client should be yours.";
+        }
+
+        return "A lead with this {$field} already exists: {$match->name} (assigned to ".($match->assignedUser?->name ?? 'nobody').'). Reassign that lead instead of adding a new one.';
+    }
+
+    /** Last 10 digits of a phone number (drops +country code / spaces / dashes); null if too short. */
+    private static function phoneKey(?string $phone): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+
+        return strlen($digits) >= 7 ? substr($digits, -10) : null;
     }
 
     private function authorizeLead(Lead $lead): void

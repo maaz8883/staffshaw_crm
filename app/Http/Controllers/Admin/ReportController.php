@@ -184,7 +184,9 @@ class ReportController extends Controller
             ->whereBetween('sale_date', [$from, $to]);
 
         $leadQ = Lead::query()->whereNotIn('status', ['customer', 'lost']);
-        if ($this->isTeamHead() && ! $this->canViewOrgReports()) {
+        if ($this->isAgent()) {
+            $leadQ->where('assigned_to', Auth::id());
+        } elseif ($this->isTeamHead() && ! $this->canViewOrgReports()) {
             $leadQ->whereIn('team_id', $this->headedTeamIds());
         }
 

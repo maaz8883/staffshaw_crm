@@ -227,11 +227,9 @@ class AuthScope
             return $query;
         }
 
+        // Project Manager: like an agent, only leads assigned to them (their work starts after the sale)
         if (self::isProjectManager()) {
-            $ids = self::projectManagerTeamIds();
-            return $ids->isEmpty()
-                ? $query->whereRaw('1 = 0')
-                : $query->whereIn('team_id', $ids);
+            return $query->where('assigned_to', auth()->id());
         }
 
         $headed = self::headedTeamIds();
@@ -253,15 +251,19 @@ class AuthScope
             });
         }
 
-        $user = auth()->user();
-        if ($user?->team_id) {
-            return $query->where(function (Builder $q) use ($user) {
-                $q->where('team_id', $user->team_id)
-                    ->orWhere('assigned_to', $user->id);
-            });
+        // Agent: only leads assigned to them (the team lead hands leads out)
+        return $query->where('assigned_to', auth()->id());
+    }
+
+    /** Project Manager or plain agent (not head / sub-head / admin): sees and works only their own leads. */
+    public static function seesOnlyOwnLeads(): bool
+    {
+        if (self::isAdminOrManager()) {
+            return false;
         }
 
-        return $query->where('assigned_to', auth()->id());
+        return self::isProjectManager()
+            || (self::headedTeamIds()->isEmpty() && self::subTeamHeadIds()->isEmpty());
     }
 
     public static function canAccessLead(\App\Models\Lead $lead): bool
