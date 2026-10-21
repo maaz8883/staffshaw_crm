@@ -8,6 +8,7 @@ use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -24,7 +25,16 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
+        // Password guessing: 5 wrong tries per email + IP, then wait a minute
+        $key = 'login:'.mb_strtolower($credentials['email']).'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            return back()->withErrors([
+                'email' => 'Too many sign-in attempts. Try again in '.RateLimiter::availableIn($key).' seconds.',
+            ])->onlyInput('email');
+        }
+
         if (Auth::attempt($credentials, true)) {
+            RateLimiter::clear($key);
             $user = Auth::user();
 
             if ($blocked = $user->signInBlockedMessage()) {
@@ -41,6 +51,8 @@ class AuthController extends Controller
 
             return redirect()->intended(route('admin.dashboard'));
         }
+
+        RateLimiter::hit($key, 60);
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',

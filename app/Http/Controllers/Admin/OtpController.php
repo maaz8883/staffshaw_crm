@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 
 class OtpController extends Controller
 {
@@ -24,11 +25,24 @@ class OtpController extends Controller
     public function sendOtp(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
         ]);
 
         $email = $request->email;
-        $user  = User::where('email', $email)->first();
+        // Max 3 codes per email and 10 per IP in 10 minutes (stops email flooding / guessing)
+        foreach (['otp-send:'.mb_strtolower($email) => 3, 'otp-send-ip:'.$request->ip() => 10] as $key => $max) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                return back()->withErrors(['email' => 'Too many OTP requests. Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.'])->withInput();
+            }
+            RateLimiter::hit($key, 600);
+        }
+
+        $user = User::where('email', $email)->first();
+        if (! $user) {
+            // Same answer as for a real account, so the form can't be used to find which emails exist
+            return redirect()->route('admin.otp.verify.form', ['email' => $email])
+                ->with('info', 'OTP sent. Check the configured email(s).');
+        }
 
         // Banned / pending / rejected accounts don't get a code
         if ($blocked = $user?->signInBlockedMessage()) {
@@ -73,7 +87,7 @@ class OtpController extends Controller
     public function resendOtp(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
         ]);
 
         // Reuse sendOtp logic
@@ -101,9 +115,17 @@ class OtpController extends Controller
     public function verifyOtp(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
             'otp'   => 'required|digits:6',
         ]);
+
+        // 5 wrong codes → every open code for this email is cancelled; a new one must be requested
+        $key = 'otp-verify:'.mb_strtolower($request->email);
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            LoginOtp::where('email', $request->email)->where('used', false)->update(['used' => true]);
+
+            return back()->withErrors(['otp' => 'Too many wrong codes. Request a new OTP.'])->withInput();
+        }
 
         $record = LoginOtp::where('email', $request->email)
             ->where('otp', $request->otp)
@@ -112,8 +134,11 @@ class OtpController extends Controller
             ->first();
 
         if (! $record || ! $record->isValid()) {
+            RateLimiter::hit($key, 900);
+
             return back()->withErrors(['otp' => 'Invalid or expired OTP.'])->withInput();
         }
+        RateLimiter::clear($key);
 
         // Mark used
         $record->update(['used' => true]);

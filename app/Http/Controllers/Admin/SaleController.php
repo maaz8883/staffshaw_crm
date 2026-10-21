@@ -55,7 +55,7 @@ class SaleController extends Controller
             // Admin, Manager, Finance: all sales
         } elseif ($this->isProjectManager()) {
             // Requirement 6.1/6.2 — Project Manager: only sales from their approved (joined) teams
-            $query->whereIn('team_id', $user->approvedTeamIds());
+            $query->whereIn('team_id', $user->approvedTeamIdsWithSubTeams()); // sub-teams too, like clients
         } elseif ($this->isTeamHead()) {
             // Team Head: sales from their teams
             $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
@@ -94,6 +94,7 @@ class SaleController extends Controller
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return true;
         }
+        // Team lead approves every sale of their team, their own included
         if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) {
             return true;
         }
@@ -421,7 +422,9 @@ class SaleController extends Controller
         $invoices = $sale->invoices->sortByDesc('issued_at')->values();
         $billableRemaining = $invoiceService->billableRemaining($sale);
         $invoiceMaxAmount = $invoiceService->maxReceivableAmount($sale);
-        $canGenerateInvoice = $invoiceService->canGenerateForSale($sale);
+        // A Project Manager only records payments on their own sales (others' they just view)
+        $canGenerateInvoice = $invoiceService->canGenerateForSale($sale)
+            && (! $this->isProjectManager() || (int) $sale->user_id === (int) Auth::id());
 
         return view('admin.sales.show', compact(
             'sale',
@@ -625,7 +628,7 @@ class SaleController extends Controller
 
         // Requirement 6.5 — Project Manager: only sales from their approved (joined) teams
         if ($this->isProjectManager()) {
-            if ($sale->team_id && $user->approvedTeamIds()->contains((int) $sale->team_id)) {
+            if ($sale->team_id && $user->approvedTeamIdsWithSubTeams()->contains((int) $sale->team_id)) {
                 return;
             }
             abort(403);

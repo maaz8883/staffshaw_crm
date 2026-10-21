@@ -154,23 +154,30 @@ class UserController extends Controller
     }
 
     /** Roles the signed-in user may give: IT can't make anyone an Admin. */
+    /**
+     * Roles that see every sale / all money. Only an Admin may give them or touch those accounts:
+     * otherwise IT / HR could make (or reset the password of) a Finance or Manager account and
+     * sign in with it to read all sales data.
+     */
+    private const ADMIN_ONLY_ROLES = [Role::ADMIN, Role::MANAGER, Role::FINANCE];
+
     private function assignableRoles()
     {
         return Role::query()
-            ->when(! Auth::user()->hasRole(Role::ADMIN), fn ($q) => $q->where('name', '!=', Role::ADMIN))
+            ->when(! Auth::user()->hasRole(Role::ADMIN), fn ($q) => $q->whereNotIn('name', self::ADMIN_ONLY_ROLES))
             ->orderBy('name')
             ->get();
     }
 
-    /** IT manages every account except Admin ones. */
+    /** IT / HR manage every account except Admin, Manager and Finance ones. */
     private function canManageAccount(User $user): bool
     {
-        return Auth::user()->hasRole(Role::ADMIN) || ! $user->hasRole(Role::ADMIN);
+        return Auth::user()->hasRole(Role::ADMIN) || ! $user->hasRole(self::ADMIN_ONLY_ROLES);
     }
 
     private function guardAdminAccount(User $user): void
     {
-        abort_unless($this->canManageAccount($user), 403, 'Only an Admin can change an Admin account.');
+        abort_unless($this->canManageAccount($user), 403, 'Only an Admin can change an Admin, Manager or Finance account.');
     }
 
     public function create(): View

@@ -56,7 +56,8 @@ Route::prefix('v1')->group(function () {
 });
 
 // Protected API - token required
-Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+// Admin tokens only: these can edit any user (role included) and read every lead
+Route::middleware(['auth:sanctum', 'role:Admin'])->prefix('v1')->group(function () {
 
     // Teams CRUD
     Route::post('teams', [TeamController::class, 'store']);

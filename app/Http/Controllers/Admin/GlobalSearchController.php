@@ -282,7 +282,7 @@ class GlobalSearchController extends Controller
         }
 
         if ($user->hasRole(Role::PROJECT_MANAGER)) {
-            $ids = $user->approvedTeamIds();
+            $ids = $user->approvedTeamIdsWithSubTeams(); // same as the Clients / Sales pages
             $query->whereIn($column, $ids->isEmpty() ? [0] : $ids);
 
             return;

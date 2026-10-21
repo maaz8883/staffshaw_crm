@@ -272,6 +272,9 @@ class InvoiceController extends Controller
     public function store(Request $request, Sale $sale): RedirectResponse
     {
         $this->authorizeSaleAccess($sale);
+        // Recording money received changes the sale: a Project Manager may only do it on their own sale
+        abort_if(Auth::user()->hasRole(Role::PROJECT_MANAGER) && (int) $sale->user_id !== (int) Auth::id(), 403,
+            'You can only record payments on your own sales.');
 
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01',
@@ -470,7 +473,7 @@ class InvoiceController extends Controller
         }
 
         if ($user->hasRole(Role::PROJECT_MANAGER)) {
-            $joinedTeamIds = $user->approvedTeamIds();
+            $joinedTeamIds = $user->approvedTeamIdsWithSubTeams();
 
             return $query->where(function ($q) use ($joinedTeamIds, $user) {
                 $q->whereHas('sale', fn ($saleQuery) => $saleQuery->whereIn('team_id', $joinedTeamIds))
@@ -513,7 +516,7 @@ class InvoiceController extends Controller
 
         // Requirement 7.4 — Project Manager: only sales/invoices from their joined teams
         if ($user->hasRole(Role::PROJECT_MANAGER)) {
-            if ($sale->team_id && $user->approvedTeamIds()->contains((int) $sale->team_id)) {
+            if ($sale->team_id && $user->approvedTeamIdsWithSubTeams()->contains((int) $sale->team_id)) {
                 return;
             }
             abort(403);

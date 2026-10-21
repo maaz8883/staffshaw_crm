@@ -11,8 +11,9 @@ class TeamController extends Controller
     {
         $teams = Team::with([
             'company:id,name',
-            'teamHead:id,name,email',
-            'subTeamHead:id,name,email',
+            // Public endpoint: names only, never staff emails
+            'teamHead:id,name',
+            'subTeamHead:id,name',
             'parentTeam:id,name',
             'subTeams:id,parent_team_id,name',
         ])->latest()->get();

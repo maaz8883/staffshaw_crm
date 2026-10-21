@@ -56,8 +56,9 @@ Route::prefix('admin')->group(function () {
     });
 
     // ── Authenticated ────────────────────────────────────────────────────────
-    // One account may stay signed in on several browsers / devices (no single-session rule)
-    Route::middleware(['auth', 'active.account'])->group(function () {
+    // One account may stay signed in on several browsers / devices (no single-session rule),
+    // but a password change signs out every other device (auth.session)
+    Route::middleware(['auth', 'auth.session', 'active.account'])->group(function () {
 
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
         Route::get('/production/overview', [\App\Http\Controllers\Admin\ProductionDashboardController::class, 'overview'])

@@ -35,6 +35,10 @@ class UserController extends Controller
     {
         // HRM provisions accounts server-to-server with the shared SSO secret; anyone else is a public sign-up.
         $trusted = $this->isTrustedIntegration($request);
+        if (! $trusted) {
+            // Public sign-up is closed: only HRM (shared secret) may create accounts
+            return response()->json(['status' => false, 'message' => 'Sign-up is closed. Ask an admin for an account.'], 403);
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
