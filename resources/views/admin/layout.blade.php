@@ -364,6 +364,11 @@
                         allowClear: !$el.prop('required') && emptyOption.length > 0,
                         dropdownParent: $parent.length ? $parent : $(document.body)
                     });
+                    // Filter bars: admin.css forces Select2 to 100% (!important), so pin the asked width the same way
+                    if ($el.data('width')) {
+                        var box = $el.next('.select2-container')[0];
+                        if (box) box.style.setProperty('width', $el.data('width'), 'important');
+                    }
                     // Select2 only fires jQuery events: pass a real "change" on to plain JS listeners
                     $el.on('select2:select select2:clear', function () {
                         el.dispatchEvent(new Event('change', { bubbles: true }));

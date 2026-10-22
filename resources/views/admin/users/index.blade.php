@@ -130,7 +130,7 @@
             });
 
             $('#btn-reset').on('click', function () {
-                $('#filter-company, #filter-team, #filter-role, #filter-status').val('');
+                $('#filter-company, #filter-team, #filter-role, #filter-status').val('').trigger('change.select2');
                 table.draw();
             });
 

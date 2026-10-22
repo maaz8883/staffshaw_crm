@@ -19,12 +19,15 @@
     @endif
 
     @if(!$isAgent)
+    {{-- Team filter only when there's more than one team to pick (a team lead has just theirs) --}}
+    @if($teams->count() > 1)
     <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Teams</option>
         @foreach($teams as $team)
             <option value="{{ $team->id }}">{{ $team->name }}</option>
         @endforeach
     </select>
+    @endif
 
     <select id="filter-user" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Agents</option>
@@ -207,7 +210,7 @@ $(function () {
     });
 
     $('#btn-reset').on('click', function () {
-        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').val('');
+        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').val('').trigger('change.select2');
         table.draw();
     });
 

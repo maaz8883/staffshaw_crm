@@ -31,6 +31,7 @@
                 </select>
             </div>
             @endif
+            @if($teams->count() > 1)
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Team</label>
                 <select name="team_id" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
@@ -40,6 +41,7 @@
                     @endforeach
                 </select>
             </div>
+            @endif
             <div class="col-auto d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm">Apply</button>
                 <a href="{{ route('admin.reports.user') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
