@@ -19,14 +19,14 @@
     @endif
 
     @if(!$isAgent)
-    <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px">
+    <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Teams</option>
         @foreach($teams as $team)
             <option value="{{ $team->id }}">{{ $team->name }}</option>
         @endforeach
     </select>
 
-    <select id="filter-user" class="form-select form-select-sm js-select2" data-width="180px">
+    <select id="filter-user" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Agents</option>
         @foreach($users as $user)
             <option value="{{ $user->id }}">{{ $user->name }}</option>
@@ -55,7 +55,7 @@
         <option value="upsell">Upsell</option>
     </select>
 
-    <select id="filter-brand" class="form-select form-select-sm js-select2" data-width="180px">
+    <select id="filter-brand" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Brands</option>
         @foreach($brands as $brand)
             <option value="{{ $brand->id }}">{{ $brand->name }}</option>

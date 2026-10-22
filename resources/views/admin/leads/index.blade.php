@@ -8,13 +8,15 @@
     <div class="mb-3 d-flex gap-2 flex-wrap align-items-center">
         <a href="{{ route('admin.leads.create') }}" class="btn btn-primary">Add Lead</a>
 
-        {{-- Filters --}}
-        <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px">
+        {{-- Filters (team filter only when there's more than one team to pick) --}}
+        @if($teams->count() > 1)
+        <select id="filter-team" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
             <option value="">All Teams</option>
             @foreach($teams as $team)
                 <option value="{{ $team->id }}">{{ $team->name }}</option>
             @endforeach
         </select>
+        @endif
 
         <select id="filter-status" class="form-select form-select-sm" style="width:auto">
             <option value="">All Statuses</option>

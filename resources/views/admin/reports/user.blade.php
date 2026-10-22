@@ -33,7 +33,7 @@
             @endif
             <div class="col-12 col-md-auto">
                 <label class="form-label small text-muted mb-0">Team</label>
-                <select name="team_id" class="form-select form-select-sm js-select2" data-width="180px">
+                <select name="team_id" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
                     <option value="">All teams</option>
                     @foreach($teams as $t)
                         <option value="{{ $t->id }}" @selected(($filters['team_id'] ?? '') == $t->id)>{{ $t->name }}</option>

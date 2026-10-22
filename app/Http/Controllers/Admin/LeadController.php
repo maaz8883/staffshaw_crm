@@ -119,7 +119,8 @@ class LeadController extends Controller
             return back()->withInput()->withErrors(['duplicate' => $message]);
         }
 
-        Lead::query()->create($validated);
+        $lead = Lead::query()->create($validated);
+        $this->notifyAssignee($lead, null);
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead created successfully.');
     }
@@ -192,7 +193,9 @@ class LeadController extends Controller
             return back()->withInput()->withErrors(['duplicate' => $message]);
         }
 
+        $previousAssignee = $lead->assigned_to;
         $lead->update($validated);
+        $this->notifyAssignee($lead, $previousAssignee);
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead updated successfully.');
     }
@@ -287,6 +290,19 @@ class LeadController extends Controller
         $lead->delete();
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead deleted successfully.');
+    }
+
+    /** Tell the new assignee (bell icon) — not when they assigned it to themselves or nothing changed. */
+    private function notifyAssignee(Lead $lead, mixed $previousAssignee): void
+    {
+        $assigneeId = (int) $lead->assigned_to;
+        if (! $assigneeId || $assigneeId === (int) auth()->id() || $assigneeId === (int) $previousAssignee) {
+            return;
+        }
+        $assignee = \App\Models\User::query()->find($assigneeId);
+        if ($assignee) {
+            \Illuminate\Support\Facades\Notification::send($assignee, new \App\Notifications\LeadAssignedNotification($lead, auth()->user()));
+        }
     }
 
     /**
