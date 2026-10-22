@@ -112,12 +112,20 @@ class GlobalSearchController extends Controller
         $query = Client::query()->select(['id', 'name', 'email', 'phone', 'company_name', 'team_id']);
         $this->scopeByVisibleTeams($query, 'team_id');
 
+        // Agent: every team client by name, but email / phone only match (and show) on their own
+        $agent = \App\Support\AuthScope::seesOnlyOwnClients();
+        $ownIds = $agent ? \App\Support\AuthScope::scopeOwnClients(Client::query())->pluck('id')->map(fn ($id) => (int) $id)->all() : null;
+
         return $query
-            ->where(function (Builder $q) use ($like) {
+            ->where(function (Builder $q) use ($like, $ownIds) {
                 $q->where('name', 'like', $like)
-                    ->orWhere('email', 'like', $like)
-                    ->orWhere('phone', 'like', $like)
-                    ->orWhere('company_name', 'like', $like);
+                    ->orWhere('company_name', 'like', $like)
+                    ->orWhere(function (Builder $contact) use ($like, $ownIds) {
+                        if ($ownIds !== null) {
+                            $contact->whereIn('id', $ownIds ?: [0]);
+                        }
+                        $contact->where(fn (Builder $c) => $c->where('email', 'like', $like)->orWhere('phone', 'like', $like));
+                    });
             })
             ->orderBy('name')
             ->limit(5)
@@ -126,7 +134,9 @@ class GlobalSearchController extends Controller
                 'type' => 'Client',
                 'icon' => 'people',
                 'title' => $c->name,
-                'subtitle' => collect([$c->company_name, $c->email, $c->phone])->filter()->implode(' · '),
+                'subtitle' => ($ownIds === null || in_array((int) $c->id, $ownIds, true))
+                    ? collect([$c->company_name, $c->email, $c->phone])->filter()->implode(' · ')
+                    : (string) $c->company_name,
                 'url' => route('admin.clients.show', $c),
             ])
             ->all();
@@ -303,8 +313,5 @@ class GlobalSearchController extends Controller
         }
 
         $query->where($column, $user->team_id ?: 0);
-        if (\App\Support\AuthScope::seesOnlyOwnClients()) {
-            \App\Support\AuthScope::scopeOwnClients($query); // agent: own clients only
-        }
     }
 }

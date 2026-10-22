@@ -7,7 +7,7 @@
 @section('content')
 
 <div class="mb-3">
-    @unless(auth()->user()->hasRole('Finance'))<a href="{{ route('admin.clients.edit', $client) }}" class="btn btn-outline-warning btn-sm">Edit</a>@endunless
+    @if($canSeeDetails && ! auth()->user()->hasRole('Finance'))<a href="{{ route('admin.clients.edit', $client) }}" class="btn btn-outline-warning btn-sm">Edit</a>@endif
     <a href="{{ route('admin.clients.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
 </div>
 
@@ -20,7 +20,13 @@
             · Brand: {{ $client->brand?->name ?: '-' }}
             · {{ $client->is_active ? 'Active' : 'Inactive' }}
         </div>
+        @unless($canSeeDetails)
+            <div class="alert alert-light border small py-2 mb-3">
+                <i class="bi bi-lock"></i> This client is handled by another agent, so contact details are hidden. You can still see their Trello projects below.
+            </div>
+        @endunless
         <div class="row g-3">
+            @if($canSeeDetails)
             <div class="col-md-6">
                 <small class="text-muted d-block">Email</small>
                 {{ $client->email ?: '-' }}
@@ -29,19 +35,22 @@
                 <small class="text-muted d-block">Phone</small>
                 {{ $client->phone ?: '-' }}
             </div>
+            @endif
             <div class="col-md-6">
                 <small class="text-muted d-block">Added By</small>
                 {{ $client->createdBy?->name ?? '-' }}
             </div>
+            @if($canSeeDetails)
             <div class="col-12">
                 <small class="text-muted d-block">Notes</small>
                 {{ $client->notes ?: '-' }}
             </div>
+            @endif
         </div>
     </div>
 </div>
 
-@if($client->contacts->isNotEmpty())
+@if($canSeeDetails && $client->contacts->isNotEmpty())
 <div class="card mb-3">
     <div class="card-header">Contacts</div>
     <div class="card-body p-0">

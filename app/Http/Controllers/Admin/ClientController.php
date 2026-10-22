@@ -68,12 +68,31 @@ class ClientController extends Controller
         if ($teamIds !== null) {
             $query->whereIn('team_id', $teamIds);
         }
-        // An agent works their own clients only (like leads): not every client of the team
+        return $query;
+    }
+
+    /** Clients the user may pick / edit: an agent only their own (team clients they can just look at). */
+    private function ownQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = $this->baseQuery();
         if (AuthScope::seesOnlyOwnClients()) {
             AuthScope::scopeOwnClients($query);
         }
 
         return $query;
+    }
+
+    /** Contact details, notes and edit: everyone who sees the client, except an agent on someone else's client. */
+    private function canSeeDetails(Client $client): bool
+    {
+        return ! AuthScope::seesOnlyOwnClients()
+            || AuthScope::scopeOwnClients(Client::query()->whereKey($client->id))->exists();
+    }
+
+    private function authorizeDetails(Client $client): void
+    {
+        $this->authorizeClient($client);
+        abort_unless($this->canSeeDetails($client), 403, 'Only the agent who works this client can change or copy its details.');
     }
 
     /** Team a newly created client (or sale) should be attached to, for the current user. */
@@ -120,7 +139,26 @@ class ClientController extends Controller
 
         $query->withCount(['sales as sales_count' => fn ($q) => $q->where('is_draft', false)]);
 
-        return DataTables::eloquent($query)
+        // Agent: someone else's client shows name / team / projects only, no email or phone
+        $ownIds = AuthScope::seesOnlyOwnClients()
+            ? AuthScope::scopeOwnClients(Client::query())->pluck('id')->map(fn ($id) => (int) $id)->flip()
+            : null;
+        $isOwn = fn (Client $client) => $ownIds === null || $ownIds->has((int) $client->id);
+        $hidden = '<span class="text-muted" title="Only the agent who works this client sees contact details">—</span>';
+
+        $table = DataTables::eloquent($query)
+            ->editColumn('email', fn (Client $client) => $isOwn($client) ? e($client->email ?: '-') : $hidden)
+            ->editColumn('phone', fn (Client $client) => $isOwn($client) ? e($client->phone ?: '-') : $hidden);
+        if ($ownIds !== null) {
+            // Searching by email / phone only finds the agent's own clients (no guessing others' details)
+            foreach (['email', 'phone'] as $col) {
+                $table->filterColumn($col, function ($q, $keyword) use ($col) {
+                    AuthScope::scopeOwnClients($q)->where("clients.{$col}", 'like', '%'.$keyword.'%');
+                });
+            }
+        }
+
+        return $table
             ->addColumn('brand_name', fn (Client $client) => e($client->brand?->name ?? '-'))
             ->addColumn('active_badge', function (Client $client) {
                 $class = $client->is_active ? 'success' : 'secondary';
@@ -131,7 +169,7 @@ class ClientController extends Controller
             ->addColumn('team_name', fn (Client $client) => e($client->team?->name ?? '-'))
             ->addColumn('created_by_name', fn (Client $client) => e($client->createdBy?->name ?? '-'))
             ->addColumn('sales_count', fn (Client $client) => (int) $client->sales_count)
-            ->addColumn('actions', function (Client $client) {
+            ->addColumn('actions', function (Client $client) use ($isOwn) {
                 $showUrl = route('admin.clients.show', $client);
                 $editUrl = route('admin.clients.edit', $client);
                 $deleteUrl = route('admin.clients.destroy', $client);
@@ -140,7 +178,7 @@ class ClientController extends Controller
 
                 $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>';
                 // Finance only looks at clients (to bill them)
-                if (AuthScope::isFinance()) {
+                if (AuthScope::isFinance() || ! $isOwn($client)) {
                     return $html;
                 }
                 $html .= ' <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>';
@@ -155,7 +193,7 @@ class ClientController extends Controller
 
                 return $html;
             })
-            ->rawColumns(['actions', 'active_badge'])
+            ->rawColumns(['actions', 'active_badge', 'email', 'phone'])
             ->toJson();
     }
 
@@ -270,15 +308,17 @@ class ClientController extends Controller
 
         $totalInvoiced = $invoices->sum('amount');
 
+        $canSeeDetails = $this->canSeeDetails($client);
+
         return view('admin.clients.show', compact(
             'client', 'sales', 'totalSaleAmount', 'totalReceived', 'totalRemaining',
-            'invoices', 'totalInvoiced'
+            'invoices', 'totalInvoiced', 'canSeeDetails'
         ));
     }
 
     public function edit(Client $client): View
     {
-        $this->authorizeClient($client);
+        $this->authorizeDetails($client);
 
         $brands = AuthScope::brandsForDropdown();
         $teams = $this->teamsForClientForm();
@@ -288,7 +328,7 @@ class ClientController extends Controller
 
     public function update(Request $request, Client $client): RedirectResponse
     {
-        $this->authorizeClient($client);
+        $this->authorizeDetails($client);
 
         $validated = $request->validate($this->clientRules());
         $payload = $this->clientPayload($validated, $request);
@@ -343,7 +383,7 @@ class ClientController extends Controller
     /** AJAX endpoint used by the sale form's client dropdown to fetch a client's details. */
     public function lookup(Client $client): JsonResponse
     {
-        $this->authorizeClient($client);
+        $this->authorizeDetails($client);
 
         return response()->json([
             'id'    => $client->id,
@@ -356,13 +396,13 @@ class ClientController extends Controller
     /** For dropdowns — clients scoped to the same teams the current user can see. */
     public static function forDropdown()
     {
-        return (new self())->baseQuery()->orderBy('name')->get(['id', 'name', 'email', 'phone', 'team_id', 'brand_id']);
+        return (new self())->ownQuery()->orderBy('name')->get(['id', 'name', 'email', 'phone', 'team_id', 'brand_id']);
     }
 
     /** Client IDs the current user may attach to sales/invoices. */
     public static function accessibleClientIds(): \Illuminate\Support\Collection
     {
-        return (new self())->baseQuery()->pluck('id');
+        return (new self())->ownQuery()->pluck('id');
     }
 
     private function clientRules(): array
@@ -442,9 +482,6 @@ class ClientController extends Controller
         }
 
         if (! $teamIds->contains($client->team_id)) {
-            abort(403);
-        }
-        if (AuthScope::seesOnlyOwnClients() && ! AuthScope::scopeOwnClients(Client::query()->whereKey($client->id))->exists()) {
             abort(403);
         }
     }
