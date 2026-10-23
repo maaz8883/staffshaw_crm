@@ -17,6 +17,7 @@ class Team extends Model
         'company_id',
         'parent_team_id',
         'team_head_id',
+        'co_head_id',
         'sub_team_head_id',
         'name',
         'description',
@@ -56,6 +57,45 @@ class Team extends Model
     public function teamHead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'team_head_id');
+    }
+
+    /** Second team lead (same rights as the first). */
+    public function coHead(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'co_head_id');
+    }
+
+    /** Teams this user leads, as team lead or second team lead. */
+    public function scopeHeadedBy($query, $userId)
+    {
+        $userId = (int) $userId;
+
+        return $query->where(fn ($q) => $q->where('teams.team_head_id', $userId)->orWhere('teams.co_head_id', $userId));
+    }
+
+    public function isHeadedBy($userId): bool
+    {
+        $userId = (int) $userId;
+
+        return $userId > 0 && ((int) $this->team_head_id === $userId || (int) $this->co_head_id === $userId);
+    }
+
+    /** Both team leads' user ids (one or two). */
+    public function headIds(): array
+    {
+        return array_values(array_unique(array_filter([(int) $this->team_head_id, (int) $this->co_head_id])));
+    }
+
+    /** @return \Illuminate\Support\Collection<int, User> */
+    public function heads(): \Illuminate\Support\Collection
+    {
+        return User::query()->whereIn('id', $this->headIds() ?: [0])->get();
+    }
+
+    /** "Leroy" or "Leroy & Sam" */
+    public function headNames(): string
+    {
+        return collect([$this->teamHead?->name, $this->coHead?->name])->filter()->unique()->implode(' & ');
     }
 
     public function subTeamHead(): BelongsTo

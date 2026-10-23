@@ -30,14 +30,14 @@ class TeamController extends Controller
     {
         $query = Team::query()
             ->select('teams.*')
-            ->with(['company', 'teamHead'])
+            ->with(['company', 'teamHead', 'coHead'])
             ->withCount('users');
 
         AuthScope::scopeByTeam($query, 'id');
 
         return DataTables::eloquent($query)
             ->addColumn('company_name', fn (Team $team) => e($team->company?->name ?? '-'))
-            ->addColumn('team_head_name', fn (Team $team) => e($team->teamHead?->name ?? '-'))
+            ->addColumn('team_head_name', fn (Team $team) => e($team->headNames() ?: '-'))
             ->editColumn('description', fn (Team $team) => e($team->description ?: '-'))
             ->addColumn('actions', function (Team $team) {
                 $showUrl = route('admin.teams.show', $team);
@@ -81,6 +81,7 @@ class TeamController extends Controller
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
             'team_head_id'     => 'nullable|exists:users,id',
+            'co_head_id'       => 'nullable|different:team_head_id|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name',
             'description'      => 'nullable|string',
             'brand_ids'        => 'nullable|array',
@@ -94,6 +95,7 @@ class TeamController extends Controller
         $team = Team::query()->create([
             'company_id'   => CompanyContext::idForCreate($validated['company_id'] ?? null),
             'team_head_id' => $validated['team_head_id'] ?? null,
+            'co_head_id'   => $validated['co_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
@@ -139,6 +141,7 @@ class TeamController extends Controller
         $team->load([
             'company', 
             'teamHead', 
+            'coHead',
             'users' => function($query) {
                 $query->with(['role', 'subTeamHead.user'])->orderBy('name');
             },
@@ -163,8 +166,10 @@ class TeamController extends Controller
                 ->value('target_amount');
         };
 
-        if ($team->teamHead) {
-            $team->teamHead->current_target_amount = $targetLookup($team->teamHead->id);
+        foreach ([$team->teamHead, $team->coHead] as $lead) {
+            if ($lead) {
+                $lead->current_target_amount = $targetLookup($lead->id);
+            }
         }
         $team->users->each(function ($member) use ($targetLookup) {
             $member->current_target_amount = $targetLookup($member->id);
@@ -187,7 +192,7 @@ class TeamController extends Controller
         $canManageMembers = $user->hasRole(\App\Models\Role::ADMIN);
         // PPC spend is a business cost: Admin, Manager, Finance, PPC and this team's lead only
         $canSeePpc = $user->hasRole([\App\Models\Role::ADMIN, \App\Models\Role::MANAGER, \App\Models\Role::FINANCE, \App\Models\Role::PPC])
-            || (int) $team->team_head_id === (int) $user->id;
+            || $team->isHeadedBy($user->id);
 
         return view('admin.teams.show', compact(
             'team', 'spendings', 'totalSpending', 'month', 'year', 'isPpc', 'canManageMembers', 'canSeePpc'
@@ -214,6 +219,7 @@ class TeamController extends Controller
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
             'team_head_id'     => 'nullable|exists:users,id',
+            'co_head_id'       => 'nullable|different:team_head_id|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name,' . $team->id,
             'description'      => 'nullable|string',
             'brand_ids'        => 'nullable|array',
@@ -229,6 +235,7 @@ class TeamController extends Controller
         $team->update([
             'company_id'   => CompanyContext::idForUpdate($team->company_id, $validated['company_id'] ?? null),
             'team_head_id' => $validated['team_head_id'] ?? null,
+            'co_head_id'   => $validated['co_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
@@ -368,10 +375,10 @@ class TeamController extends Controller
         }
     }
 
-    /** Ensure Team Head's users.team_id matches the team they head. */
+    /** Ensure both team leads' users.team_id matches the team they lead. */
     private function syncTeamHeadMembership(Team $team): void
     {
-        if (! $team->team_head_id) {
+        if (! $team->headIds()) {
             return;
         }
 
@@ -380,7 +387,7 @@ class TeamController extends Controller
             $attrs['company_id'] = $team->company_id;
         }
 
-        User::where('id', $team->team_head_id)->update($attrs);
+        User::whereIn('id', $team->headIds())->update($attrs);
     }
 
     /**
@@ -400,7 +407,7 @@ class TeamController extends Controller
         $teamIds = $team->subTeams()->pluck('id')->push($team->id);
         $members = User::query()
             ->with('role')
-            ->where(fn ($q) => $q->whereIn('team_id', $teamIds)->orWhere('id', $team->team_head_id))
+            ->where(fn ($q) => $q->whereIn('team_id', $teamIds)->orWhereIn('id', $team->headIds() ?: [0]))
             ->orderBy('name')
             ->get();
 
@@ -424,7 +431,7 @@ class TeamController extends Controller
             $rows = $counts->get($member->id, collect());
             $row = [
                 'user' => $member,
-                'is_head' => (int) $member->id === (int) $team->team_head_id,
+                'is_head' => $team->isHeadedBy($member->id),
                 'total' => (int) $rows->sum('total'),
                 'last_at' => $rows->max('last_at'),
             ];

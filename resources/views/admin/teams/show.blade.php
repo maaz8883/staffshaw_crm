@@ -23,8 +23,8 @@
             @endif
         </div>
         <div class="mb-2">
-            <small class="text-muted">Team Head:</small>
-            <strong>{{ $team->teamHead?->name ?? 'Not assigned' }}</strong>
+            <small class="text-muted">Team Lead{{ $team->co_head_id ? 's' : '' }}:</small>
+            <strong>{{ $team->headNames() ?: 'Not assigned' }}</strong>
         </div>
         <div class="mb-2">
             <small class="text-muted d-block mb-1">Assigned Brands:</small>
@@ -53,24 +53,24 @@
         <i class="bi bi-diagram-3-fill"></i> Team Hierarchy
     </div>
     <div class="card-body">
-        {{-- Team Head --}}
-        @if($team->teamHead)
-        <div class="mb-4">
+        {{-- Team Lead(s): one or two --}}
+        @foreach(collect([$team->teamHead, $team->coHead])->filter()->unique('id') as $lead)
+        <div class="mb-3">
             <div class="d-flex align-items-center mb-2">
                 <i class="bi bi-person-badge-fill text-primary fs-5 me-2"></i>
                 <div>
-                    <div class="fw-bold">{{ $team->teamHead->name }}</div>
-                    <small class="text-muted">Team Head</small>
-                    @if($team->teamHead->email)
-                        <small class="text-muted"> • {{ $team->teamHead->email }}</small>
+                    <div class="fw-bold">{{ $lead->name }}</div>
+                    <small class="text-muted">Team Lead</small>
+                    @if($lead->email)
+                        <small class="text-muted"> • {{ $lead->email }}</small>
                     @endif
-                    @if($team->teamHead->current_target_amount !== null)
-                        <span class="badge bg-success ms-1">Target: ${{ number_format($team->teamHead->current_target_amount, 0) }}</span>
+                    @if($lead->current_target_amount !== null)
+                        <span class="badge bg-success ms-1">Target: ${{ number_format($lead->current_target_amount, 0) }}</span>
                     @endif
                 </div>
             </div>
         </div>
-        @endif
+        @endforeach
 
         {{-- Sub-Team Heads --}}
         @if($team->subTeamHeads->count() > 0)
@@ -152,7 +152,7 @@
         @php
             $usersWithoutSubHead = $team->users
                 ->whereNull('sub_team_head_id')
-                ->reject(fn ($u) => $u->hasRole([\App\Models\Role::PROJECT_MANAGER, \App\Models\Role::PPC]));
+                ->reject(fn ($u) => $u->hasRole([\App\Models\Role::PROJECT_MANAGER, \App\Models\Role::PPC]) || $team->isHeadedBy($u->id));
         @endphp
         @if($usersWithoutSubHead->count() > 0)
         <div class="mt-4 ps-4 border-start border-3 border-secondary">

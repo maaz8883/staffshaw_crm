@@ -72,9 +72,9 @@
                 // HR: users + daily expenses only
                 $isHr = auth()->user()?->hasRole('HR');
                 $canManageUsers = $canManageAccounts || $isHr;
-                $isTeamHeadUser = \App\Models\Team::where('team_head_id', (int) auth()->id())->exists();
+                $isTeamHeadUser = \App\Models\Team::headedBy(auth()->id())->exists();
                 $headedTeamForNav = $isTeamHeadUser
-                    ? \App\Models\Team::where('team_head_id', (int) auth()->id())->orderBy('name')->first()
+                    ? \App\Models\Team::headedBy(auth()->id())->orderBy('name')->first()
                     : null;
                 // Production team heads have no sales join requests / reports (those pages are sales-only)
                 $canReviewJoinRequests = ! $isProjectManager && ! $isProduction && ($isAdminOrManager || $isTeamHeadUser);
@@ -82,7 +82,7 @@
                 if ($canReviewJoinRequests) {
                     $jrQuery = \App\Models\TeamMembership::where('status', \App\Models\TeamMembership::STATUS_PENDING);
                     if (! $isAdminOrManager) {
-                        $headedTeamIds = \App\Models\Team::where('team_head_id', (int) auth()->id())->pluck('id');
+                        $headedTeamIds = \App\Models\Team::headedBy(auth()->id())->pluck('id');
                         $jrQuery->whereIn('team_id', $headedTeamIds);
                     }
                     $pendingJoinRequestCount = $jrQuery->count();

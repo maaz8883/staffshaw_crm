@@ -30,11 +30,12 @@ class SaleNotificationDispatcher
 
         $recipients = self::adminsForCompany($sale->company_id);
 
-        // If seller is a plain agent (not a team head), also notify their team head
-        if (self::isAgentOnly($seller) && $sale->team_id) {
-            $head = Team::query()->find($sale->team_id)?->teamHead;
-            if ($head && $head->id !== $seller->id) {
-                $recipients->push($head);
+        // Also the team leads (both, when there are two) — a lead's own sale goes to the other lead
+        if ($sale->team_id) {
+            foreach (Team::query()->find($sale->team_id)?->heads() ?? [] as $head) {
+                if ($head->id !== $seller->id) {
+                    $recipients->push($head);
+                }
             }
         }
 
@@ -107,9 +108,10 @@ class SaleNotificationDispatcher
         }
 
         if ($sale->team_id) {
-            $head = Team::query()->find($sale->team_id)?->teamHead;
-            if ($head && $head->id !== $editor->id) {
-                $recipients->push($head);
+            foreach (Team::query()->find($sale->team_id)?->heads() ?? [] as $head) {
+                if ($head->id !== $editor->id) {
+                    $recipients->push($head);
+                }
             }
         }
 
@@ -131,15 +133,6 @@ class SaleNotificationDispatcher
         }
 
         Notification::send($recipients, new SaleUpdatedNotification($sale, $editor));
-    }
-
-    private static function isAgentOnly(User $user): bool
-    {
-        if (! $user->hasRole(Role::AGENT)) {
-            return false;
-        }
-
-        return ! Team::where('team_head_id', $user->id)->exists();
     }
 
     /** Admins scoped to company (null company_id on admin = all companies). */

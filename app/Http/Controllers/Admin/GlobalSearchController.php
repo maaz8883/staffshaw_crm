@@ -59,7 +59,7 @@ class GlobalSearchController extends Controller
         $viewer = Auth::user();
         $query = User::query()
             ->accountActive()
-            ->with(['role', 'team:id,name,team_head_id'])
+            ->with(['role', 'team:id,name,team_head_id,co_head_id'])
             ->select(['id', 'name', 'email', 'role_id', 'team_id']);
 
         AuthScope::scopeUsers($query);
@@ -73,7 +73,7 @@ class GlobalSearchController extends Controller
             ->limit(5)
             ->get()
             ->map(function (User $u) use ($viewer) {
-                $isHead = $u->team && (int) $u->team->team_head_id === (int) $u->id;
+                $isHead = $u->team && $u->team->isHeadedBy($u->id);
 
                 return [
                     'type' => 'User',
@@ -263,7 +263,7 @@ class GlobalSearchController extends Controller
             return $query->whereIn('team_id', $ids->isEmpty() ? [0] : $ids);
         }
 
-        $headed = Team::where('team_head_id', $user->id)->pluck('id');
+        $headed = Team::headedBy($user->id)->pluck('id');
         if ($headed->isNotEmpty()) {
             return $query->whereIn('team_id', $headed);
         }
@@ -298,7 +298,7 @@ class GlobalSearchController extends Controller
             return;
         }
 
-        $headed = Team::where('team_head_id', $user->id)->pluck('id');
+        $headed = Team::headedBy($user->id)->pluck('id');
         if ($headed->isNotEmpty()) {
             $query->whereIn($column, $headed);
 

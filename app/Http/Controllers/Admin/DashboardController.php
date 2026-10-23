@@ -56,7 +56,7 @@ class DashboardController extends Controller
         }
 
         // Team Head check
-        $isTeamHead = Team::where('team_head_id', $user->id)->exists();
+        $isTeamHead = Team::headedBy($user->id)->exists();
         if ($isTeamHead) {
             return $this->teamHeadDashboard($user, $month, $year);
         }
@@ -434,7 +434,7 @@ class DashboardController extends Controller
                     ->unique('id')
                     // Team Lead first, then agents, then Project Managers (A–Z within each)
                     ->sortBy(fn (User $u) => [
-                        (int) $team->team_head_id === (int) $u->id ? 0 : ($u->hasRole(Role::PROJECT_MANAGER) ? 2 : 1),
+                        $team->isHeadedBy($u->id) ? 0 : ($u->hasRole(Role::PROJECT_MANAGER) ? 2 : 1),
                         mb_strtolower($u->name),
                     ])
                     ->values();
@@ -445,7 +445,7 @@ class DashboardController extends Controller
                         $stats       = $salesStatsByUser->get($mid);
                         $monthTarget = (float) ($userTargets[$mid] ?? 0);
                         $monthRev    = $stats ? (float) $stats->sale_amount : 0.0;
-                        $isHead      = (int) $team->team_head_id === (int) $mid;
+                        $isHead      = $team->isHeadedBy($mid);
                         // Project Managers can't be given a target: show "—", not $0
                         $monthTarget = $member->hasRole(Role::PROJECT_MANAGER) ? null : $monthTarget;
 
@@ -511,7 +511,7 @@ class DashboardController extends Controller
     private function teamHeadDashboard(User $user, int $month, int $year): View
     {
         $teams = Team::with(['company', 'users.role', 'teamHead'])
-            ->where('team_head_id', $user->id)
+            ->headedBy($user->id)
             ->get();
 
         $teamDashboardCards = $this->buildTeamDashboardCards($month, $year)

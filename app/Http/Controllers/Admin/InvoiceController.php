@@ -484,8 +484,8 @@ class InvoiceController extends Controller
         return $query->where(function ($outer) use ($user) {
             $outer->where('invoices.created_by', $user->id)
                 ->orWhereHas('sale', function ($saleQuery) use ($user) {
-            if (Team::where('team_head_id', $user->id)->exists()) {
-                $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
+            if (Team::headedBy($user->id)->exists()) {
+                $teamIds = Team::headedBy($user->id)->pluck('id');
                 $saleQuery->whereIn('team_id', $teamIds);
 
                 return;
@@ -526,7 +526,7 @@ class InvoiceController extends Controller
             return;
         }
 
-        if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) {
+        if ($sale->team_id && Team::headedBy($user->id)->where('id', $sale->team_id)->exists()) {
             return;
         }
 

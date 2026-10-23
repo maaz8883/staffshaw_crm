@@ -88,7 +88,7 @@ class CrmOverview
             ->latest('sale_date')
             ->limit(5)
             ->get(['id', 'title', 'client_name', 'amount', 'status', 'sale_date', 'user_id']);
-        $teams = Team::query()->sales()->with('teamHead')->whereNull('parent_team_id')->orderBy('name')->get();
+        $teams = Team::query()->sales()->with(['teamHead', 'coHead'])->whereNull('parent_team_id')->orderBy('name')->get();
         $teamCards = [];
         foreach ($teams as $team) {
             $target = (float) TeamTarget::query()
@@ -105,7 +105,7 @@ class CrmOverview
                 ->sum('amount');
             $teamCards[] = [
                 'name' => $team->name,
-                'lead' => $team->teamHead?->name,
+                'lead' => $team->headNames() ?: null,
                 'target' => $target,
                 'achieved' => $achieved,
                 'percent' => $target > 0 ? round(($achieved / $target) * 100, 1) : 0,

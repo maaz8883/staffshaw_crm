@@ -72,7 +72,7 @@ class TargetCarryForward
             }
 
             return (int) $user->team_id === (int) $row->team_id
-                || Team::query()->whereKey($row->team_id)->where('team_head_id', $user->id)->exists()
+                || Team::query()->whereKey($row->team_id)->headedBy($user->id)->exists()
                 || TeamMembership::query()->where('user_id', $user->id)->where('team_id', $row->team_id)
                     ->where('status', TeamMembership::STATUS_APPROVED)->exists();
         });

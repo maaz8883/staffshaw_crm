@@ -32,7 +32,7 @@ class SaleController extends Controller
 
     private function isTeamHead(): bool
     {
-        return Team::where('team_head_id', Auth::id())->exists();
+        return Team::headedBy(Auth::id())->exists();
     }
 
     private function isAgent(): bool
@@ -58,7 +58,7 @@ class SaleController extends Controller
             $query->whereIn('team_id', $user->approvedTeamIdsWithSubTeams()); // sub-teams too, like clients
         } elseif ($this->isTeamHead()) {
             // Team Head: sales from their teams
-            $teamIds = Team::where('team_head_id', $user->id)->pluck('id');
+            $teamIds = Team::headedBy($user->id)->pluck('id');
             $query->whereIn('team_id', $teamIds);
         } else {
             $subTeamHeadIds = \App\Models\SubTeamHead::where('user_id', $user->id)->pluck('id');
@@ -95,7 +95,7 @@ class SaleController extends Controller
             return true;
         }
         // Team lead approves every sale of their team, their own included
-        if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) {
+        if ($sale->team_id && Team::headedBy($user->id)->where('id', $sale->team_id)->exists()) {
             return true;
         }
 
@@ -634,7 +634,7 @@ class SaleController extends Controller
             abort(403);
         }
 
-        if ($sale->team_id && Team::where('team_head_id', $user->id)->where('id', $sale->team_id)->exists()) return;
+        if ($sale->team_id && Team::headedBy($user->id)->where('id', $sale->team_id)->exists()) return;
         
         // Check if user is a sub-team head and the sale belongs to their sub-team member
         $subTeamHead = \App\Models\SubTeamHead::where('user_id', $user->id)->first();

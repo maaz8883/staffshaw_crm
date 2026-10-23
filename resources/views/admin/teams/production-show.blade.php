@@ -17,7 +17,7 @@
     <div>
         <h5 class="mb-0">{{ $team->name }}</h5>
         <div class="small text-muted">
-            Team head: {{ $team->teamHead?->name ?? '—' }} · {{ $report->count() }} members
+            Team head: {{ $team->headNames() ?: '—' }} · {{ $report->count() }} members
         </div>
     </div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Period">

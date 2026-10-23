@@ -105,7 +105,7 @@ class TeamMemberController extends Controller
             abort(404);
         }
 
-        if ((int) $team->team_head_id === (int) $user->id) {
+        if ($team->isHeadedBy($user->id)) {
             return back()->with('error', 'You cannot remove the team lead from the team.');
         }
 
@@ -143,7 +143,7 @@ class TeamMemberController extends Controller
             return;
         }
 
-        if ($user && (int) $team->team_head_id === (int) $user->id) {
+        if ($user && $team->isHeadedBy($user->id)) {
             return;
         }
 
@@ -163,9 +163,9 @@ class TeamMemberController extends Controller
     private function availableUsersQuery(Team $team)
     {
         $otherHeadIds = Team::query()
-            ->whereNotNull('team_head_id')
             ->where('id', '!=', $team->id)
-            ->pluck('team_head_id');
+            ->get(['team_head_id', 'co_head_id'])
+            ->flatMap->headIds();
 
         $q = User::query()
             ->accountActive()

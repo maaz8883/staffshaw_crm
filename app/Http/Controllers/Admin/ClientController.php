@@ -26,7 +26,7 @@ class ClientController extends Controller
 
     private function isTeamHead(): bool
     {
-        return Team::where('team_head_id', Auth::id())->exists();
+        return Team::headedBy(Auth::id())->exists();
     }
 
     private function isProjectManager(): bool
@@ -48,7 +48,7 @@ class ClientController extends Controller
         }
 
         if ($this->isTeamHead()) {
-            return Team::where('team_head_id', $user->id)->pluck('id');
+            return Team::headedBy($user->id)->pluck('id');
         }
 
         $subTeamHead = SubTeamHead::where('user_id', $user->id)->first();
@@ -101,7 +101,7 @@ class ClientController extends Controller
         $user = Auth::user();
 
         if ($this->isTeamHead()) {
-            return Team::where('team_head_id', $user->id)->value('id');
+            return Team::headedBy($user->id)->value('id');
         }
 
         $subTeamHead = SubTeamHead::where('user_id', $user->id)->first();
@@ -494,7 +494,7 @@ class ClientController extends Controller
 
         if ($this->isTeamHead()) {
             return Team::query()
-                ->where('team_head_id', Auth::id())
+                ->headedBy(Auth::id())
                 ->orderBy('name')
                 ->get(['id', 'name']);
         }
@@ -532,7 +532,7 @@ class ClientController extends Controller
         }
 
         if ($this->isTeamHead()) {
-            $query->whereIn('team_id', Team::where('team_head_id', $user->id)->pluck('id'));
+            $query->whereIn('team_id', Team::headedBy($user->id)->pluck('id'));
 
             return;
         }

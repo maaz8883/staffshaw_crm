@@ -29,7 +29,7 @@ class ReportController extends Controller
 {
     private function isTeamHead(): bool
     {
-        return Team::where('team_head_id', Auth::id())->exists();
+        return Team::headedBy(Auth::id())->exists();
     }
 
     private function isAgent(): bool
@@ -55,7 +55,7 @@ class ReportController extends Controller
     /** @return Collection<int, int> */
     private function headedTeamIds(): Collection
     {
-        return Team::where('team_head_id', Auth::id())->pluck('id');
+        return Team::headedBy(Auth::id())->pluck('id');
     }
 
     /** Same visibility rules as {@see SaleController::baseQuery()}. */

@@ -17,9 +17,10 @@ class AgentSignupNotificationDispatcher
         $recipients = self::adminsForCompany($newUser->company_id);
 
         if ($newUser->team_id) {
-            $head = Team::query()->find($newUser->team_id)?->teamHead;
-            if ($head && $head->id !== $newUser->id) {
-                $recipients->push($head);
+            foreach (Team::query()->find($newUser->team_id)?->heads() ?? [] as $head) {
+                if ($head->id !== $newUser->id) {
+                    $recipients->push($head);
+                }
             }
         }
 

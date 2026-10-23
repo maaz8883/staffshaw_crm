@@ -101,7 +101,7 @@
                 </thead>
                 <tbody>
                 @forelse($members as $member)
-                    @php $isHead = (int) $team->team_head_id === (int) $member->id; @endphp
+                    @php $isHead = $team->isHeadedBy($member->id); @endphp
                     <tr>
                         <td>
                             {{ $member->name }}

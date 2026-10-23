@@ -86,7 +86,7 @@ class AuthScope
             return collect();
         }
 
-        return Team::where('team_head_id', $user->id)->pluck('id');
+        return Team::headedBy($user->id)->pluck('id');
     }
 
     /** SubTeamHead row IDs where the user is a sub-team head. */

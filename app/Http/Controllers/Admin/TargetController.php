@@ -33,7 +33,7 @@ class TargetController extends Controller
 
         // Team head: only teams where they are the head
         return Team::with(['company', 'users'])
-            ->where('team_head_id', $user->id)
+            ->headedBy($user->id)
             ->orderBy('name')
             ->get();
     }
@@ -46,7 +46,7 @@ class TargetController extends Controller
             return;
         }
 
-        if ((int)$team->team_head_id !== (int)$user->id) {
+        if (! $team->isHeadedBy($user->id)) {
             abort(403, 'You can only manage targets for your own team.');
         }
     }
@@ -61,7 +61,7 @@ class TargetController extends Controller
         TargetCarryForward::ensureMonth($month, $year);
 
         $isAdmin    = $authUser->hasRole(['Admin', 'Manager']);
-        $isTeamHead = Team::where('team_head_id', $authUser->id)->exists();
+        $isTeamHead = Team::headedBy($authUser->id)->exists();
         $isSubTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)->exists();
 
         $withRelations = ['company', 'teamHead.role', 'users.role', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members', 'approvedProjectManagers.role'];
@@ -70,7 +70,7 @@ class TargetController extends Controller
             $teams = Team::with($withRelations)->sales()->orderBy('name')->get();
         } elseif ($isTeamHead) {
             $teams = Team::with($withRelations)
-                ->where('team_head_id', $authUser->id)
+                ->headedBy($authUser->id)
                 ->orderBy('name')
                 ->get();
         } else {
@@ -85,7 +85,7 @@ class TargetController extends Controller
             return $team->users
                 ->filter(fn ($u) => $u->role?->name === Role::AGENT)
                 ->pluck('id')
-                ->merge([$team->team_head_id]);
+                ->merge($team->headIds());
         })->filter()->unique()->values();
 
         $achievedByUser = collect();
@@ -107,9 +107,9 @@ class TargetController extends Controller
         if ($isAdmin) {
             // full org today
         } elseif ($isTeamHead) {
-            $teamIds = Team::where('team_head_id', $authUser->id)->pluck('id');
+            $teamIds = Team::headedBy($authUser->id)->pluck('id');
             $memberIds = \App\Models\User::whereIn('team_id', $teamIds)->pluck('id')
-                ->merge(Team::where('team_head_id', $authUser->id)->pluck('team_head_id'));
+                ->merge(Team::headedBy($authUser->id)->get()->flatMap->headIds());
             $todayQuery->whereIn('user_id', $memberIds->unique());
         } else {
             $todayQuery->where('user_id', $authUser->id);
@@ -178,7 +178,7 @@ class TargetController extends Controller
     {
         $authUser = Auth::user();
 
-        if (! $authUser->hasRole(['Admin', 'Manager']) && (int) $team->team_head_id !== (int) $authUser->id) {
+        if (! $authUser->hasRole(['Admin', 'Manager']) && ! $team->isHeadedBy($authUser->id)) {
             abort(403, 'Only admins and the assigned team head can set this team target.');
         }
 
@@ -221,7 +221,7 @@ class TargetController extends Controller
         $authUser = Auth::user();
         
         // Authorization: Only Admin or Team Head can set sub-team targets
-        if (! $authUser->hasRole(['Admin', 'Manager']) && (int) $team->team_head_id !== (int) $authUser->id) {
+        if (! $authUser->hasRole(['Admin', 'Manager']) && ! $team->isHeadedBy($authUser->id)) {
             abort(403, 'Only admins and team heads can set sub-team targets.');
         }
 
@@ -277,7 +277,7 @@ class TargetController extends Controller
         $authUser = Auth::user();
         
         // Authorization: Admin/Manager, Team Head, or Sub-Team Head
-        if (!$authUser->hasRole(['Admin', 'Manager']) && (int)$team->team_head_id !== (int)$authUser->id) {
+        if (!$authUser->hasRole(['Admin', 'Manager']) && ! $team->isHeadedBy($authUser->id)) {
             $mySubHeadIds = \App\Models\SubTeamHead::where('user_id', $authUser->id)
                 ->where('team_id', $team->id)
                 ->pluck('id');
@@ -318,7 +318,7 @@ class TargetController extends Controller
         // or as an approved Project Manager (joined via Team_Membership).
         $team->load(['users', 'approvedProjectManagers']);
         $belongsToTeam = $team->users->contains('id', $validated['user_id'])
-            || (int) $team->team_head_id === (int) $validated['user_id']
+            || $team->isHeadedBy($validated['user_id'])
             || $team->approvedProjectManagers->contains('id', $validated['user_id']);
 
         if (! $belongsToTeam) {
@@ -369,7 +369,7 @@ class TargetController extends Controller
         $authUser = Auth::user();
 
         $isAdmin    = $authUser->hasRole(['Admin', 'Manager']);
-        $isTeamHead = (int) $team->team_head_id === (int) $authUser->id;
+        $isTeamHead = $team->isHeadedBy($authUser->id);
         $mySubHeadIds = collect();
 
         if (! $isAdmin && ! $isTeamHead) {
@@ -422,7 +422,7 @@ class TargetController extends Controller
 
             // Must actually belong to this team (member, team head, or approved Project Manager).
             $belongsToTeam = $team->users->contains('id', $targetUser->id)
-                || (int) $team->team_head_id === (int) $targetUser->id
+                || $team->isHeadedBy($targetUser->id)
                 || $team->approvedProjectManagers->contains('id', $targetUser->id);
 
             if (! $belongsToTeam) {

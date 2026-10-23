@@ -154,7 +154,7 @@ class TeamMembershipController extends Controller
             ->with(['user', 'team']);
 
         if (! $user->hasRole([Role::ADMIN, Role::MANAGER])) {
-            $headedTeamIds = Team::where('team_head_id', $user->id)->pluck('id');
+            $headedTeamIds = Team::headedBy($user->id)->pluck('id');
             $query->whereIn('team_id', $headedTeamIds);
         }
 
@@ -225,7 +225,7 @@ class TeamMembershipController extends Controller
         }
 
         $membership->loadMissing('team');
-        $isHead = $membership->team && (int) $membership->team->team_head_id === (int) $user->id;
+        $isHead = $membership->team && $membership->team->isHeadedBy($user->id);
 
         // Headless teams: only Admin/Manager (already returned above) may decide.
         if ($isHead) {
@@ -239,11 +239,8 @@ class TeamMembershipController extends Controller
     {
         $recipients = collect();
 
-        if ($team->team_head_id) {
-            $head = \App\Models\User::find($team->team_head_id);
-            if ($head) {
-                $recipients->push($head);
-            }
+        if ($team->headIds()) {
+            $recipients = $team->heads(); // both team leads
         } else {
             // No team head assigned — fall back to notifying Admins.
             $recipients = $recipients->merge(

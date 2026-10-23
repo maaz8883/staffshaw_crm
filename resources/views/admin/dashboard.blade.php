@@ -392,7 +392,7 @@
                         @if($teams->first())
                         <div class="small text-muted">
                             {{ $teams->first()->users->count() }} members &middot;
-                            Head: {{ $teams->first()->teamHead?->name ?? 'N/A' }}
+                            Head: {{ $teams->first()->headNames() ?: 'N/A' }}
                         </div>
                         @endif
                     </div>
@@ -732,7 +732,7 @@
                         @if($team)
                         <div class="small text-muted">
                             {{ $team->users()->count() }} members &middot;
-                            Head: {{ $team->teamHead?->name ?? 'N/A' }}
+                            Head: {{ $team->headNames() ?: 'N/A' }}
                         </div>
                         @endif
                     </div>

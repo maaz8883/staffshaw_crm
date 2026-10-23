@@ -57,7 +57,7 @@
 
 @forelse($teams as $team)
 @php
-    $canManageTeamTarget = $isAdmin || ($isTeamHead && (int) $team->team_head_id === (int) auth()->id());
+    $canManageTeamTarget = $isAdmin || ($isTeamHead && $team->isHeadedBy(auth()->id()));
     $canManageSubTeamTargets = $canManageTeamTarget;
     $canManageUserTargets = $canManageTeamTarget || $isSubTeamHead;
 
@@ -77,7 +77,7 @@
             $agentRows->push([
                 'user' => $member,
                 'seat' => (int) $member->id === (int) $subHead->user_id ? $subHead->title . ' Head' : $subHead->title,
-                'is_head' => (int) $team->team_head_id === (int) $member->id,
+                'is_head' => $team->isHeadedBy($member->id),
             ]);
         }
     }
@@ -110,8 +110,8 @@
         }
         $agentRows->push([
             'user' => $member,
-            'seat' => (int) $team->team_head_id === (int) $member->id ? 'Team Lead' : 'Agent',
-            'is_head' => (int) $team->team_head_id === (int) $member->id,
+            'seat' => $team->isHeadedBy($member->id) ? 'Team Lead' : 'Agent',
+            'is_head' => $team->isHeadedBy($member->id),
         ]);
     }
 
