@@ -88,7 +88,7 @@ class CrmOverview
             ->latest('sale_date')
             ->limit(5)
             ->get(['id', 'title', 'client_name', 'amount', 'status', 'sale_date', 'user_id']);
-        $teams = Team::query()->sales()->with(['teamHead', 'coHead'])->whereNull('parent_team_id')->orderBy('name')->get();
+        $teams = Team::query()->sales()->with(['teamHead', 'leaders'])->whereNull('parent_team_id')->orderBy('name')->get();
         $teamCards = [];
         foreach ($teams as $team) {
             $target = (float) TeamTarget::query()

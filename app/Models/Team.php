@@ -17,7 +17,6 @@ class Team extends Model
         'company_id',
         'parent_team_id',
         'team_head_id',
-        'co_head_id',
         'sub_team_head_id',
         'name',
         'description',
@@ -35,6 +34,9 @@ class Team extends Model
             if ($team->parent_team_id) {
                 $team->is_production = (bool) Team::query()->whereKey($team->parent_team_id)->value('is_production');
             }
+        });
+        static::deleted(function (Team $team) {
+            \Illuminate\Support\Facades\DB::table('team_heads')->where('team_id', $team->id)->delete();
         });
         static::saved(function (Team $team) {
             if (! $team->parent_team_id && $team->wasChanged('is_production')) {
@@ -59,45 +61,67 @@ class Team extends Model
         return $this->belongsTo(User::class, 'team_head_id');
     }
 
-    /** Second team lead (same rights as the first). */
-    public function coHead(): BelongsTo
+    /**
+     * All team leads (one or more, same rights). team_head_id is kept as the first of them
+     * for older screens; see syncLeaders().
+     */
+    public function leaders(): BelongsToMany
     {
-        return $this->belongsTo(User::class, 'co_head_id');
+        return $this->belongsToMany(User::class, 'team_heads')->withTimestamps()->orderBy('users.name');
     }
 
-    /** Teams this user leads, as team lead or second team lead. */
+    /** Teams this user leads. */
     public function scopeHeadedBy($query, $userId)
     {
         $userId = (int) $userId;
 
-        return $query->where(fn ($q) => $q->where('teams.team_head_id', $userId)->orWhere('teams.co_head_id', $userId));
+        return $query->where(fn ($q) => $q->where('teams.team_head_id', $userId)
+            ->orWhereIn('teams.id', \Illuminate\Support\Facades\DB::table('team_heads')->where('user_id', $userId)->select('team_id')));
     }
 
     public function isHeadedBy($userId): bool
     {
         $userId = (int) $userId;
 
-        return $userId > 0 && ((int) $this->team_head_id === $userId || (int) $this->co_head_id === $userId);
+        return $userId > 0 && in_array($userId, $this->headIds(), true);
     }
 
-    /** Both team leads' user ids (one or two). */
+    /** Every team lead's user id. */
     public function headIds(): array
     {
-        return array_values(array_unique(array_filter([(int) $this->team_head_id, (int) $this->co_head_id])));
+        $ids = $this->relationLoaded('leaders')
+            ? $this->leaders->pluck('id')->all()
+            : ($this->exists ? \Illuminate\Support\Facades\DB::table('team_heads')->where('team_id', $this->id)->pluck('user_id')->all() : []);
+        $ids[] = $this->team_head_id;
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
     }
 
     /** @return \Illuminate\Support\Collection<int, User> */
     public function heads(): \Illuminate\Support\Collection
     {
-        return User::query()->whereIn('id', $this->headIds() ?: [0])->get();
+        return User::query()->whereIn('id', $this->headIds() ?: [0])->orderBy('name')->get();
     }
 
-    /** "Leroy" or "Leroy & Sam" */
+    /** "Leroy" or "Leroy, Sam & Ali" */
     public function headNames(): string
     {
-        return collect([$this->teamHead?->name, $this->coHead?->name])->filter()->unique()->implode(' & ');
+        $names = ($this->relationLoaded('leaders') && $this->leaders->isNotEmpty() ? $this->leaders : $this->heads())->pluck('name');
+        if ($names->count() <= 1) {
+            return (string) $names->first();
+        }
+
+        return $names->slice(0, -1)->implode(', ').' & '.$names->last();
     }
 
+    /** Set the team's leads; the first becomes team_head_id. */
+    public function syncLeaders(array $userIds): void
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+        $this->leaders()->sync($userIds);
+        $this->forceFill(['team_head_id' => $userIds[0] ?? null])->save();
+        $this->unsetRelation('leaders');
+    }
     public function subTeamHead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sub_team_head_id');

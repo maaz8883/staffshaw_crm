@@ -69,7 +69,7 @@ class DemoDataSeeder extends Seeder
             ]
         );
 
-        $team->update(['team_head_id' => $agent1->id]);
+        $team->syncLeaders([$agent1->id]);
 
         $now = Carbon::now();
         $month = (int) $now->month;

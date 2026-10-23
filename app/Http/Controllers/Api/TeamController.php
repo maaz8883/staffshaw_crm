@@ -13,7 +13,7 @@ class TeamController extends Controller
             'company:id,name',
             // Public endpoint: names only, never staff emails
             'teamHead:id,name',
-            'coHead:id,name',
+            'leaders' => fn ($q) => $q->select('users.id', 'users.name'), // names only (public endpoint)
             'subTeamHead:id,name',
             'parentTeam:id,name',
             'subTeams:id,parent_team_id,name',

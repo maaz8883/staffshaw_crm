@@ -30,7 +30,7 @@ class TeamController extends Controller
     {
         $query = Team::query()
             ->select('teams.*')
-            ->with(['company', 'teamHead', 'coHead'])
+            ->with(['company', 'teamHead', 'leaders'])
             ->withCount('users');
 
         AuthScope::scopeByTeam($query, 'id');
@@ -80,8 +80,8 @@ class TeamController extends Controller
 
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
-            'team_head_id'     => 'nullable|exists:users,id',
-            'co_head_id'       => 'nullable|different:team_head_id|exists:users,id',
+            'head_ids'         => 'nullable|array',
+            'head_ids.*'       => 'integer|distinct|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name',
             'description'      => 'nullable|string',
             'brand_ids'        => 'nullable|array',
@@ -94,14 +94,13 @@ class TeamController extends Controller
 
         $team = Team::query()->create([
             'company_id'   => CompanyContext::idForCreate($validated['company_id'] ?? null),
-            'team_head_id' => $validated['team_head_id'] ?? null,
-            'co_head_id'   => $validated['co_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
         ]);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);
+        $team->syncLeaders($validated['head_ids'] ?? []);
         $this->syncSubTeamHeads($team, $validated['sub_heads'] ?? []);
         $this->syncTeamHeadMembership($team);
 
@@ -141,7 +140,7 @@ class TeamController extends Controller
         $team->load([
             'company', 
             'teamHead', 
-            'coHead',
+            'leaders',
             'users' => function($query) {
                 $query->with(['role', 'subTeamHead.user'])->orderBy('name');
             },
@@ -166,11 +165,12 @@ class TeamController extends Controller
                 ->value('target_amount');
         };
 
-        foreach ([$team->teamHead, $team->coHead] as $lead) {
-            if ($lead) {
-                $lead->current_target_amount = $targetLookup($lead->id);
-            }
+        if ($team->leaders->isEmpty() && $team->teamHead) {
+            $team->setRelation('leaders', collect([$team->teamHead]));
         }
+        $team->leaders->each(function ($lead) use ($targetLookup) {
+            $lead->current_target_amount = $targetLookup($lead->id);
+        });
         $team->users->each(function ($member) use ($targetLookup) {
             $member->current_target_amount = $targetLookup($member->id);
         });
@@ -218,8 +218,8 @@ class TeamController extends Controller
 
         $validated = $request->validate([
             'company_id'       => 'nullable|exists:companies,id',
-            'team_head_id'     => 'nullable|exists:users,id',
-            'co_head_id'       => 'nullable|different:team_head_id|exists:users,id',
+            'head_ids'         => 'nullable|array',
+            'head_ids.*'       => 'integer|distinct|exists:users,id',
             'name'             => 'required|string|max:255|unique:teams,name,' . $team->id,
             'description'      => 'nullable|string',
             'brand_ids'        => 'nullable|array',
@@ -234,14 +234,14 @@ class TeamController extends Controller
         
         $team->update([
             'company_id'   => CompanyContext::idForUpdate($team->company_id, $validated['company_id'] ?? null),
-            'team_head_id' => $validated['team_head_id'] ?? null,
-            'co_head_id'   => $validated['co_head_id'] ?? null,
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
         ]);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);
+
+        $team->syncLeaders($validated['head_ids'] ?? []);
 
         // Preserve sub-head IDs so users.sub_team_head_id stays intact
         $this->syncSubTeamHeads($team, $validated['sub_heads'] ?? []);
@@ -396,6 +396,7 @@ class TeamController extends Controller
      */
     private function productionTeamView(Team $team): View
     {
+        $team->loadMissing('leaders');
         $periods = [
             'week' => ['Last 7 days', now()->subDays(7)],
             'month' => ['This month', now()->startOfMonth()],

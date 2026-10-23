@@ -23,7 +23,7 @@
             @endif
         </div>
         <div class="mb-2">
-            <small class="text-muted">Team Lead{{ $team->co_head_id ? 's' : '' }}:</small>
+            <small class="text-muted">Team Lead{{ count($team->headIds()) > 1 ? 's' : '' }}:</small>
             <strong>{{ $team->headNames() ?: 'Not assigned' }}</strong>
         </div>
         <div class="mb-2">
@@ -54,7 +54,7 @@
     </div>
     <div class="card-body">
         {{-- Team Lead(s): one or two --}}
-        @foreach(collect([$team->teamHead, $team->coHead])->filter()->unique('id') as $lead)
+        @foreach($team->leaders as $lead)
         <div class="mb-3">
             <div class="d-flex align-items-center mb-2">
                 <i class="bi bi-person-badge-fill text-primary fs-5 me-2"></i>

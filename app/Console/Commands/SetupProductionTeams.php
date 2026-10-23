@@ -75,7 +75,7 @@ class SetupProductionTeams extends Command
 
             $head = $this->user(self::HEAD['email'], self::HEAD['name'], $production, $company, $roleId, $created, $skipped);
             if ($head && ! $production->team_head_id) {
-                $production->update(['team_head_id' => $head->id]);
+                $production->syncLeaders([$head->id]);
             }
 
             foreach (self::DEPARTMENTS as $name => [$account, $members]) {

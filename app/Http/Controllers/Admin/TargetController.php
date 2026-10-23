@@ -64,7 +64,7 @@ class TargetController extends Controller
         $isTeamHead = Team::headedBy($authUser->id)->exists();
         $isSubTeamHead = \App\Models\SubTeamHead::where('user_id', $authUser->id)->exists();
 
-        $withRelations = ['company', 'teamHead.role', 'users.role', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members', 'approvedProjectManagers.role'];
+        $withRelations = ['company', 'leaders', 'teamHead.role', 'users.role', 'users.subTeamHead', 'subTeamHeads.user', 'subTeamHeads.members', 'approvedProjectManagers.role'];
 
         if ($isAdmin) {
             $teams = Team::with($withRelations)->sales()->orderBy('name')->get();

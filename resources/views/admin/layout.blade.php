@@ -350,6 +350,13 @@
                             ? $el.closest('.mb-3, .col-md-6, .col-md-4, .form-group, td, .card-body')
                             : $(document.body)
                     });
+                    // Pass picks / removals on to plain JS "change" listeners too
+                    if (!$el.data('crm-change-bound')) {
+                        $el.data('crm-change-bound', true);
+                        $el.on('select2:select select2:unselect select2:clear', function () {
+                            this.dispatchEvent(new Event('change', { bubbles: true }));
+                        });
+                    }
                 });
                 // Single searchable dropdowns (e.g. Brand)
                 $root.find('select.js-select2').each(function () {

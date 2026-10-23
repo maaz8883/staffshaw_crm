@@ -414,7 +414,7 @@ class DashboardController extends Controller
             ->map(fn ($rows) => $rows->map->user->filter()->unique('id')->values());
 
         return Team::query()->sales()
-            ->with('company')
+            ->with(['company', 'leaders'])
             ->orderBy('name')
             ->get()
             ->map(function (Team $team) use (
@@ -510,7 +510,7 @@ class DashboardController extends Controller
 
     private function teamHeadDashboard(User $user, int $month, int $year): View
     {
-        $teams = Team::with(['company', 'users.role', 'teamHead'])
+        $teams = Team::with(['company', 'users.role', 'teamHead', 'leaders'])
             ->headedBy($user->id)
             ->get();
 

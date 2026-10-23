@@ -15,6 +15,14 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    protected static function booted(): void
+    {
+        // team_heads has no foreign keys (MyISAM tables): drop a deleted user's team-lead rows
+        static::deleted(function (User $user) {
+            \Illuminate\Support\Facades\DB::table('team_heads')->where('user_id', $user->id)->delete();
+        });
+    }
+
     public const ACCOUNT_ACTIVE = 'active';
 
     public const ACCOUNT_PENDING = 'pending';

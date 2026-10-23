@@ -23,7 +23,7 @@ class TeamMemberController extends Controller
 
         $canManageMembers = Auth::user()?->hasRole(Role::ADMIN) ?? false;
 
-        $team->load(['users.role', 'teamHead', 'subTeamHeads']);
+        $team->load(['users.role', 'teamHead', 'leaders', 'subTeamHeads']);
         $availableUsers = $canManageMembers
             ? $this->availableUsersQuery($team)->get()
             : collect();
@@ -164,8 +164,11 @@ class TeamMemberController extends Controller
     {
         $otherHeadIds = Team::query()
             ->where('id', '!=', $team->id)
-            ->get(['team_head_id', 'co_head_id'])
-            ->flatMap->headIds();
+            ->whereNotNull('team_head_id')
+            ->pluck('team_head_id')
+            ->merge(\Illuminate\Support\Facades\DB::table('team_heads')->where('team_id', '!=', $team->id)->pluck('user_id'))
+            ->unique()
+            ->values();
 
         $q = User::query()
             ->accountActive()

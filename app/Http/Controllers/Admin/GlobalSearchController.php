@@ -59,7 +59,7 @@ class GlobalSearchController extends Controller
         $viewer = Auth::user();
         $query = User::query()
             ->accountActive()
-            ->with(['role', 'team:id,name,team_head_id,co_head_id'])
+            ->with(['role', 'team:id,name,team_head_id', 'team.leaders'])
             ->select(['id', 'name', 'email', 'role_id', 'team_id']);
 
         AuthScope::scopeUsers($query);

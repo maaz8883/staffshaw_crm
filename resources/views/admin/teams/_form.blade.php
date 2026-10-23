@@ -20,29 +20,15 @@
         value="{{ old('name', $team->name ?? '') }}" required>
 </div>
 
+@php
+    // Current leads: old input after a failed save, else the team's leads
+    $selectedLeadIds = collect(old('head_ids', isset($team) && $team->exists ? $team->headIds() : []))->map(fn ($id) => (int) $id)->all();
+@endphp
 <div class="mb-3">
-    <label for="team_head_id" class="form-label">Team Lead</label>
-    <select id="team_head_id" name="team_head_id" class="form-select js-select2">
-        <option value="">-- No Team Head --</option>
+    <label for="team_head_id" class="form-label">Team Lead(s) <span class="text-muted small">— pick one or more, all get the same rights</span></label>
+    <select id="team_head_id" name="head_ids[]" class="form-select js-select2-multi" multiple data-placeholder="Select team lead(s)">
         @foreach($allUsers as $user)
-            <option value="{{ $user->id }}" {{ old('team_head_id', $team->team_head_id ?? '') == $user->id ? 'selected' : '' }}>
-                {{ $user->name }}
-                @unless($singleCompany)
-                @if($user->company)
-                    ({{ $user->company->name }})
-                @endif
-                @endunless
-            </option>
-        @endforeach
-    </select>
-</div>
-
-<div class="mb-3">
-    <label for="co_head_id" class="form-label">Second Team Lead <span class="text-muted small">(optional — same rights as the team lead)</span></label>
-    <select id="co_head_id" name="co_head_id" class="form-select js-select2">
-        <option value="">-- No second lead --</option>
-        @foreach($allUsers as $user)
-            <option value="{{ $user->id }}" {{ old('co_head_id', $team->co_head_id ?? '') == $user->id ? 'selected' : '' }}>
+            <option value="{{ $user->id }}" @selected(in_array((int) $user->id, $selectedLeadIds, true))>
                 {{ $user->name }}
                 @unless($singleCompany)
                 @if($user->company)
@@ -168,13 +154,13 @@
     }
 
     function getAvailableUsers(currentSelectValue = null) {
-        const teamHeadId = teamHeadSelect.value;
-        const coHeadId = document.getElementById('co_head_id')?.value || '';
+        // Every picked team lead (multi-select)
+        const leadIds = Array.from(teamHeadSelect.selectedOptions).map(o => String(o.value));
         const selectedSubHeadUsers = getSelectedSubHeadUsers();
         
         return allTeamUsers.filter(user => {
             // Exclude team head
-            if (String(user.id) === String(teamHeadId) || String(user.id) === String(coHeadId)) return false;
+            if (leadIds.includes(String(user.id))) return false;
             
             // Include if this is the current select's value
             if (currentSelectValue && String(user.id) === String(currentSelectValue)) return true;
@@ -245,9 +231,6 @@
 
     // Update sub-team head dropdowns when team head changes
     teamHeadSelect.addEventListener('change', function() {
-        updateAllSubHeadDropdowns();
-    });
-    document.getElementById('co_head_id')?.addEventListener('change', function() {
         updateAllSubHeadDropdowns();
     });
 
