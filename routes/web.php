@@ -60,6 +60,8 @@ Route::prefix('admin')->group(function () {
     // but a password change signs out every other device (auth.session)
     Route::middleware(['auth', 'auth.session', 'active.account'])->group(function () {
 
+        Route::get('/open-hrm', [AuthController::class, 'openHrm'])->name('admin.open.hrm');
+
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
         Route::get('/production/overview', [\App\Http\Controllers\Admin\ProductionDashboardController::class, 'overview'])
             ->middleware('role:Production,Admin,Manager')

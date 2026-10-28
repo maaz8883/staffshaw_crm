@@ -75,15 +75,85 @@ class AuthController extends Controller
 
     public function globalLogout(Request $request)
     {
-        if ($user = Auth::user()) {
-            $user->update(['session_token' => null]);
+        $redirectTo = $this->safeRedirect($request, $this->hrmLoginUrl());
+
+        try {
+            if ($user = Auth::user()) {
+                $user->update(['session_token' => null]);
+            }
+
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        } catch (\Throwable $e) {
+            // Still send user to HRM login if MySQL is saturated (Too many connections)
+            report($e);
+            try {
+                Auth::logout();
+            } catch (\Throwable) {
+                //
+            }
         }
 
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        return redirect($redirectTo);
+    }
 
-        return redirect($this->safeRedirect($request, $this->hrmLoginUrl()));
+    /**
+     * Authenticated CRM user → open HRM via one-time SSO token.
+     */
+    public function openHrm(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return redirect()->route('admin.login');
+        }
+
+        $hrmAppUrl = rtrim((string) config('services.hrm.url'), '/');
+        $ssoSecret = config('services.hrm.sso_secret');
+
+        if (!$hrmAppUrl || !$ssoSecret) {
+            return redirect()->route('admin.dashboard')->withErrors([
+                'email' => 'SSO is not configured. Contact admin.',
+            ]);
+        }
+
+        try {
+            $client = new \GuzzleHttp\Client(['timeout' => 10]);
+            $response = $client->post("{$hrmAppUrl}/api/integrations/crm/sso/issue", [
+                'headers' => [
+                    'X-SSO-Secret' => $ssoSecret,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                'json' => ['email' => $user->email],
+            ]);
+
+            $body = json_decode($response->getBody()->getContents(), true);
+
+            if (!($body['success'] ?? false) || empty($body['redirectUrl'])) {
+                return redirect()->route('admin.dashboard')->withErrors([
+                    'email' => $body['error'] ?? 'Could not open HRM. Try again.',
+                ]);
+            }
+
+            return redirect()->away($body['redirectUrl']);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $message = 'Could not open HRM. Ensure your account exists there.';
+            $status = $e->getResponse() ? $e->getResponse()->getStatusCode() : 0;
+            if ($status === 404) {
+                $message = 'No HRM account for this email. Contact HR.';
+            } elseif ($status === 403) {
+                $message = 'Your HRM account is deactivated. Contact HR.';
+            } elseif ($status === 401) {
+                $message = 'SSO authentication failed. Contact admin.';
+            }
+
+            return redirect()->route('admin.dashboard')->withErrors(['email' => $message]);
+        } catch (\Exception $e) {
+            return redirect()->route('admin.dashboard')->withErrors([
+                'email' => 'Could not open HRM. Please try again.',
+            ]);
+        }
     }
 
     public function hrmSso(Request $request)

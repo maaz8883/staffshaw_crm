@@ -37,6 +37,12 @@
             <div id="global-search-results" class="global-search-dropdown" hidden role="listbox"></div>
         </div>
         <div class="topbar-actions">
+            @if(env('HRM_APP_URL'))
+            <a class="topbar-app-link" href="{{ route('admin.open.hrm') }}" title="HRM System">
+                <i class="bi bi-person-badge"></i>
+                <span>HRM System</span>
+            </a>
+            @endif
             <button id="sidebar-toggle" class="topbar-icon" title="Toggle sidebar" type="button">
                 <i class="bi bi-list"></i>
             </button>
@@ -95,14 +101,6 @@
                     <i class="bi bi-speedometer2"></i> <span class="nav-label">Dashboard</span>
                 </a>
             </li>
-
-            @if(env('HRM_APP_URL'))
-            <li class="nav-item">
-                <a class="nav-link" href="{{ rtrim(env('HRM_APP_URL'), '/') }}/dashboard" title="HRM System">
-                    <i class="bi bi-person-badge"></i> <span class="nav-label">HRM System</span>
-                </a>
-            </li>
-            @endif
 
             @if(! $isPpc && ! $isIt && ! $isHr)
             @if(! $isProduction)

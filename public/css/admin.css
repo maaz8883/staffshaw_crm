@@ -1172,6 +1172,27 @@ body {
     font-size: 13px;
 }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.topbar-app-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-right: 4px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.topbar-app-link:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.topbar-app-link i { font-size: 15px; color: var(--text-muted); }
+@media (max-width: 576px) {
+    .topbar-app-link span { display: none; }
+}
 .topbar-icon {
     width: 34px; height: 34px;
     border: none; background: transparent;
