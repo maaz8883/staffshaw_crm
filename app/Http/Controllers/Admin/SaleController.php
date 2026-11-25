@@ -793,6 +793,11 @@ class SaleController extends Controller
     {
         $user = Auth::user();
 
+        // Approved sales are locked — only Admin may edit (stops amount / agent changes after approval).
+        if ($sale->isApproved()) {
+            return $user->hasRole(Role::ADMIN);
+        }
+
         if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return true;
         }
