@@ -177,6 +177,12 @@
                 <small class="text-muted d-block">Agent</small>
                 @if($sale->user)
                     {{ $sale->user->name }}
+                @elseif($sale->sales_agent_name)
+                    {{ $sale->sales_agent_name }}
+                    <span class="badge bg-secondary" title="Imported name — person not linked in CRM">Former</span>
+                    @if($canEdit ?? false)
+                        <a href="{{ route('admin.sales.edit', $sale) }}" class="small ms-1">Link CRM user</a>
+                    @endif
                 @else
                     <span class="badge bg-warning text-dark">Unassigned</span>
                     @if($canEdit ?? false)
@@ -186,11 +192,25 @@
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Account Manager</small>
-                {{ $sale->accountManager?->name ?? '—' }}
+                @if($sale->accountManager)
+                    {{ $sale->accountManager->name }}
+                @elseif($sale->account_manager_name)
+                    {{ $sale->account_manager_name }}
+                    <span class="badge bg-secondary">Former</span>
+                @else
+                    —
+                @endif
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Project Manager</small>
-                {{ $sale->projectManager?->name ?? '—' }}
+                @if($sale->projectManager)
+                    {{ $sale->projectManager->name }}
+                @elseif($sale->project_manager_name)
+                    {{ $sale->project_manager_name }}
+                    <span class="badge bg-secondary">Former</span>
+                @else
+                    —
+                @endif
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Merchant</small>

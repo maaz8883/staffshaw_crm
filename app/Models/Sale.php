@@ -38,8 +38,11 @@ class Sale extends Model
         'received_amount',
         'sale_date',
         'user_id',
+        'sales_agent_name',
         'account_manager_id',
+        'account_manager_name',
         'project_manager_id',
+        'project_manager_name',
         'team_id',
         'company_id',
         'brand_id',
@@ -192,5 +195,27 @@ class Sale extends Model
     public function remainingAmount(): float
     {
         return round(max(0, (float) $this->amount - (float) $this->received_amount), 2);
+    }
+
+    /** Live CRM user, or imported historical name when that person is no longer in the system. */
+    public function agentDisplayName(): ?string
+    {
+        return $this->user?->name ?: ($this->sales_agent_name ?: null);
+    }
+
+    public function accountManagerDisplayName(): ?string
+    {
+        return $this->accountManager?->name ?: ($this->account_manager_name ?: null);
+    }
+
+    public function projectManagerDisplayName(): ?string
+    {
+        return $this->projectManager?->name ?: ($this->project_manager_name ?: null);
+    }
+
+    /** True when we only have a text name (no linked user account). */
+    public function agentIsHistoricalOnly(): bool
+    {
+        return $this->user_id === null && filled($this->sales_agent_name);
     }
 }

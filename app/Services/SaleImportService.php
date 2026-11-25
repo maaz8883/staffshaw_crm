@@ -286,16 +286,19 @@ class SaleImportService
             $status = 'completed';
         }
 
-        // Sales Agent: match CRM user if possible; otherwise leave unassigned (never force importer).
+        // Sales Agent: link CRM user when found; otherwise keep the sheet name for history.
         $agentRaw = trim($row['sales_agent'] ?? '');
         $agent = $agentRaw !== '' ? $this->resolveUser($agentRaw, $users) : null;
+        $agentName = null;
         if ($agentRaw !== '' && ! $agent) {
-            $warnings[] = "Sales Agent \"{$agentRaw}\" not found — sale saved without agent (assign later in CRM).";
+            $agentName = Str::limit($agentRaw, 255, '');
+            $warnings[] = "Sales Agent \"{$agentRaw}\" not in CRM — name saved on sale for history (not linked to a login).";
         } elseif ($agentRaw === '') {
-            $warnings[] = 'No Sales Agent in sheet — sale saved without agent (assign later in CRM).';
+            $warnings[] = 'No Sales Agent in sheet — sale saved without agent.';
         }
         if ($agent && ! $canAssignOthers && (int) $agent->id !== (int) $actor->id) {
-            $warnings[] = 'Sales Agent “'.$agent->name.'” skipped (you can only assign yourself) — sale saved without agent.';
+            $agentName = Str::limit($agent->name, 255, '');
+            $warnings[] = 'Sales Agent “'.$agent->name.'” skipped (you can only assign yourself) — name kept on sale, not linked.';
             $agent = null;
         }
 
@@ -322,24 +325,30 @@ class SaleImportService
         }
 
         $accountManagerId = null;
+        $amName = null;
         $amRaw = trim($row['account_manager'] ?? '');
         if ($amRaw !== '') {
             $am = $this->resolveUser($amRaw, $users);
             if ($am) {
                 $accountManagerId = $am->id;
+                $amName = $am->name;
             } else {
-                $warnings[] = "Account Manager \"{$amRaw}\" not found — left blank.";
+                $amName = Str::limit($amRaw, 255, '');
+                $warnings[] = "Account Manager \"{$amRaw}\" not in CRM — name saved for history.";
             }
         }
 
         $projectManagerId = null;
+        $pmName = null;
         $pmRaw = trim($row['project_manager'] ?? '');
         if ($pmRaw !== '') {
             $pm = $this->resolveUser($pmRaw, $users);
             if ($pm) {
                 $projectManagerId = $pm->id;
+                $pmName = $pm->name;
             } else {
-                $warnings[] = "Project Manager \"{$pmRaw}\" not found — left blank.";
+                $pmName = Str::limit($pmRaw, 255, '');
+                $warnings[] = "Project Manager \"{$pmRaw}\" not in CRM — name saved for history.";
             }
         }
 
@@ -382,8 +391,11 @@ class SaleImportService
             'received_amount' => $paid,
             'sale_date' => $saleDate,
             'user_id' => $agent?->id,
+            'sales_agent_name' => $agent?->name ?? $agentName,
             'account_manager_id' => $accountManagerId,
+            'account_manager_name' => $amName,
             'project_manager_id' => $projectManagerId,
+            'project_manager_name' => $pmName,
             'team_id' => $teamId,
             'company_id' => $companyId,
             'brand_id' => $brand->id,

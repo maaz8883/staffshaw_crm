@@ -239,9 +239,16 @@ class SaleController extends Controller
                 '<span class="badge bg-' . self::statusColor($s->status) . '">' . e($s->statusLabel()) . '</span>')
             ->addColumn('approval_badge', fn (Sale $s) =>
                 '<span class="badge bg-' . self::approvalColor($s->approval_status) . '">' . self::approvalLabel($s->approval_status) . '</span>')
-            ->addColumn('agent_name', fn (Sale $s) => $s->user
-                ? e($s->user->name)
-                : '<span class="badge bg-warning text-dark">Unassigned</span>')
+            ->addColumn('agent_name', function (Sale $s) {
+                if ($s->user) {
+                    return e($s->user->name);
+                }
+                if ($s->sales_agent_name) {
+                    return e($s->sales_agent_name).' <span class="badge bg-secondary" title="Name from import — no CRM login">Former</span>';
+                }
+
+                return '<span class="badge bg-warning text-dark">Unassigned</span>';
+            })
             ->addColumn('team_name', fn (Sale $s) => e($s->team?->name ?? '-'))
             ->addColumn('brand_name', fn (Sale $s) => e($s->brand?->name ?? '-'))
             ->addColumn('select', function (Sale $sale) {

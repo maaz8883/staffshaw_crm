@@ -75,8 +75,8 @@
                     <li><strong>Order Date</strong> — YYYY-MM-DD or MM/DD/YYYY (US)</li>
                     <li><strong>Paid Amount + Balance</strong> = total sale amount</li>
                     <li><strong>Status</strong> — Pending, Completed, Cancelled (blank = Completed)</li>
-                    <li><strong>Sales Agent</strong> — optional; if name matches CRM user it is assigned, otherwise sale is saved <em>Unassigned</em> (assign later on Edit)</li>
-                    <li><strong>Account / Project Manager</strong> — optional; unknown names are left blank (sale still imports)</li>
+                    <li><strong>Sales Agent</strong> — match CRM user when possible; if the person left / isn’t in CRM, their <em>name is still saved</em> on the sale (shown as Former)</li>
+                    <li><strong>Account / Project Manager</strong> — same: link if found, otherwise keep the sheet name for history</li>
                     <li>Do <strong>not</strong> fill merchant summary columns (Gross Total, Disputes, etc.) — those come from reports</li>
                 </ul>
                 <p class="mb-1 fw-semibold">Your CRM brands</p>

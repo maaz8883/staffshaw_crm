@@ -135,7 +135,11 @@
                 </option>
             @endforeach
         </select>
-        <div class="form-text">Imported sales with no matching agent can be assigned here.</div>
+        @if(!empty($sale->sales_agent_name) && empty($sale->user_id))
+            <div class="form-text">Import record: <strong>{{ $sale->sales_agent_name }}</strong> (not linked — pick a CRM user above if they still work here).</div>
+        @else
+            <div class="form-text">Imported sales with no matching agent can be assigned here.</div>
+        @endif
     </div>
     @endif
 
@@ -176,6 +180,9 @@
                 </option>
             @endforeach
         </select>
+        @if(isset($sale) && $sale->account_manager_name && ! $sale->account_manager_id)
+            <div class="form-text">Import record: <strong>{{ $sale->account_manager_name }}</strong></div>
+        @endif
     </div>
 
     <div class="col-md-6 mb-3">
@@ -189,6 +196,9 @@
                 </option>
             @endforeach
         </select>
+        @if(isset($sale) && $sale->project_manager_name && ! $sale->project_manager_id)
+            <div class="form-text">Import record: <strong>{{ $sale->project_manager_name }}</strong></div>
+        @endif
     </div>
 
     <div class="col-12 mb-3">
