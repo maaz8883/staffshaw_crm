@@ -48,6 +48,41 @@ class TrelloApiClient
         return is_array($boards) ? array_values($boards) : [];
     }
 
+    /**
+     * Trello global search (cards + boards) — same source as trello.com quick search.
+     *
+     * @return array{cards: list<array<string, mixed>>, boards: list<array<string, mixed>>}
+     */
+    public function search(string $query, int $cardLimit = 10, int $boardLimit = 8): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return ['cards' => [], 'boards' => []];
+        }
+
+        $result = $this->get('search', [
+            'query' => $query,
+            'modelTypes' => 'cards,boards',
+            'cards_limit' => max(1, min(20, $cardLimit)),
+            'boards_limit' => max(1, min(20, $boardLimit)),
+            'partial' => 'true',
+            'card_fields' => 'id,name,idBoard,idList,closed,url,shortUrl',
+            'card_board' => 'true',
+            'card_list' => 'true',
+            'board_fields' => 'id,name,closed,url,shortUrl,prefs,idOrganization',
+            'organization' => 'true',
+            'organization_fields' => 'displayName,name',
+        ]);
+
+        $cards = is_array($result['cards'] ?? null) ? array_values($result['cards']) : [];
+        $boards = is_array($result['boards'] ?? null) ? array_values($result['boards']) : [];
+
+        return [
+            'cards' => array_values(array_filter($cards, fn ($c) => empty($c['closed']))),
+            'boards' => array_values(array_filter($boards, fn ($b) => empty($b['closed']))),
+        ];
+    }
+
     /** @return array<string, mixed> */
     public function board(string $boardId): array
     {

@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SaleController;
+use App\Http\Controllers\Admin\SaleImportController;
 use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\TeamMemberController;
@@ -219,6 +220,7 @@ Route::prefix('admin')->group(function () {
             Route::get('reports/company',  [ReportController::class, 'company'])->name('admin.reports.company');
             Route::get('reports/team',     [ReportController::class, 'team'])->name('admin.reports.team');
             Route::get('reports/sales',    [ReportController::class, 'sales'])->name('admin.reports.sales');
+            Route::get('reports/merchants',[ReportController::class, 'merchants'])->name('admin.reports.merchants');
             Route::get('reports/user',     [ReportController::class, 'user'])->name('admin.reports.user');
             Route::get('reports/leads',    [ReportController::class, 'leads'])->name('admin.reports.leads');
             Route::get('reports/invoices', [ReportController::class, 'invoices'])->name('admin.reports.invoices');
@@ -240,6 +242,9 @@ Route::prefix('admin')->group(function () {
         Route::middleware('role:Admin,Agent,Manager,Project Manager,Production')->group(function () {
             Route::get('trello', [TrelloController::class, 'index'])->name('admin.trello.index');
             Route::get('trello/boards/{boardId}', [TrelloController::class, 'board'])->name('admin.trello.board');
+            Route::get('trello/teams/{team}/search', [TrelloController::class, 'search'])
+                ->name('admin.trello.search')
+                ->whereNumber('team');
             Route::get('trello/teams/{team}/boards/{boardId}/live', [TrelloController::class, 'live'])
                 ->name('admin.trello.board.live')
                 ->whereNumber('team');
@@ -299,6 +304,9 @@ Route::prefix('admin')->group(function () {
         // ── Selling: Admin + Agent + Team Head + Project Manager (Requirements 6, 7) ──
         // Registered before the view routes so sales/create isn't caught by sales/{sale}
         Route::middleware('role:Admin,Agent,Manager,Project Manager')->group(function () {
+            Route::get('sales/import', [SaleImportController::class, 'show'])->name('admin.sales.import');
+            Route::get('sales/import/template', [SaleImportController::class, 'template'])->name('admin.sales.import.template');
+            Route::post('sales/import', [SaleImportController::class, 'store'])->name('admin.sales.import.store');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
             Route::delete('sales/{sale}',             [SaleController::class, 'destroy'])->name('admin.sales.destroy');

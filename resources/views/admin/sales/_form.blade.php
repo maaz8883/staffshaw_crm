@@ -123,6 +123,74 @@
         <div class="form-text">Defaults from your Front/Upsell seat when set. Refunds are marked by admin or team lead.</div>
     </div>
 
+    @if(isset($sale))
+    <div class="col-md-6 mb-3">
+        <label for="user_id" class="form-label">Sales Agent</label>
+        <select id="user_id" name="user_id" class="form-select js-select2" data-placeholder="Unassigned">
+            <option value="">— Unassigned —</option>
+            @foreach($staffUsers ?? [] as $u)
+                <option value="{{ $u->id }}"
+                    {{ (string) old('user_id', $sale->user_id ?? '') === (string) $u->id ? 'selected' : '' }}>
+                    {{ $u->name }}
+                </option>
+            @endforeach
+        </select>
+        <div class="form-text">Imported sales with no matching agent can be assigned here.</div>
+    </div>
+    @endif
+
+    <div class="col-md-6 mb-3">
+        <label for="merchant" class="form-label">Merchant</label>
+        <input type="text" id="merchant" name="merchant" class="form-control" list="merchant-suggestions"
+            maxlength="120"
+            value="{{ old('merchant', $sale->merchant ?? '') }}"
+            placeholder="e.g. Stripe, PayPal, Bank">
+        <datalist id="merchant-suggestions">
+            <option value="Stripe"></option>
+            <option value="PayPal"></option>
+            <option value="Square"></option>
+            <option value="Authorize.net"></option>
+            <option value="Bank Transfer"></option>
+            <option value="Cash"></option>
+        </datalist>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label class="form-label d-block">PPC</label>
+        @php $ppc = (string) old('is_ppc', isset($sale) ? ($sale->is_ppc ? '1' : '0') : '0'); @endphp
+        <div class="form-check form-switch mt-1">
+            <input class="form-check-input" type="checkbox" role="switch" id="is_ppc" name="is_ppc" value="1"
+                {{ $ppc === '1' ? 'checked' : '' }}>
+            <label class="form-check-label" for="is_ppc">This sale came from PPC</label>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label for="account_manager_id" class="form-label">Account Manager</label>
+        <select id="account_manager_id" name="account_manager_id" class="form-select js-select2" data-placeholder="Optional">
+            <option value="">— None —</option>
+            @foreach($staffUsers ?? [] as $u)
+                <option value="{{ $u->id }}"
+                    {{ (string) old('account_manager_id', $sale->account_manager_id ?? '') === (string) $u->id ? 'selected' : '' }}>
+                    {{ $u->name }}
+                </option>
+            @endforeach
+        </select>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <label for="project_manager_id" class="form-label">Project Manager</label>
+        <select id="project_manager_id" name="project_manager_id" class="form-select js-select2" data-placeholder="Optional">
+            <option value="">— None —</option>
+            @foreach($staffUsers ?? [] as $u)
+                <option value="{{ $u->id }}"
+                    {{ (string) old('project_manager_id', $sale->project_manager_id ?? '') === (string) $u->id ? 'selected' : '' }}>
+                    {{ $u->name }}
+                </option>
+            @endforeach
+        </select>
+    </div>
+
     <div class="col-12 mb-3">
         <label for="notes" class="form-label">Description</label>
         <textarea id="notes" name="notes" class="form-control" rows="3">{{ old('notes', $sale->notes ?? '') }}</textarea>

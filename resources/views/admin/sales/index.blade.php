@@ -17,6 +17,11 @@
     @if(! auth()->user()->hasRole(['Admin', 'Finance']))
     <a href="{{ route('admin.sales.create') }}" class="btn btn-primary">Add Sale</a>
     @endif
+    @if(auth()->user()->hasRole(['Admin', 'Manager', 'Agent', 'Project Manager']))
+    <a href="{{ route('admin.sales.import') }}" class="btn btn-outline-primary">
+        <i class="bi bi-upload"></i> Import CSV
+    </a>
+    @endif
 
     @if(!$isAgent)
     {{-- Team filter only when there's more than one team to pick (a team lead has just theirs) --}}

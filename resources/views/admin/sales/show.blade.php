@@ -167,7 +167,30 @@
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Agent</small>
-                {{ $sale->user?->name ?? '-' }}
+                @if($sale->user)
+                    {{ $sale->user->name }}
+                @else
+                    <span class="badge bg-warning text-dark">Unassigned</span>
+                    @if($canEdit ?? false)
+                        <a href="{{ route('admin.sales.edit', $sale) }}" class="small ms-1">Assign agent</a>
+                    @endif
+                @endif
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Account Manager</small>
+                {{ $sale->accountManager?->name ?? '—' }}
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Project Manager</small>
+                {{ $sale->projectManager?->name ?? '—' }}
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Merchant</small>
+                {{ $sale->merchant ?: '—' }}
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">PPC</small>
+                {{ $sale->is_ppc ? 'Yes' : 'No' }}
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Team</small>

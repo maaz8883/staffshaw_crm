@@ -38,6 +38,8 @@ class Sale extends Model
         'received_amount',
         'sale_date',
         'user_id',
+        'account_manager_id',
+        'project_manager_id',
         'team_id',
         'company_id',
         'brand_id',
@@ -48,6 +50,8 @@ class Sale extends Model
         'refunded_at',
         'refunded_by',
         'notes',
+        'merchant',
+        'is_ppc',
         'approval_status',
         'is_draft',
         'approval_note',
@@ -60,6 +64,8 @@ class Sale extends Model
         'amount'          => 'decimal:2',
         'received_amount' => 'decimal:2',
         'user_id'      => 'integer',
+        'account_manager_id' => 'integer',
+        'project_manager_id' => 'integer',
         'team_id'      => 'integer',
         'company_id'   => 'integer',
         'brand_id'     => 'integer',
@@ -68,12 +74,23 @@ class Sale extends Model
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',
+        'is_ppc'       => 'boolean',
         'is_draft'     => 'boolean',
     ];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function accountManager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'account_manager_id');
+    }
+
+    public function projectManager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'project_manager_id');
     }
 
     public function team(): BelongsTo

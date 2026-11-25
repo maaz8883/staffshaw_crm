@@ -64,7 +64,7 @@ class SaleController extends Controller
             $subTeamHeadIds = \App\Models\SubTeamHead::where('user_id', $user->id)->pluck('id');
 
             if ($subTeamHeadIds->isNotEmpty()) {
-                // Sub-Team Head: own sales + all members under any of their seats
+                // Sub-Team Head: own sales + all members under any of their seats + unassigned on team
                 $subTeamMemberIds = \App\Models\User::whereIn('sub_team_head_id', $subTeamHeadIds)
                     ->pluck('id')
                     ->push($user->id)
@@ -72,10 +72,24 @@ class SaleController extends Controller
                     ->values()
                     ->all();
 
-                $query->whereIn('user_id', $subTeamMemberIds);
+                $query->where(function ($q) use ($subTeamMemberIds, $user) {
+                    $q->whereIn('user_id', $subTeamMemberIds);
+                    if ($user->team_id) {
+                        $q->orWhere(function ($q2) use ($user) {
+                            $q2->whereNull('user_id')->where('team_id', $user->team_id);
+                        });
+                    }
+                });
             } else {
-                // Regular Agent: only their own sales
-                $query->where('user_id', $user->id);
+                // Regular Agent: own sales + unassigned imports on their team
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                    if ($user->team_id) {
+                        $q->orWhere(function ($q2) use ($user) {
+                            $q2->whereNull('user_id')->where('team_id', $user->team_id);
+                        });
+                    }
+                });
             }
         }
 
@@ -220,7 +234,9 @@ class SaleController extends Controller
                 '<span class="badge bg-' . self::statusColor($s->status) . '">' . e($s->statusLabel()) . '</span>')
             ->addColumn('approval_badge', fn (Sale $s) =>
                 '<span class="badge bg-' . self::approvalColor($s->approval_status) . '">' . self::approvalLabel($s->approval_status) . '</span>')
-            ->addColumn('agent_name', fn (Sale $s) => e($s->user?->name ?? '-'))
+            ->addColumn('agent_name', fn (Sale $s) => $s->user
+                ? e($s->user->name)
+                : '<span class="badge bg-warning text-dark">Unassigned</span>')
             ->addColumn('team_name', fn (Sale $s) => e($s->team?->name ?? '-'))
             ->addColumn('brand_name', fn (Sale $s) => e($s->brand?->name ?? '-'))
             ->addColumn('actions', function (Sale $sale) {
@@ -265,7 +281,7 @@ class SaleController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'actions'])
+            ->rawColumns(['amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'agent_name', 'actions'])
             ->toJson();
     }
 
@@ -306,6 +322,7 @@ class SaleController extends Controller
         return view('admin.sales.create', [
             'brands'           => $this->brandsForDropdown(),
             'clients'          => \App\Http\Controllers\Admin\ClientController::forDropdown(),
+            'staffUsers'       => AuthScope::usersForDropdown(),
             'isProjectManager' => $this->isProjectManager(),
             'joinedTeams'      => $this->isProjectManager() ? AuthScope::teamsForDropdown() : collect(),
             'suggestedSaleType'=> $this->suggestedSaleType($user),
@@ -412,7 +429,7 @@ class SaleController extends Controller
     public function show(Sale $sale): View
     {
         $this->authorizeView($sale);
-        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices']);
+        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices', 'accountManager', 'projectManager']);
 
         $canToggleRefund = $this->canToggleRefund($sale);
         $canDecide = $this->canApprove($sale) && $sale->isPendingApproval(); // Approve / Reject buttons
@@ -443,9 +460,10 @@ class SaleController extends Controller
         $this->authorizeEdit($sale);
 
         return view('admin.sales.edit', [
-            'sale'    => $sale,
-            'brands'  => $this->brandsForDropdown(),
-            'clients' => \App\Http\Controllers\Admin\ClientController::forDropdown(),
+            'sale'       => $sale,
+            'brands'     => $this->brandsForDropdown(),
+            'clients'    => \App\Http\Controllers\Admin\ClientController::forDropdown(),
+            'staffUsers' => AuthScope::usersForDropdown(),
         ]);
     }
 
@@ -456,7 +474,12 @@ class SaleController extends Controller
         $validated = $this->normalizeSaleInput($request->validate($this->saleFormRules($request)));
         $validated['client_id'] = $this->resolveOrCreateClient($validated, $sale->team_id, Auth::id());
 
-        if ($sale->is_refunded) {
+        // Only the sale form (edit) may change Sales Agent; create always uses the logged-in user.
+        if (! array_key_exists('user_id', $request->all())) {
+            unset($validated['user_id']);
+        }
+
+        if ($sale->is_refunded || $sale->isApproved()) {
             unset($validated['status']);
             $sale->update($validated);
             $trelloResult = TrelloSaleDispatcher::dispatch($sale->fresh());
@@ -624,7 +647,12 @@ class SaleController extends Controller
     {
         $user = Auth::user();
         if (AuthScope::seesAllMoney()) return;
-        if ((int) $sale->user_id === (int) $user->id) return;
+        if ($sale->user_id !== null && (int) $sale->user_id === (int) $user->id) return;
+
+        // Unassigned imports on the viewer's team
+        if ($sale->user_id === null && $sale->team_id && (int) $user->team_id === (int) $sale->team_id) {
+            return;
+        }
 
         // Requirement 6.5 — Project Manager: only sales from their approved (joined) teams
         if ($this->isProjectManager()) {
@@ -659,8 +687,18 @@ class SaleController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->hasRole(Role::ADMIN)) {
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
             return true;
+        }
+
+        // Unassigned imports: team lead (or anyone on that team who can import) may assign an agent.
+        if ($sale->user_id === null && $sale->team_id) {
+            if (Team::headedBy($user->id)->where('id', $sale->team_id)->exists()) {
+                return true;
+            }
+            if ((int) $user->team_id === (int) $sale->team_id && $user->hasRole([Role::AGENT, Role::PROJECT_MANAGER])) {
+                return true;
+            }
         }
 
         if ((int) $sale->user_id !== (int) $user->id) {
@@ -811,6 +849,15 @@ class SaleController extends Controller
     private function normalizeSaleInput(array $validated): array
     {
         $validated['received_amount'] = $validated['received_amount'] ?? 0;
+        $validated['is_ppc'] = ! empty($validated['is_ppc']);
+        $validated['account_manager_id'] = $validated['account_manager_id'] ?? null;
+        $validated['project_manager_id'] = $validated['project_manager_id'] ?? null;
+        if (array_key_exists('user_id', $validated) && ($validated['user_id'] === '' || $validated['user_id'] === null)) {
+            $validated['user_id'] = null;
+        }
+        $validated['merchant'] = isset($validated['merchant']) && trim((string) $validated['merchant']) !== ''
+            ? trim((string) $validated['merchant'])
+            : null;
 
         return $validated;
     }
@@ -920,6 +967,11 @@ class SaleController extends Controller
             ],
             'sale_date'        => 'required|date',
             'sale_type'        => 'required|in:' . implode(',', Sale::SALE_TYPES),
+            'merchant'         => 'nullable|string|max:120',
+            'is_ppc'           => 'sometimes|boolean',
+            'user_id'          => 'nullable|integer|exists:users,id',
+            'account_manager_id' => 'nullable|integer|exists:users,id',
+            'project_manager_id' => 'nullable|integer|exists:users,id',
             'notes'            => 'nullable|string',
         ];
     }

@@ -22,7 +22,6 @@
     .pd-activity li { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--bs-border-color, rgba(0,0,0,.08)); }
     .pd-activity li:last-child { border-bottom: 0; }
     .pd-activity .when { font-size: 11px; opacity: .65; }
-    .pd-tile.is-stale .num { color: #fea362; }
     .pd-tile.is-done .num { color: #22a06b; }
     .pd-tile .sub { font-size: 12px; opacity: .7; }
     /* Needs attention chips */
@@ -81,8 +80,6 @@
             <div class="text-muted small">Due today</div><div class="num" data-count="today">–</div></div></div></div>
         <div class="col-6 col-md-4 col-xl-2"><div class="card border-0 shadow-sm h-100 pd-tile is-week"><div class="card-body">
             <div class="text-muted small">Due in next 7 days</div><div class="num" data-count="week">–</div></div></div></div>
-        <div class="col-6 col-md-4 col-xl-2"><div class="card border-0 shadow-sm h-100 pd-tile is-stale"><div class="card-body">
-            <div class="text-muted small">Stuck (no activity 14+ days)</div><div class="num" data-count="stale">–</div><div class="sub" data-sub="stale"></div></div></div></div>
         <div class="col-6 col-md-4 col-xl-2"><div class="card border-0 shadow-sm h-100 pd-tile"><div class="card-body">
             <div class="text-muted small">Open cards</div><div class="num" data-count="open">–</div><div class="sub" data-sub="open"></div></div></div></div>
         <div class="col-6 col-md-4 col-xl-2"><div class="card border-0 shadow-sm h-100 pd-tile is-done"><div class="card-body">
@@ -150,15 +147,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-xl-8">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-transparent fw-semibold">Stuck cards <span class="pd-help fw-normal">· not completed, no activity for 14+ days (longest first)</span></div>
-                <div class="card-body">
-                    <div class="pd-list" id="pd-stale"><div class="text-muted small">Loading…</div></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-4">
+        <div class="col-12 col-xl-4">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-transparent fw-semibold">Data cleanup</div>
                 <div class="card-body" id="pd-hygiene"><div class="text-muted small">Loading…</div></div>
@@ -276,19 +265,6 @@
                 </div>`).join('');
         }
 
-        function renderStale(stale) {
-            const box = document.getElementById('pd-stale');
-            const cards = stale.cards || [];
-            if (!cards.length) { box.innerHTML = '<div class="text-muted small">Nothing stuck 🎉</div>'; return; }
-            box.innerHTML = cards.map((c) => `
-                <a class="pd-card" href="${esc(c.url)}">
-                    <div class="d-flex justify-content-between gap-2">
-                        <div class="name">${esc(c.name)}</div><div class="pd-days">${n(c.days)} days idle</div>
-                    </div>
-                    <div class="meta mt-1">${esc(c.board)}${c.list ? ' · ' + esc(c.list) : ''}</div>
-                </a>`).join('') + (stale.count > cards.length ? `<div class="pd-help mt-2">Showing the ${cards.length} longest idle of ${n(stale.count)}.</div>` : '');
-        }
-
         function renderHygiene(h, open) {
             const pct = (v) => open ? Math.round((v / open) * 100) : 0;
             const row = (v, title, help) => `
@@ -371,10 +347,6 @@
                 setText('[data-count="done"]', n((data.stages || {}).done));
                 const age = data.late_age || {};
                 setText('[data-sub="overdue"]', c.overdue ? `${n(age['31_plus'])} over 30 days` : '');
-                const stale = data.stale || { count: 0, buckets: {}, cards: [] };
-                setText('[data-count="stale"]', n(stale.count));
-                setText('[data-sub="stale"]', stale.count ? `${n((stale.buckets || {})['60_plus'])} idle 60+ days` : '');
-
                 lateCards = (data.cards || {}).overdue || [];
                 lateFilter = { board: '', age: '' };
                 renderLateControls(data.late_by_board, age);
@@ -383,7 +355,6 @@
                 renderAttention(data.attention || {});
                 renderPipeline(data.stages || {}, data.pipeline || []);
                 renderMembers(data.members || []);
-                renderStale(stale);
                 renderHygiene(data.hygiene || {}, c.open_cards || 0);
                 document.getElementById('pd-updated').textContent = data.generated_at
                     ? 'Updated ' + new Date(data.generated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })

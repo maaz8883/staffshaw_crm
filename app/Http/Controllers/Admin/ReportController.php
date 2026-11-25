@@ -407,6 +407,54 @@ class ReportController extends Controller
         ]));
     }
 
+    public function merchants(Request $request): View
+    {
+        $ctx = $this->prepareSalesContext($request);
+        $salesInPeriod = $ctx['salesInPeriod'];
+        $approvedCompleted = $ctx['approvedCompleted'];
+
+        $base = (clone $approvedCompleted)
+            ->toBase()
+            ->selectRaw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —') as merchant_name")
+            ->selectRaw('COUNT(*) as transactions')
+            ->selectRaw('SUM(amount) as gross_total')
+            ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —')"))
+            ->orderByDesc('gross_total')
+            ->get();
+
+        $refundAgg = (clone $salesInPeriod)
+            ->where(function ($q) {
+                $q->where('is_refunded', true)->orWhere('status', Sale::STATUS_REFUNDED);
+            })
+            ->toBase()
+            ->selectRaw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —') as merchant_name")
+            ->selectRaw('COUNT(*) as refund_count')
+            ->selectRaw('SUM(amount) as refunded_total')
+            ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —')"))
+            ->get()
+            ->keyBy('merchant_name');
+
+        $merchantRows = $base->map(function ($row) use ($refundAgg) {
+            $refund = $refundAgg->get($row->merchant_name);
+            $refunded = $refund ? (float) $refund->refunded_total : 0.0;
+            $refundCount = $refund ? (int) $refund->refund_count : 0;
+            $gross = (float) $row->gross_total;
+
+            return [
+                'merchant' => $row->merchant_name,
+                'transactions' => (int) $row->transactions,
+                'gross_total' => $gross,
+                'refunded' => $refunded,
+                'refund_count' => $refundCount,
+                'net_total' => round($gross - $refunded, 2),
+            ];
+        })->values();
+
+        return view('admin.reports.merchants', array_merge($ctx, [
+            'merchantRows' => $merchantRows,
+        ]));
+    }
+
     public function leads(Request $request): View
     {
         abort_if(AuthScope::isFinance(), 403, 'The leads report is for sales roles.');

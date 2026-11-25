@@ -281,12 +281,13 @@
 
 <div class="trello-board-stage {{ $bgBright }}{{ !empty($boardBg['image']) ? ' has-photo' : '' }}" style="{{ $bgAttr }}">
 <div class="trello-board-toolbar">
-    <div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
         <a href="{{ route('admin.trello.index', ['team' => $team->id]) }}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Boards
         </a>
-        <span class="ms-2 text-muted small">{{ $team->name }} · {{ $integration->displayAccount() }}</span>
-        <span class="trello-hint ms-2">Drag to move · click title to open card</span>
+        @include('admin.trello._search', ['team' => $team, 'variant' => 'dark'])
+        <span class="ms-1 text-muted small">{{ $team->name }} · {{ $integration->displayAccount() }}</span>
+        <span class="trello-hint">Drag to move · click title to open card</span>
     </div>
 </div>
 

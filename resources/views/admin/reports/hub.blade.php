@@ -67,6 +67,7 @@
         ['route' => 'admin.reports.team', 'icon' => 'people', 'title' => 'Team report', 'desc' => 'Revenue and volume by team'],
         ['route' => 'admin.reports.user', 'icon' => 'person-badge', 'title' => 'Agent report', 'desc' => 'Agent leaderboard by revenue'],
         ['route' => 'admin.reports.brands', 'icon' => 'tags', 'title' => 'Brand report', 'desc' => 'Sales performance by brand'],
+        ['route' => 'admin.reports.merchants', 'icon' => 'credit-card', 'title' => 'Merchant report', 'desc' => 'Gross, refunds & net by payment merchant'],
     ];
     if ($canViewOrgReports && ! ($singleCompany ?? false)) {
         $salesCards[] = ['route' => 'admin.reports.company', 'icon' => 'buildings', 'title' => 'Company report', 'desc' => 'Revenue broken down by company'];

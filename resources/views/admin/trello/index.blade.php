@@ -34,18 +34,22 @@
     }
     .trello-ws-name { font-weight: 700; font-size: 16px; margin: 0; }
     .trello-ws-count { font-size: 12px; color: var(--text-muted); }
-    .trello-board-search { max-width: 280px; }
 </style>
 
 <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
-    <form method="GET" action="{{ route('admin.trello.index') }}" class="d-flex gap-2 align-items-center flex-wrap">
-        <label class="small text-muted mb-0">Team</label>
-        <select name="team" class="form-select form-select-sm js-select2" data-width="220px" style="width:220px" onchange="this.form.submit()">
-            @foreach($teams as $t)
-                <option value="{{ $t->id }}" @selected((int) $team->id === (int) $t->id)>{{ \App\Support\TeamTrelloAccounts::label($t) }}</option>
-            @endforeach
-        </select>
-    </form>
+    <div class="d-flex gap-2 align-items-center flex-wrap flex-grow-1">
+        <form method="GET" action="{{ route('admin.trello.index') }}" class="d-flex gap-2 align-items-center flex-wrap">
+            <label class="small text-muted mb-0">Team</label>
+            <select name="team" class="form-select form-select-sm js-select2" data-width="220px" style="width:220px" onchange="this.form.submit()">
+                @foreach($teams as $t)
+                    <option value="{{ $t->id }}" @selected((int) $team->id === (int) $t->id)>{{ \App\Support\TeamTrelloAccounts::label($t) }}</option>
+                @endforeach
+            </select>
+        </form>
+        @if($integration?->isReady())
+            @include('admin.trello._search', ['team' => $team, 'variant' => 'light'])
+        @endif
+    </div>
     <div class="d-flex gap-2 flex-wrap">
         @if($canManage)
             <a href="{{ route('admin.trello.edit', $team) }}" class="btn btn-sm btn-primary">
@@ -106,13 +110,6 @@
             $wsColors = ['#579dff', '#4bce97', '#f87168', '#9f8fef', '#fea362', '#6cc3e0', '#e774bb', '#94c748'];
         @endphp
 
-        @if(count($boards) > 8)
-            <div class="mb-3">
-                <input type="search" id="trello-board-filter" class="form-control form-control-sm trello-board-search"
-                       placeholder="Search boards…" autocomplete="off">
-            </div>
-        @endif
-
         @foreach($workspaces as $wsName => $wsBoards)
             <section class="trello-ws" data-ws>
                 <div class="trello-ws-head">
@@ -144,29 +141,6 @@
                 </div>
             </section>
         @endforeach
-        <div class="text-muted small d-none" id="trello-board-empty">No board matches your search.</div>
-
-        <script>
-        (function () {
-            const input = document.getElementById('trello-board-filter');
-            if (!input) return;
-            input.addEventListener('input', () => {
-                const q = input.value.trim().toLowerCase();
-                let any = false;
-                document.querySelectorAll('[data-ws]').forEach((ws) => {
-                    let shown = 0;
-                    ws.querySelectorAll('[data-board-name]').forEach((col) => {
-                        const hit = !q || col.dataset.boardName.includes(q);
-                        col.classList.toggle('d-none', !hit);
-                        if (hit) shown++;
-                    });
-                    ws.classList.toggle('d-none', shown === 0); // hide workspaces with no match
-                    if (shown) any = true;
-                });
-                document.getElementById('trello-board-empty').classList.toggle('d-none', any);
-            });
-        })();
-        </script>
     @endif
 @endif
 @endsection

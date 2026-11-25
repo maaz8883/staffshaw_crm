@@ -185,8 +185,6 @@ class ProductionDashboardController extends Controller
         $stages = ['todo' => 0, 'progress' => 0, 'review' => 0, 'hold' => 0, 'done' => 0];
         $pipeline = [];
         $attention = ['qa' => 0, 'revision' => 0, 'concern' => 0, 'client' => 0, 'hold' => 0];
-        $stale = [];
-        $staleBuckets = ['14_30' => 0, '30_60' => 0, '60_plus' => 0];
         $members = [];
         $hygiene = ['no_due' => 0, 'no_member' => 0];
         $lateByBoard = [];
@@ -246,13 +244,6 @@ class ProductionDashboardController extends Controller
                 if ($stage !== 'hold') {
                     $hygiene['no_member'] += empty($card['idMembers']) ? 1 : 0;
                     $hygiene['no_due'] += empty($card['due']) ? 1 : 0;
-
-                    // Stuck: nothing happened on the card for 2+ weeks (on-hold cards are parked on purpose)
-                    $idle = ! empty($card['dateLastActivity']) ? (int) Carbon::parse($card['dateLastActivity'])->diffInDays($now) : 0;
-                    if ($idle >= 14) {
-                        $staleBuckets[$idle >= 60 ? '60_plus' : ($idle >= 30 ? '30_60' : '14_30')]++;
-                        $stale[] = ['name' => $card['name'] ?? '', 'board' => $board['name'] ?? '', 'list' => $listName, 'days' => $idle, 'url' => $url];
-                    }
                 }
 
                 if (empty($card['due'])) {
@@ -289,7 +280,6 @@ class ProductionDashboardController extends Controller
             usort($cards, fn ($a, $b) => strcmp($a['due'], $b['due']));
         }
         unset($cards);
-        usort($stale, fn ($a, $b) => $b['days'] <=> $a['days']);
         usort($pipeline, fn ($a, $b) => ($b['todo'] + $b['progress'] + $b['review'] + $b['hold']) <=> ($a['todo'] + $a['progress'] + $a['review'] + $a['hold']));
         $lateByBoard = array_values($lateByBoard);
         usort($lateByBoard, fn ($a, $b) => $b['count'] <=> $a['count']);
@@ -310,7 +300,6 @@ class ProductionDashboardController extends Controller
             'stages' => $stages,
             'pipeline' => $pipeline,
             'attention' => $attention,
-            'stale' => ['count' => count($stale), 'buckets' => $staleBuckets, 'cards' => array_slice($stale, 0, 60)],
             'members' => array_slice($members, 0, 30),
             'hygiene' => $hygiene,
             'boards' => array_map(fn ($b) => [

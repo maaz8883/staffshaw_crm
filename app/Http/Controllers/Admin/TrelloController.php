@@ -61,6 +61,88 @@ class TrelloController extends Controller
         ]);
     }
 
+    public function search(Request $request, Team $team): JsonResponse
+    {
+        abort_unless(AuthScope::canAccessTeam((int) $team->id), 403);
+        abort_if($team->parent_team_id !== null, 422, 'Use the main team for Trello.');
+
+        $q = trim((string) $request->query('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json(['ok' => true, 'cards' => [], 'boards' => []]);
+        }
+
+        $integration = $team->trelloIntegration;
+        if (! $integration?->isReady()) {
+            return response()->json(['ok' => false, 'message' => 'Trello is not connected.'], 422);
+        }
+
+        try {
+            if ($request->hasSession()) {
+                $request->session()->save();
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $raw = TrelloApiClient::forIntegration($integration)->search($q);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        $cards = array_map(function (array $c) use ($team) {
+            $board = is_array($c['board'] ?? null) ? $c['board'] : [];
+            $list = is_array($c['list'] ?? null) ? $c['list'] : [];
+            $boardId = (string) ($c['idBoard'] ?? $board['id'] ?? '');
+            $boardName = (string) ($board['name'] ?? '');
+            $listName = (string) ($list['name'] ?? '');
+            $sub = trim($boardName.($listName !== '' ? ': '.$listName : ''));
+
+            return [
+                'id' => (string) ($c['id'] ?? ''),
+                'name' => (string) ($c['name'] ?? ''),
+                'board_id' => $boardId,
+                'subtitle' => $sub,
+                'url' => $boardId !== '' && ! empty($c['id'])
+                    ? route('admin.trello.board', [
+                        'boardId' => $boardId,
+                        'team' => $team->id,
+                        'card' => $c['id'],
+                    ])
+                    : null,
+            ];
+        }, $raw['cards']);
+
+        $boards = array_map(function (array $b) use ($team) {
+            $org = is_array($b['organization'] ?? null) ? $b['organization'] : [];
+            $prefs = is_array($b['prefs'] ?? null) ? $b['prefs'] : [];
+            $bg = (string) ($prefs['backgroundColor'] ?? '#0079bf');
+            $bgImage = data_get($prefs, 'backgroundImageScaled.0.url')
+                ?: ($prefs['backgroundImage'] ?? null);
+
+            return [
+                'id' => (string) ($b['id'] ?? ''),
+                'name' => (string) ($b['name'] ?? ''),
+                'subtitle' => (string) ($org['displayName'] ?? $org['name'] ?? 'Workspace'),
+                'bg' => $bg,
+                'bg_image' => is_string($bgImage) && $bgImage !== '' ? $bgImage : null,
+                'url' => ! empty($b['id'])
+                    ? route('admin.trello.board', ['boardId' => $b['id'], 'team' => $team->id])
+                    : null,
+            ];
+        }, $raw['boards']);
+
+        return response()->json([
+            'ok' => true,
+            'q' => $q,
+            'cards' => array_values(array_filter($cards, fn ($c) => $c['id'] !== '' && $c['url'])),
+            'boards' => array_values(array_filter($boards, fn ($b) => $b['id'] !== '' && $b['url'])),
+        ]);
+    }
+
     public function board(Request $request, string $boardId): View|RedirectResponse
     {
         $teams = $this->accessibleParentTeams();

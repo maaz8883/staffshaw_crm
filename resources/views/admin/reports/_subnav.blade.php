@@ -14,6 +14,7 @@
         ['route' => 'admin.reports.sales', 'label' => 'Sales', 'icon' => 'cash-stack'],
         ['route' => 'admin.reports.user', 'label' => 'Agents', 'icon' => 'person-badge'],
         ['route' => 'admin.reports.brands', 'label' => 'Brands', 'icon' => 'tags'],
+        ['route' => 'admin.reports.merchants', 'label' => 'Merchants', 'icon' => 'credit-card'],
         ...(auth()->user()?->hasRole('Finance') ? [] : [['route' => 'admin.reports.leads', 'label' => 'Leads', 'icon' => 'funnel']]),
         ['route' => 'admin.reports.clients', 'label' => 'Clients', 'icon' => 'people-fill'],
         ['route' => 'admin.reports.invoices', 'label' => 'Invoices', 'icon' => 'receipt'],
