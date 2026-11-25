@@ -632,6 +632,39 @@ main {
 [data-theme="dark"] .alert-info    { background: #1a3d4d; border-color: #2d5a6b; color: #a8d8f0; }
 
 /* ── Forms ───────────────────────────────────────────────────── */
+/* Light theme: Bootstrap checkbox border was nearly invisible on white tables */
+.form-check-input {
+    width: 1.15em;
+    height: 1.15em;
+    margin-top: 0.15em;
+    cursor: pointer;
+    background-color: #fff;
+    border: 2px solid #64748b;
+}
+.form-check-input:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 0.2rem rgba(46, 134, 193, 0.25);
+}
+.form-check-input:checked {
+    background-color: var(--brand-blue);
+    border-color: var(--brand-blue);
+}
+.table .form-check-input,
+.sale-row-check,
+.lead-row-check,
+#sale-select-all,
+#lead-select-all {
+    border-color: #475569;
+}
+[data-theme="dark"] .form-check-input {
+    background-color: #0f1117;
+    border-color: #94a3b8;
+}
+[data-theme="dark"] .form-check-input:checked {
+    background-color: var(--brand-blue);
+    border-color: var(--brand-blue);
+}
+
 .form-control, .form-select {
     background: var(--bg-card);
     color: var(--text-primary);
