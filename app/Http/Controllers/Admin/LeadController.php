@@ -23,8 +23,9 @@ class LeadController extends Controller
         $countQuery = Lead::query();
         AuthScope::scopeLeads($countQuery);
         $counts = $countQuery->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
+        $canBulkDelete = AuthScope::isAdminOrManager();
 
-        return view('admin.leads.index', compact('teams', 'counts'));
+        return view('admin.leads.index', compact('teams', 'counts', 'canBulkDelete'));
     }
 
     public function datatable(Request $request): JsonResponse
@@ -50,7 +51,14 @@ class LeadController extends Controller
                 ->whereNotIn('status', ['customer', 'lost']);
         }
 
+        $canDelete = AuthScope::isAdminOrManager();
+
         return DataTables::eloquent($query)
+            ->addColumn('select', function (Lead $lead) use ($canDelete) {
+                $del = $canDelete ? '1' : '0';
+
+                return '<input type="checkbox" class="form-check-input lead-row-check" value="'.(int) $lead->id.'" data-can-delete="'.$del.'" aria-label="Select lead">';
+            })
             ->addColumn('assigned_to_name', fn (Lead $lead) => e($lead->assignedUser?->name ?? '-'))
             ->addColumn('team_name', fn (Lead $lead) => e($lead->team?->name ?? '-'))
             ->addColumn('brand_name', fn (Lead $lead) => e($lead->brand?->name ?? '-'))
@@ -67,13 +75,12 @@ class LeadController extends Controller
                 return $html;
             })
             ->editColumn('source', fn (Lead $lead) => ucwords(str_replace('_', ' ', $lead->source ?? '-')))
-            ->addColumn('actions', function (Lead $lead) {
+            ->addColumn('actions', function (Lead $lead) use ($canDelete) {
                 $showUrl   = route('admin.leads.show', $lead);
                 $editUrl   = route('admin.leads.edit', $lead);
                 $deleteUrl = route('admin.leads.destroy', $lead);
                 $csrf      = csrf_field();
                 $method    = method_field('DELETE');
-                $canDelete = AuthScope::isAdminOrManager();
 
                 $html = '<a href="'.$showUrl.'" class="btn btn-sm btn-outline-info">View</a>
                     <a href="'.$editUrl.'" class="btn btn-sm btn-outline-warning">Edit</a>';
@@ -86,7 +93,7 @@ class LeadController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['status', 'actions'])
+            ->rawColumns(['select', 'status', 'actions'])
             ->toJson();
     }
 
@@ -290,6 +297,42 @@ class LeadController extends Controller
         $lead->delete();
 
         return redirect()->route('admin.leads.index')->with('success', 'Lead deleted successfully.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse|JsonResponse
+    {
+        if (! AuthScope::isAdminOrManager()) {
+            abort(403);
+        }
+
+        $ids = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ])['ids'];
+
+        $deleted = 0;
+        $skipped = 0;
+        $leads = Lead::query()->whereIn('id', $ids)->get();
+
+        foreach ($leads as $lead) {
+            if (! AuthScope::canAccessLead($lead)) {
+                $skipped++;
+                continue;
+            }
+            $lead->delete();
+            $deleted++;
+        }
+
+        $msg = "Deleted {$deleted} lead(s).";
+        if ($skipped > 0) {
+            $msg .= " {$skipped} skipped (no access).";
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'deleted' => $deleted, 'skipped' => $skipped, 'message' => $msg]);
+        }
+
+        return redirect()->route('admin.leads.index')->with('success', $msg);
     }
 
     /** Tell the new assignee (bell icon) — not when they assigned it to themselves or nothing changed. */

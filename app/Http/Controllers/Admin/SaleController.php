@@ -140,8 +140,13 @@ class SaleController extends Controller
         $brands           = $this->brandsForDropdown();
         $pendingCount     = $this->baseQuery()->where('approval_status', Sale::APPROVAL_PENDING)->count();
         $isProjectManager = $this->isProjectManager();
+        $canBulkApprove   = $this->userCanBulkApprove();
+        $canBulkDelete    = ! $user->hasRole(Role::FINANCE);
 
-        return view('admin.sales.index', compact('teams', 'users', 'brands', 'isAgent', 'pendingCount', 'isProjectManager'));
+        return view('admin.sales.index', compact(
+            'teams', 'users', 'brands', 'isAgent', 'pendingCount', 'isProjectManager',
+            'canBulkApprove', 'canBulkDelete'
+        ));
     }
 
     public function datatable(Request $request): JsonResponse
@@ -239,10 +244,21 @@ class SaleController extends Controller
                 : '<span class="badge bg-warning text-dark">Unassigned</span>')
             ->addColumn('team_name', fn (Sale $s) => e($s->team?->name ?? '-'))
             ->addColumn('brand_name', fn (Sale $s) => e($s->brand?->name ?? '-'))
+            ->addColumn('select', function (Sale $sale) {
+                $canApprove = $this->canApprove($sale) && $sale->isPendingApproval();
+                $canDelete = $this->userCanDeleteSale($sale);
+                if (! $canApprove && ! $canDelete) {
+                    return '';
+                }
+
+                return '<input type="checkbox" class="form-check-input sale-row-check" value="' . (int) $sale->id . '"'
+                    . ' data-can-approve="' . ($canApprove ? '1' : '0') . '"'
+                    . ' data-can-delete="' . ($canDelete ? '1' : '0') . '"'
+                    . ' aria-label="Select sale #' . (int) $sale->id . '">';
+            })
             ->addColumn('actions', function (Sale $sale) {
-                $user      = Auth::user();
                 $canEdit   = $this->userCanEditSale($sale);
-                $canDelete = $user->hasRole('Admin');
+                $canDelete = $this->userCanDeleteSale($sale);
                 $canApprove = $this->canApprove($sale) && $sale->isPendingApproval();
                 $canReject  = $this->canApprove($sale) && $sale->isPendingApproval();
 
@@ -281,8 +297,80 @@ class SaleController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'agent_name', 'actions'])
+            ->rawColumns(['select', 'amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'agent_name', 'actions'])
             ->toJson();
+    }
+
+    public function bulkApprove(Request $request): RedirectResponse|JsonResponse
+    {
+        abort_unless($this->userCanBulkApprove(), 403);
+
+        $ids = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ])['ids'];
+
+        $approved = 0;
+        $skipped = 0;
+        $sales = $this->baseQuery()->whereIn('id', $ids)->get();
+
+        foreach ($sales as $sale) {
+            if (! $this->canApprove($sale) || ! $sale->isPendingApproval()) {
+                $skipped++;
+                continue;
+            }
+            $this->applyApproval($sale);
+            $approved++;
+        }
+
+        $msg = "Approved {$approved} sale(s).";
+        if ($skipped > 0) {
+            $msg .= " {$skipped} skipped (no permission or already decided).";
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'approved' => $approved, 'skipped' => $skipped, 'message' => $msg]);
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse|JsonResponse
+    {
+        abort_if(Auth::user()->hasRole(Role::FINANCE), 403);
+
+        $ids = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ])['ids'];
+
+        $deleted = 0;
+        $skipped = 0;
+        $sales = $this->baseQuery()->whereIn('id', $ids)->get();
+
+        foreach ($sales as $sale) {
+            if (! $this->userCanDeleteSale($sale)) {
+                $skipped++;
+                continue;
+            }
+            ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_DELETED,
+                "Deleted sale \"{$sale->title}\" (#{$sale->id})",
+                ['sale_id' => $sale->id, 'amount' => $sale->amount]
+            );
+            $sale->delete();
+            $deleted++;
+        }
+
+        $msg = "Deleted {$deleted} sale(s).";
+        if ($skipped > 0) {
+            $msg .= " {$skipped} skipped (no permission or already approved).";
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'deleted' => $deleted, 'skipped' => $skipped, 'message' => $msg]);
+        }
+
+        return redirect()->route('admin.sales.index')->with('success', $msg);
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────────────
@@ -434,6 +522,7 @@ class SaleController extends Controller
         $canToggleRefund = $this->canToggleRefund($sale);
         $canDecide = $this->canApprove($sale) && $sale->isPendingApproval(); // Approve / Reject buttons
         $canEdit = $this->userCanEditSale($sale);
+        $canDelete = $this->userCanDeleteSale($sale);
         $invoiceService = app(InvoiceService::class);
         $sale = $invoiceService->syncReceivedAmount($sale);
         $invoices = $sale->invoices->sortByDesc('issued_at')->values();
@@ -448,6 +537,7 @@ class SaleController extends Controller
             'canToggleRefund',
             'canDecide',
             'canEdit',
+            'canDelete',
             'invoices',
             'billableRemaining',
             'invoiceMaxAmount',
@@ -512,7 +602,7 @@ class SaleController extends Controller
 
     public function destroy(Sale $sale): RedirectResponse
     {
-        if (! Auth::user()->hasRole('Admin')) abort(403);
+        abort_unless($this->userCanDeleteSale($sale), 403);
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_DELETED,
             "Deleted sale \"{$sale->title}\" (#{$sale->id})",
@@ -529,7 +619,13 @@ class SaleController extends Controller
     public function approve(Sale $sale): RedirectResponse
     {
         if (! $this->canApprove($sale)) abort(403);
+        $this->applyApproval($sale);
 
+        return back()->with('success', "Sale \"{$sale->title}\" approved.");
+    }
+
+    private function applyApproval(Sale $sale): void
+    {
         $payload = [
             'approval_status' => Sale::APPROVAL_APPROVED,
             'approved_by'     => Auth::id(),
@@ -549,14 +645,24 @@ class SaleController extends Controller
 
         SaleNotificationDispatcher::dispatchSaleDecision($sale, Auth::user(), true);
 
-        // Log activity
         ActivityLogger::log(
             Auth::user(),
             UserActivityLog::TYPE_SALE_APPROVED,
             "Approved sale: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
         );
+    }
 
-        return back()->with('success', "Sale \"{$sale->title}\" approved.");
+    private function userCanBulkApprove(): bool
+    {
+        $user = Auth::user();
+        if ($user->hasRole([Role::ADMIN, Role::MANAGER])) {
+            return true;
+        }
+        if (Team::headedBy($user->id)->exists()) {
+            return true;
+        }
+
+        return \App\Models\SubTeamHead::where('user_id', $user->id)->exists();
     }
 
     public function reject(Request $request, Sale $sale): RedirectResponse
@@ -706,6 +812,20 @@ class SaleController extends Controller
         }
 
         return $sale->isEditableByOwner();
+    }
+
+    /** Delete while not approved; Admin may delete anytime. */
+    private function userCanDeleteSale(Sale $sale): bool
+    {
+        $user = Auth::user();
+        if ($user->hasRole(Role::ADMIN)) {
+            return true;
+        }
+        if ($sale->isApproved()) {
+            return false;
+        }
+
+        return $this->userCanEditSale($sale) || $this->canApprove($sale);
     }
 
     private static function statusColor(string $status): string

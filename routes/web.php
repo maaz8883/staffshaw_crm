@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\GlobalSearchController;
 use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\LeadController;
+use App\Http\Controllers\Admin\LeadImportController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
@@ -307,6 +308,8 @@ Route::prefix('admin')->group(function () {
             Route::get('sales/import', [SaleImportController::class, 'show'])->name('admin.sales.import');
             Route::get('sales/import/template', [SaleImportController::class, 'template'])->name('admin.sales.import.template');
             Route::post('sales/import', [SaleImportController::class, 'store'])->name('admin.sales.import.store');
+            Route::post('sales/bulk-approve',         [SaleController::class, 'bulkApprove'])->name('admin.sales.bulk-approve');
+            Route::post('sales/bulk-delete',          [SaleController::class, 'bulkDestroy'])->name('admin.sales.bulk-delete');
             Route::post('sales/{sale}/approve',       [SaleController::class, 'approve'])->name('admin.sales.approve');
             Route::post('sales/{sale}/reject',        [SaleController::class, 'reject'])->name('admin.sales.reject');
             Route::delete('sales/{sale}',             [SaleController::class, 'destroy'])->name('admin.sales.destroy');
@@ -315,7 +318,11 @@ Route::prefix('admin')->group(function () {
                 'edit'   => 'admin.sales.edit',   'update' => 'admin.sales.update',
             ]);
 
+            Route::get('leads/import', [LeadImportController::class, 'show'])->name('admin.leads.import');
+            Route::get('leads/import/template', [LeadImportController::class, 'template'])->name('admin.leads.import.template');
+            Route::post('leads/import', [LeadImportController::class, 'store'])->name('admin.leads.import.store');
             Route::get('leads/datatable', [LeadController::class, 'datatable'])->name('admin.leads.datatable');
+            Route::post('leads/bulk-delete', [LeadController::class, 'bulkDestroy'])->name('admin.leads.bulk-delete');
             Route::post('leads/{lead}/convert', [LeadController::class, 'convert'])->name('admin.leads.convert');
             Route::post('leads/{lead}/activities', [LeadController::class, 'storeActivity'])->name('admin.leads.activities.store')->whereNumber('lead');
             Route::resource('leads', LeadController::class)->names([

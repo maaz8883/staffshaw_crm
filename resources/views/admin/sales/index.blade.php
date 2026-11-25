@@ -92,12 +92,32 @@
     <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>
 </div>
 
+@if(($canBulkApprove ?? false) || ($canBulkDelete ?? false))
+<div id="sales-bulk-bar" class="alert alert-secondary d-none align-items-center flex-wrap gap-2 mb-3 py-2">
+    <span class="me-1"><strong id="sales-bulk-count">0</strong> selected</span>
+    @if($canBulkApprove ?? false)
+    <button type="button" id="btn-bulk-approve" class="btn btn-success btn-sm">
+        <i class="bi bi-check2-circle"></i> Approve selected
+    </button>
+    @endif
+    @if($canBulkDelete ?? false)
+    <button type="button" id="btn-bulk-delete" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash"></i> Delete selected
+    </button>
+    @endif
+    <button type="button" id="btn-bulk-clear" class="btn btn-outline-secondary btn-sm">Clear</button>
+</div>
+@endif
+
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">
             <table id="sales-table" class="table table-striped w-100">
                 <thead>
                 <tr>
+                    <th class="text-center" style="width:36px">
+                        <input type="checkbox" class="form-check-input" id="sale-select-all" title="Select all on this page" aria-label="Select all">
+                    </th>
                     <th>Title</th>
                     <th>Client</th>
                     <th>Brand</th>
@@ -173,6 +193,12 @@ console.groupEnd();
 @endif
 
 $(function () {
+    var canBulkApprove = @json((bool) ($canBulkApprove ?? false));
+    var canBulkDelete = @json((bool) ($canBulkDelete ?? false));
+    var bulkApproveUrl = @json(route('admin.sales.bulk-approve'));
+    var bulkDeleteUrl = @json(route('admin.sales.bulk-delete'));
+    var csrf = @json(csrf_token());
+
     var table = $('#sales-table').DataTable({
         processing: true,
         serverSide: true,
@@ -193,6 +219,7 @@ $(function () {
             }
         },
         columns: [
+            {data: 'select',         name: 'select', orderable: false, searchable: false, className: 'text-center'},
             {data: 'title',          name: 'title'},
             {data: 'client_name',    name: 'client_name'},
             {data: 'brand_name',     name: 'brand.name', searchable: false},
@@ -207,7 +234,93 @@ $(function () {
             {data: 'approval_badge', name: 'approval_status'},
             {data: 'refund_toggle',  name: 'is_refunded', orderable: true, searchable: false, className: 'text-center'},
             {data: 'actions',        name: 'actions', orderable: false, searchable: false, className: 'text-end'}
-        ]
+        ],
+        drawCallback: function () {
+            $('#sale-select-all').prop('checked', false);
+            syncBulkBar();
+        }
+    });
+
+    function selectedIds(attr) {
+        var ids = [];
+        $('#sales-table .sale-row-check:checked').each(function () {
+            if (!attr || $(this).attr(attr) === '1') {
+                ids.push(parseInt($(this).val(), 10));
+            }
+        });
+        return ids;
+    }
+
+    function syncBulkBar() {
+        var n = $('#sales-table .sale-row-check:checked').length;
+        var bar = $('#sales-bulk-bar');
+        if (!bar.length) return;
+        $('#sales-bulk-count').text(n);
+        if (n > 0) bar.removeClass('d-none').addClass('d-flex');
+        else bar.addClass('d-none').removeClass('d-flex');
+        if (canBulkApprove) {
+            $('#btn-bulk-approve').prop('disabled', selectedIds('data-can-approve').length === 0);
+        }
+        if (canBulkDelete) {
+            $('#btn-bulk-delete').prop('disabled', selectedIds('data-can-delete').length === 0);
+        }
+    }
+
+    $(document).on('change', '.sale-row-check', syncBulkBar);
+
+    $('#sale-select-all').on('change', function () {
+        var on = $(this).is(':checked');
+        $('#sales-table .sale-row-check').prop('checked', on);
+        syncBulkBar();
+    });
+
+    $('#btn-bulk-clear').on('click', function () {
+        $('#sales-table .sale-row-check, #sale-select-all').prop('checked', false);
+        syncBulkBar();
+    });
+
+    function postBulk(url, ids, confirmTitle) {
+        if (!ids.length) return;
+        var go = function () {
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ ids: ids })
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+              .then(function (res) {
+                  if (!res.ok || res.d.ok === false) throw new Error(res.d.message || 'Request failed');
+                  if (window.Swal) Swal.fire({ icon: 'success', title: res.d.message || 'Done', timer: 2200, showConfirmButton: false });
+                  else alert(res.d.message || 'Done');
+                  table.draw(false);
+              })
+              .catch(function (err) {
+                  if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: err.message });
+                  else alert(err.message);
+              });
+        };
+        if (window.Swal) {
+            Swal.fire({
+                icon: 'warning',
+                title: confirmTitle,
+                text: ids.length + ' sale(s) will be affected.',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, continue'
+            }).then(function (r) { if (r.isConfirmed) go(); });
+        } else if (confirm(confirmTitle)) {
+            go();
+        }
+    }
+
+    $('#btn-bulk-approve').on('click', function () {
+        postBulk(bulkApproveUrl, selectedIds('data-can-approve'), 'Approve selected sales?');
+    });
+    $('#btn-bulk-delete').on('click', function () {
+        postBulk(bulkDeleteUrl, selectedIds('data-can-delete'), 'Delete selected sales?');
     });
 
     $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').on('change', function () {

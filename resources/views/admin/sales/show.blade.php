@@ -11,6 +11,14 @@
         {{ $sale->approval_status === \App\Models\Sale::APPROVAL_REJECTED ? 'Edit & Resubmit' : 'Edit' }}
     </a>
     @endif
+    @if($canDelete ?? false)
+    <form action="{{ route('admin.sales.destroy', $sale) }}" method="POST" class="d-inline js-admin-delete-form"
+          data-swal-title="Delete this sale?">
+        @csrf
+        @method('DELETE')
+        <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+    </form>
+    @endif
     <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
     @if($canDecide ?? false)
         {{-- Pending sale: approver (Admin / Manager / Team Head) decides here too --}}
