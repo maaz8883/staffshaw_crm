@@ -1092,10 +1092,12 @@
     }
     .tc-desc-view.is-empty:hover { background: #40464d; }
     .tc-desc-view a { color: var(--tc-link); }
-    .tc-desc-view img.tc-desc-img,
-    .tc-desc-visual img.tc-desc-img,
+    .tc-desc-view img,
+    .tc-desc-visual img,
     .tc-bubble img,
-    .tc-comment-body img {
+    .tc-comment-body img,
+    .tc-desc-view img.tc-desc-img,
+    .tc-desc-visual img.tc-desc-img {
         display: block;
         max-width: 100%;
         width: auto;
@@ -1103,6 +1105,7 @@
         border-radius: 8px;
         margin: 10px 0 4px;
         background: #1e2124;
+        object-fit: contain;
     }
 
     /* Trello-like description editor */
@@ -1568,14 +1571,16 @@
     #tc-desc-editor .tc-desc-toolbar .sep { height: 20px; margin: 0 6px; background: #454f59; }
 
     /* Description editor (Trello): gray box, toolbar + text, actions below */
-    #tc-desc-editor { background: #22272b; border-color: #738496; border-radius: 8px; }
+    #tc-desc-editor {
+        background: #22272b; border-color: #738496; border-radius: 8px; overflow: hidden;
+    }
     #tc-desc-editor:focus-within { border-color: #8c9bab; }
     #tc-desc-editor .tc-desc-toolbar {
         gap: 0; padding: 6px 8px; background: transparent; border-bottom: 1px solid #384047;
     }
     #tc-desc-editor .tc-tb.tc-rich-md strong { font-size: 12px; font-weight: 700; letter-spacing: -.5px; }
     #tc-desc-editor .tc-desc-visual {
-        min-height: 200px; max-height: none; overflow: visible;
+        min-height: 200px; max-height: none; overflow-x: hidden; overflow-y: visible;
         padding: 16px 20px; background: transparent; border-radius: 0 0 8px 8px;
         white-space: normal; line-height: 24px; color: #b6c2cf;
     }

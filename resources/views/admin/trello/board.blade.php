@@ -3732,19 +3732,36 @@
             setActiveRich(visual);
             refreshMentionMenu();
         });
-        visual.addEventListener('paste', (e) => {
+        visual.addEventListener('paste', async (e) => {
             setActiveRich(visual);
-            const text = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
+            const cd = e.clipboardData || window.clipboardData;
+            const text = cd?.getData('text/plain') || '';
             // Inside a code block: always plain text
             if (codeCaret()) {
                 e.preventDefault();
                 document.execCommand('insertText', false, text);
                 return;
             }
-            // Copied image (from a card editor, a website, "Copy image"…) → paste the image itself
-            const richHtml = (e.clipboardData || window.clipboardData)?.getData('text/html') || '';
+            // Win/Mac screenshot or "Copy image": image file/blob on clipboard → upload like Trello
+            const clipFile = pastedImageFile(cd);
+            if (clipFile) {
+                e.preventDefault();
+                await uploadPastedImage(clipFile, visual);
+                return;
+            }
+            // Copied image HTML (from a card editor / website) — skip blob/data URLs (upload those)
+            const richHtml = cd?.getData('text/html') || '';
             if (/<img\s/i.test(richHtml)) {
                 e.preventDefault();
+                const dataSrc = richHtml.match(/<img[^>]+src=["'](data:image\/[^"']+|blob:[^"']+)["']/i);
+                if (dataSrc?.[1]?.startsWith('data:image/')) {
+                    try {
+                        const blob = await (await fetch(dataSrc[1])).blob();
+                        const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+                        await uploadPastedImage(new File([blob], `screenshot.${ext}`, { type: blob.type || 'image/png' }), visual);
+                    } catch (err) { toastError(err.message || 'Could not paste image'); }
+                    return;
+                }
                 const clean = sanitizePastedHtml(richHtml);
                 if (clean) document.execCommand('insertHTML', false, clean);
                 return;
@@ -3768,7 +3785,7 @@
                 return;
             }
             // Rich paste (from Trello, websites, Word…): keep the content, drop foreign styles/boxes
-            const html = (e.clipboardData || window.clipboardData)?.getData('text/html') || '';
+            const html = cd?.getData('text/html') || '';
             if (html) {
                 e.preventDefault();
                 const clean = sanitizePastedHtml(html);
@@ -3776,6 +3793,55 @@
                 else document.execCommand('insertText', false, text);
             }
         });
+    }
+
+    function pastedImageFile(cd) {
+        if (!cd) return null;
+        if (cd.files?.length) {
+            for (const f of cd.files) {
+                if (f.type?.startsWith('image/')) return f;
+            }
+        }
+        const items = cd.items ? [...cd.items] : [];
+        for (const item of items) {
+            if (item.kind === 'file' && item.type?.startsWith('image/')) {
+                const f = item.getAsFile();
+                if (f) return f;
+            }
+        }
+        return null;
+    }
+
+    async function uploadPastedImage(file, visual) {
+        if (!file || !currentCardId) {
+            toastError('Open a card before pasting an image');
+            return;
+        }
+        const name = file.name && file.name !== 'image.png'
+            ? file.name
+            : `screenshot-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+        const fd = new FormData();
+        fd.append('file', file, name);
+        try {
+            if (visual === descVisual) setDescMode(true);
+            else if (visual === cmtVisual) focusCommentEditor();
+            const res = await fetch(cardUrl(currentCardId, 'attachments'), {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.message || 'Upload failed');
+            await reloadCard();
+            const att = (state?.attachments || []).find((a) => a.id === data.attachment?.id)
+                || (state?.attachments || [])[0];
+            if (att) {
+                if (visual) setActiveRich(visual);
+                insertDescImage(att);
+            }
+        } catch (err) {
+            toastError(err.message || 'Could not paste screenshot');
+        }
     }
     bindRichVisual(descVisual);
     bindRichVisual(cmtVisual);
