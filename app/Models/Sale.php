@@ -6,10 +6,44 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class Sale extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Sale $sale) {
+            DB::transaction(function () use ($sale) {
+                // Receipts created on approve
+                $sale->invoices()->each(function (Invoice $invoice) {
+                    $invoice->items()->delete();
+                    $invoice->payments()->delete();
+                    $invoice->delete();
+                });
+
+                // Client briefs tied to this sale
+                $sale->briefSubmissions()->delete();
+
+                // In-app bells that link to this sale
+                DatabaseNotification::query()
+                    ->where(function ($q) use ($sale) {
+                        $q->where('data->sale_id', $sale->id)
+                            ->orWhere('data->sale_id', (string) $sale->id);
+                    })
+                    ->delete();
+            });
+
+            // Uploaded brief files: brief-uploads/{saleId}/...
+            $uploadDir = 'brief-uploads/'.$sale->id;
+            if (Storage::disk('public')->exists($uploadDir)) {
+                Storage::disk('public')->deleteDirectory($uploadDir);
+            }
+        });
+    }
 
     /** User-selectable statuses (create / edit); refunded is set only via refund toggle. */
     public const STATUSES = ['pending', 'completed', 'cancelled'];

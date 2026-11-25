@@ -13,7 +13,6 @@ use App\Models\UserActivityLog;
 use App\Services\ActivityLogger;
 use App\Services\InvoiceService;
 use App\Services\SaleNotificationDispatcher;
-use App\Services\TrelloSaleDispatcher;
 use App\Support\AuthScope;
 use App\Services\BriefFormSchemaService;
 use App\Support\BriefFormSupport;
@@ -509,7 +508,6 @@ class SaleController extends Controller
         }
 
         SaleNotificationDispatcher::dispatchSaleCreated($sale);
-        $trelloResult = TrelloSaleDispatcher::dispatch($sale);
 
         ActivityLogger::log($user, UserActivityLog::TYPE_SALE_CREATED,
             "Created sale \"{$sale->title}\" (#{$sale->id})",
@@ -517,8 +515,7 @@ class SaleController extends Controller
         );
 
         return redirect()->route('admin.sales.index')
-            ->with('success', 'Sale submitted and pending approval.')
-            ->with('trello_diagnostics', $trelloResult);
+            ->with('success', 'Sale submitted and pending approval.');
     }
 
     public function show(Sale $sale): View
@@ -579,11 +576,9 @@ class SaleController extends Controller
         if ($sale->is_refunded || $sale->isApproved()) {
             unset($validated['status']);
             $sale->update($validated);
-            $trelloResult = TrelloSaleDispatcher::dispatch($sale->fresh());
 
             return redirect()->route('admin.sales.index')
-                ->with('success', 'Sale updated.')
-                ->with('trello_diagnostics', $trelloResult);
+                ->with('success', 'Sale updated.');
         }
 
         $sale->update(array_merge($validated, [
@@ -595,7 +590,6 @@ class SaleController extends Controller
         ]));
 
         SaleNotificationDispatcher::dispatchSaleUpdated($sale, Auth::user());
-        $trelloResult = TrelloSaleDispatcher::dispatch($sale->fresh());
 
         ActivityLogger::log(Auth::user(), UserActivityLog::TYPE_SALE_UPDATED,
             "Updated sale \"{$sale->title}\" (#{$sale->id})",
@@ -603,8 +597,7 @@ class SaleController extends Controller
         );
 
         return redirect()->route('admin.sales.index')
-            ->with('success', 'Sale updated and re-submitted for approval.')
-            ->with('trello_diagnostics', $trelloResult);
+            ->with('success', 'Sale updated and re-submitted for approval.');
     }
 
     public function destroy(Sale $sale): RedirectResponse
