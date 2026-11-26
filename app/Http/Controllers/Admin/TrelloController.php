@@ -675,6 +675,7 @@ class TrelloController extends Controller
 
         // Main teams and sub-teams: a sub-team can have its own Trello account
         $teams = Team::query()
+            ->active()
             ->with(['trelloIntegration', 'company:id,name', 'parentTeam:id,name'])
             ->orderBy('name')
             ->get();

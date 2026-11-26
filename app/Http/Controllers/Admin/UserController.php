@@ -25,7 +25,7 @@ class UserController extends Controller
     public function index(): View
     {
         $companies = Company::query()->orderBy('name')->get();
-        $teams     = Team::query()->orderBy('name')->get();
+        $teams     = Team::query()->active()->orderBy('name')->get();
         $roles     = Role::query()->orderBy('name')->get();
 
         return view('admin.users.index', compact('companies', 'teams', 'roles'));
@@ -183,7 +183,7 @@ class UserController extends Controller
     public function create(): View
     {
         $roles     = $this->assignableRoles();
-        $teams     = Team::query()->orderBy('name')->get();
+        $teams     = $this->teamsForForm();
         $companies = AuthScope::isAgent()
             ? \App\Models\Company::where('id', auth()->user()->company_id)->get()
             : Company::query()->orderBy('name')->get();
@@ -199,8 +199,8 @@ class UserController extends Controller
             'password'         => 'required|string|min:8|confirmed',
             'role_id'          => ['nullable', Rule::in($this->assignableRoles()->pluck('id')->all())],
             'company_id'       => 'nullable|exists:companies,id',
-            'team_id'          => 'nullable|exists:teams,id',
-            'sub_team_id'      => 'nullable|exists:teams,id',
+            'team_id'          => ['nullable', Rule::exists('teams', 'id')->where(fn ($q) => $q->where('is_active', true))],
+            'sub_team_id'      => ['nullable', Rule::exists('teams', 'id')->where(fn ($q) => $q->where('is_active', true))],
             'sub_team_head_id' => 'nullable|exists:sub_team_heads,id',
         ]);
 
@@ -247,7 +247,7 @@ class UserController extends Controller
     {
         $this->guardAdminAccount($user);
         $roles     = $this->assignableRoles();
-        $teams     = Team::query()->orderBy('name')->get();
+        $teams     = $this->teamsForForm($user->team_id);
         $companies = AuthScope::isAgent()
             ? \App\Models\Company::where('id', auth()->user()->company_id)->get()
             : Company::query()->orderBy('name')->get();
@@ -264,8 +264,8 @@ class UserController extends Controller
             'password'         => 'nullable|string|min:8|confirmed',
             'role_id'          => ['nullable', Rule::in($this->assignableRoles()->pluck('id')->all())],
             'company_id'       => 'nullable|exists:companies,id',
-            'team_id'          => 'nullable|exists:teams,id',
-            'sub_team_id'      => 'nullable|exists:teams,id',
+            'team_id'          => ['nullable', Rule::in($this->teamsForForm($user->team_id)->pluck('id')->all())],
+            'sub_team_id'      => ['nullable', Rule::in($this->teamsForForm($user->sub_team_id)->pluck('id')->all())],
             'sub_team_head_id' => 'nullable|exists:sub_team_heads,id',
         ]);
 
@@ -334,5 +334,20 @@ class UserController extends Controller
         return redirect()
             ->route('admin.users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    /** Active teams for assign/filter; keep a user's current team listed even if it was inactivated. */
+    private function teamsForForm(int|string|null $keepTeamId = null)
+    {
+        $q = Team::query()->orderBy('name');
+        if ($keepTeamId) {
+            $q->where(function ($inner) use ($keepTeamId) {
+                $inner->where('is_active', true)->orWhereKey($keepTeamId);
+            });
+        } else {
+            $q->active();
+        }
+
+        return $q->get();
     }
 }

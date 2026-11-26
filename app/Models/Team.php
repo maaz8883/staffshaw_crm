@@ -21,10 +21,12 @@ class Team extends Model
         'name',
         'description',
         'is_production',
+        'is_active',
     ];
 
     protected $casts = [
         'is_production' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -32,23 +34,39 @@ class Team extends Model
         // A sub-team always follows its main team (sub-teams of Production are production too)
         static::saving(function (Team $team) {
             if ($team->parent_team_id) {
-                $team->is_production = (bool) Team::query()->whereKey($team->parent_team_id)->value('is_production');
+                $parent = Team::query()->whereKey($team->parent_team_id)->first(['is_production', 'is_active']);
+                if ($parent) {
+                    $team->is_production = (bool) $parent->is_production;
+                    $team->is_active = (bool) $parent->is_active;
+                }
             }
         });
         static::deleted(function (Team $team) {
             \Illuminate\Support\Facades\DB::table('team_heads')->where('team_id', $team->id)->delete();
         });
         static::saved(function (Team $team) {
-            if (! $team->parent_team_id && $team->wasChanged('is_production')) {
+            if ($team->parent_team_id) {
+                return;
+            }
+            if ($team->wasChanged('is_production')) {
                 Team::query()->where('parent_team_id', $team->id)->update(['is_production' => $team->is_production]);
+            }
+            if ($team->wasChanged('is_active')) {
+                Team::query()->where('parent_team_id', $team->id)->update(['is_active' => $team->is_active]);
             }
         });
     }
 
-    /** Sales teams only (Staffshaw, Nextbyte…): production teams have no sales, targets or leads. */
+    /** Active teams only — inactive teams stay out of dropdowns and day-to-day use. */
+    public function scopeActive($query)
+    {
+        return $query->where('teams.is_active', true);
+    }
+
+    /** Sales teams only (Staffshaw, Nextbyte…): production + inactive teams stay out. */
     public function scopeSales($query)
     {
-        return $query->where('teams.is_production', false);
+        return $query->where('teams.is_production', false)->active();
     }
 
     public function company(): BelongsTo

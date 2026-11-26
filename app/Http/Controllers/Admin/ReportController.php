@@ -55,7 +55,7 @@ class ReportController extends Controller
     /** @return Collection<int, int> */
     private function headedTeamIds(): Collection
     {
-        return Team::headedBy(Auth::id())->pluck('id');
+        return Team::headedBy(Auth::id())->active()->pluck('id');
     }
 
     /** Same visibility rules as {@see SaleController::baseQuery()}. */

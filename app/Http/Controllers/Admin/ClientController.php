@@ -494,6 +494,7 @@ class ClientController extends Controller
 
         if ($this->isTeamHead()) {
             return Team::query()
+                ->active()
                 ->headedBy(Auth::id())
                 ->orderBy('name')
                 ->get(['id', 'name']);

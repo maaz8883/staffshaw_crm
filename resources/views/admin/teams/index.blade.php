@@ -23,6 +23,7 @@
                     @if(!$isPpc)<th>Team Head</th>@endif
                     @if(!$isPpc)<th>Description</th>@endif
                     @if(!$isPpc)<th>Users</th>@endif
+                    <th>Status</th>
                     <th class="text-end">Actions</th>
                 </tr>
                 </thead>
@@ -56,6 +57,7 @@
                 columns.push({data: 'users_count', name: 'users_count', searchable: false});
             }
 
+            columns.push({data: 'status', name: 'is_active', searchable: false});
             columns.push({data: 'actions', name: 'actions', orderable: false, searchable: false, className: 'text-end'});
 
             $('#teams-table').DataTable({

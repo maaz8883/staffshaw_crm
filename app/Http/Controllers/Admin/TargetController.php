@@ -33,6 +33,7 @@ class TargetController extends Controller
 
         // Team head: only teams where they are the head
         return Team::with(['company', 'users'])
+            ->active()
             ->headedBy($user->id)
             ->orderBy('name')
             ->get();
@@ -70,11 +71,13 @@ class TargetController extends Controller
             $teams = Team::with($withRelations)->sales()->orderBy('name')->get();
         } elseif ($isTeamHead) {
             $teams = Team::with($withRelations)
+                ->active()
                 ->headedBy($authUser->id)
                 ->orderBy('name')
                 ->get();
         } else {
             $teams = Team::with($withRelations)
+                ->active()
                 ->where('id', $authUser->team_id)
                 ->get();
         }

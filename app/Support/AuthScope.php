@@ -86,7 +86,7 @@ class AuthScope
             return collect();
         }
 
-        return Team::headedBy($user->id)->pluck('id');
+        return Team::headedBy($user->id)->active()->pluck('id');
     }
 
     /** SubTeamHead row IDs where the user is a sub-team head. */
@@ -108,7 +108,11 @@ class AuthScope
             return collect();
         }
 
-        return SubTeamHead::where('user_id', $user->id)->pluck('team_id')->unique()->values();
+        return SubTeamHead::where('user_id', $user->id)
+            ->whereIn('team_id', Team::query()->active()->select('id'))
+            ->pluck('team_id')
+            ->unique()
+            ->values();
     }
 
     /** Team IDs the current Project Manager has approved access to. */
@@ -118,7 +122,9 @@ class AuthScope
             return collect();
         }
 
-        return auth()->user()->approvedTeamIds();
+        return auth()->user()->approvedTeamIds()
+            ->intersect(Team::query()->active()->pluck('id'))
+            ->values();
     }
 
     /**
@@ -127,7 +133,7 @@ class AuthScope
     public static function accessibleTeamIds(): Collection
     {
         if (self::isAdminOrManager()) {
-            return Team::query()->pluck('id');
+            return Team::query()->active()->pluck('id');
         }
 
         if (self::isProjectManager()) {
@@ -145,7 +151,11 @@ class AuthScope
         }
 
         $teamId = auth()->user()?->team_id;
-        return $teamId ? collect([(int) $teamId]) : collect();
+        if ($teamId && Team::query()->whereKey($teamId)->active()->exists()) {
+            return collect([(int) $teamId]);
+        }
+
+        return collect();
     }
 
     public static function canAccessTeam(int $teamId): bool
@@ -293,7 +303,7 @@ class AuthScope
         return self::scopeLeads(\App\Models\Lead::query()->whereKey($lead->id))->exists();
     }
 
-    /** Teams for dropdowns */
+    /** Teams for dropdowns (active sales teams only). */
     public static function teamsForDropdown()
     {
         $q = Team::query()->sales()->orderBy('name');

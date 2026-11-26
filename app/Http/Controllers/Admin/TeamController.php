@@ -39,6 +39,11 @@ class TeamController extends Controller
             ->addColumn('company_name', fn (Team $team) => e($team->company?->name ?? '-'))
             ->addColumn('team_head_name', fn (Team $team) => e($team->headNames() ?: '-'))
             ->editColumn('description', fn (Team $team) => e($team->description ?: '-'))
+            ->addColumn('status', function (Team $team) {
+                return $team->is_active
+                    ? '<span class="badge bg-success">Active</span>'
+                    : '<span class="badge bg-secondary">Inactive</span>';
+            })
             ->addColumn('actions', function (Team $team) {
                 $showUrl = route('admin.teams.show', $team);
                 $editUrl = route('admin.teams.edit', $team);
@@ -58,7 +63,7 @@ class TeamController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['actions'])
+            ->rawColumns(['status', 'actions'])
             ->toJson();
     }
 
@@ -97,6 +102,7 @@ class TeamController extends Controller
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
+            'is_active' => $request->has('is_active') ? $request->boolean('is_active') : true,
         ]);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);
@@ -232,12 +238,17 @@ class TeamController extends Controller
 
         $oldName = $team->name;
         
-        $team->update([
+        $payload = [
             'company_id'   => CompanyContext::idForUpdate($team->company_id, $validated['company_id'] ?? null),
             'name'         => $validated['name'],
             'description'  => $validated['description'] ?? null,
             'is_production' => $request->boolean('is_production'),
-        ]);
+        ];
+        // Sub-teams inherit is_active from the parent (model boot); only main teams set it here.
+        if (! $team->parent_team_id && $request->has('is_active')) {
+            $payload['is_active'] = $request->boolean('is_active');
+        }
+        $team->update($payload);
 
         $team->brands()->sync($validated['brand_ids'] ?? []);
 
@@ -292,6 +303,7 @@ class TeamController extends Controller
     public function subTeams(Team $team): JsonResponse
     {
         $subTeams = Team::query()
+            ->active()
             ->where('parent_team_id', $team->id)
             ->orderBy('name')
             ->get(['id', 'name']);

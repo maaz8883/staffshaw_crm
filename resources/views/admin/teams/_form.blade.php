@@ -120,6 +120,25 @@
     <textarea id="description" name="description" class="form-control" rows="3">{{ old('description', $team->description ?? '') }}</textarea>
 </div>
 
+@if(empty($team?->parent_team_id))
+<div class="mb-3 form-check">
+    <input type="hidden" name="is_active" value="0">
+    <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1"
+           @checked(old('is_active', $team->is_active ?? true))>
+    <label class="form-check-label" for="is_active">Active</label>
+    <div class="form-text">
+        Inactive teams are hidden everywhere (sales, leads, users, reports). Uncheck to retire a team without deleting it. Sub-teams follow this setting.
+    </div>
+</div>
+@else
+<div class="mb-3">
+    <span class="badge {{ ($team->is_active ?? true) ? 'bg-success' : 'bg-secondary' }}">
+        {{ ($team->is_active ?? true) ? 'Active' : 'Inactive' }}
+    </span>
+    <div class="form-text">Sub-teams follow their main team’s Active / Inactive setting.</div>
+</div>
+@endif
+
 <div class="mb-3 form-check">
     <input type="checkbox" class="form-check-input" id="is_production" name="is_production" value="1"
            @checked(old('is_production', $team->is_production ?? false))
