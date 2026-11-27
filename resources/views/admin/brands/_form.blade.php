@@ -33,6 +33,14 @@
     </div>
 
     <div class="col-md-6 mb-3">
+        <label for="short_code" class="form-label">Short code</label>
+        <input type="text" id="short_code" name="short_code" class="form-control"
+            maxlength="32" placeholder="e.g. HP, TGP, WP"
+            value="{{ old('short_code', $brand->short_code ?? '') }}">
+        <div class="form-text">Used on sales/leads CSV import. Sheet may use this code <em>or</em> the full brand name.</div>
+    </div>
+
+    <div class="col-md-6 mb-3">
         <label for="website" class="form-label">URL <span class="text-danger">*</span></label>
         <input type="url" id="website" name="website" class="form-control" placeholder="https://"
             value="{{ old('website', $brand->website ?? '') }}" required>

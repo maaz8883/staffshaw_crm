@@ -17,6 +17,7 @@
                     <tr>
                         <th>Image</th>
                         <th>Name</th>
+                        <th>Short code</th>
                         <th>URL</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -46,6 +47,7 @@
                 columns: [
                     {data: 'image_thumb', name: 'image', orderable: false, searchable: false},
                     {data: 'name', name: 'name'},
+                    {data: 'short_code', name: 'short_code'},
                     {data: 'website', name: 'website'},
                     {data: 'actions', name: 'actions', orderable: false, searchable: false, className: 'text-end'}
                 ]

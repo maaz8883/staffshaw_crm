@@ -22,6 +22,7 @@ class SaleImportService
     /** @var list<string> */
     public const TEMPLATE_HEADERS = [
         'Sales Type',
+        'Service',
         'PPC',
         'Brand',
         'Order Date',
@@ -68,6 +69,10 @@ class SaleImportService
         DB::transaction(function () use ($rows, $actor, $brands, $users, $canAssignOthers, &$created, &$skipped, &$errors, &$warnings) {
             foreach ($rows as $index => $row) {
                 $rowNum = $index + 2; // header is row 1
+                // Master-sheet footers / team totals have no customer or service — ignore quietly.
+                if ($this->rowLacksSaleData($row)) {
+                    continue;
+                }
                 $result = $this->importRow($row, $rowNum, $actor, $brands, $users, $canAssignOthers);
                 if ($result['ok']) {
                     $created++;
@@ -99,6 +104,7 @@ class SaleImportService
         fputcsv($out, self::TEMPLATE_HEADERS);
         fputcsv($out, [
             'Front',
+            'Design',
             'No',
             'Example Brand',
             '2026-11-01',
@@ -180,6 +186,7 @@ class SaleImportService
     {
         $aliases = [
             'sales_type' => ['sales type', 'sales type (front/upsell)', 'sale type', 'type'],
+            'service_category' => ['service', 'service category', 'category', 'ebook/design', 'ebook or design'],
             'is_ppc' => ['ppc'],
             'brand' => ['brand'],
             'sale_date' => ['order date', 'sale date', 'date'],
@@ -255,13 +262,20 @@ class SaleImportService
             return ['ok' => false, 'message' => 'Sales Type must be Front or Upsell.'];
         }
 
+        // Optional: many master sheets have no Service column — leave blank if missing/invalid.
+        $serviceCategory = $this->parseServiceCategory($row['service_category'] ?? '');
+        if (trim($row['service_category'] ?? '') !== '' && $serviceCategory === null) {
+            $warnings[] = 'Service “'.trim($row['service_category']).'” not recognized — left blank (use Ebook or Design).';
+            $serviceCategory = null;
+        }
+
         $brandName = trim($row['brand'] ?? '');
         if ($brandName === '') {
             return ['ok' => false, 'message' => 'Brand is required.'];
         }
-        $brand = $brands->get($this->norm($brandName));
+        $brand = $this->resolveBrand($brandName, $brands);
         if (! $brand) {
-            return ['ok' => false, 'message' => "Unknown brand \"{$brandName}\". Use an exact CRM brand name."];
+            return ['ok' => false, 'message' => "Unknown brand \"{$brandName}\". Use the CRM brand name or its Short code (set on Brands → Edit)."];
         }
 
         $saleDate = $this->parseDate($row['sale_date'] ?? '');
@@ -287,14 +301,25 @@ class SaleImportService
         }
 
         // Sales Agent: link CRM user when found; otherwise keep the sheet name for history.
+        // Upsell / AM-only sheets often omit Sales Agent — fall back to Account Manager for ownership.
         $agentRaw = trim($row['sales_agent'] ?? '');
+        $amRawForAgent = trim($row['account_manager'] ?? '');
+        $usedAmAsAgent = false;
+        if ($agentRaw === '' && $amRawForAgent !== '') {
+            $agentRaw = $amRawForAgent;
+            $usedAmAsAgent = true;
+        }
         $agent = $agentRaw !== '' ? $this->resolveUser($agentRaw, $users) : null;
         $agentName = null;
         if ($agentRaw !== '' && ! $agent) {
             $agentName = Str::limit($agentRaw, 255, '');
-            $warnings[] = "Sales Agent \"{$agentRaw}\" not in CRM — name saved on sale for history (not linked to a login).";
+            $warnings[] = $usedAmAsAgent
+                ? "Account Manager \"{$agentRaw}\" used as Sales Agent (no agent column) — name saved for history (not linked)."
+                : "Sales Agent \"{$agentRaw}\" not in CRM — name saved on sale for history (not linked to a login).";
         } elseif ($agentRaw === '') {
-            $warnings[] = 'No Sales Agent in sheet — sale saved without agent.';
+            $warnings[] = 'No Sales Agent or Account Manager in sheet — sale saved without agent.';
+        } elseif ($usedAmAsAgent && $agent) {
+            $warnings[] = "No Sales Agent column — used Account Manager \"{$agent->name}\" as sales agent.";
         }
         if ($agent && ! $canAssignOthers && (int) $agent->id !== (int) $actor->id) {
             $agentName = Str::limit($agent->name, 255, '');
@@ -368,9 +393,13 @@ class SaleImportService
         ]);
 
         $isRefunded = false;
+        $isChargeback = false;
         $storeStatus = $status;
         if ($status === Sale::STATUS_REFUNDED) {
             $isRefunded = true;
+            $storeStatus = 'completed';
+        } elseif ($status === Sale::STATUS_CHARGEBACK) {
+            $isChargeback = true;
             $storeStatus = 'completed';
         }
 
@@ -379,6 +408,13 @@ class SaleImportService
         $autoApprove = $canAssignOthers;
         if ($autoApprove && $storeStatus === 'pending') {
             $storeStatus = 'completed';
+        }
+
+        $finalStatus = $storeStatus;
+        if ($isChargeback) {
+            $finalStatus = Sale::STATUS_CHARGEBACK;
+        } elseif ($isRefunded) {
+            $finalStatus = Sale::STATUS_REFUNDED;
         }
 
         Sale::query()->create([
@@ -399,8 +435,9 @@ class SaleImportService
             'team_id' => $teamId,
             'company_id' => $companyId,
             'brand_id' => $brand->id,
-            'status' => $isRefunded ? Sale::STATUS_REFUNDED : $storeStatus,
+            'status' => $finalStatus,
             'sale_type' => $saleType,
+            'service_category' => $serviceCategory,
             'merchant' => trim($row['merchant'] ?? '') ?: null,
             'is_ppc' => $this->parseYesNo($row['is_ppc'] ?? ''),
             'notes' => trim($row['notes'] ?? '') ?: null,
@@ -408,6 +445,10 @@ class SaleImportService
             'refunded_at' => $isRefunded ? now() : null,
             'refunded_by' => $isRefunded ? $actor->id : null,
             'status_before_refund' => $isRefunded ? 'completed' : null,
+            'is_chargeback' => $isChargeback,
+            'chargeback_at' => $isChargeback ? now() : null,
+            'chargeback_by' => $isChargeback ? $actor->id : null,
+            'status_before_chargeback' => $isChargeback ? 'completed' : null,
             'approval_status' => $autoApprove ? Sale::APPROVAL_APPROVED : Sale::APPROVAL_PENDING,
             'approved_by' => $autoApprove ? $actor->id : null,
             'approved_at' => $autoApprove ? now() : null,
@@ -450,15 +491,64 @@ class SaleImportService
         return $client->id;
     }
 
-    /** @return Collection<string, Brand> */
+    /**
+     * Map of normalized name + short_code → Brand (both work on import).
+     *
+     * @return Collection<string, Brand>
+     */
     private function brandLookup(User $actor): Collection
     {
         $ids = AuthScope::accessibleBrandIds();
-
-        return Brand::query()
+        $brands = Brand::query()
             ->whereIn('id', $ids->isEmpty() ? [0] : $ids->all())
-            ->get()
-            ->keyBy(fn (Brand $b) => $this->norm($b->name));
+            ->get();
+
+        $map = collect();
+        foreach ($brands as $brand) {
+            $map[$this->norm($brand->name)] = $brand;
+            if (filled($brand->short_code)) {
+                $codeKey = $this->norm($brand->short_code);
+                if ($codeKey !== '' && ! $map->has($codeKey)) {
+                    $map[$codeKey] = $brand;
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Match CRM brand name or Short code from Brands → Edit.
+     *
+     * @param  Collection<string, Brand>  $brands
+     */
+    private function resolveBrand(string $raw, Collection $brands): ?Brand
+    {
+        $key = $this->norm($raw);
+        if ($key === '') {
+            return null;
+        }
+
+        if ($brands->has($key)) {
+            return $brands->get($key);
+        }
+
+        // Unique contains match on name keys only (avoid short-code collisions)
+        $hits = $brands->filter(function (Brand $brand, string $mapKey) use ($key) {
+            $nameKey = $this->norm($brand->name);
+
+            return $mapKey === $nameKey && (str_contains($nameKey, $key) || str_contains($key, $nameKey));
+        });
+
+        return $hits->count() === 1 ? $hits->first() : null;
+    }
+
+    /** Summary / blank rows from Excel master sheets (no sale fields filled). */
+    private function rowLacksSaleData(array $row): bool
+    {
+        return trim($row['client_name'] ?? '') === ''
+            && trim($row['title'] ?? '') === ''
+            && trim($row['brand'] ?? '') === '';
     }
 
     /** @return Collection<string, User> */
@@ -530,6 +620,22 @@ class SaleImportService
         return null;
     }
 
+    private function parseServiceCategory(string $raw): ?string
+    {
+        $v = Str::lower(trim($raw));
+        if ($v === '') {
+            return null;
+        }
+        if (in_array($v, ['ebook', 'e-book', 'e book', 'book'], true)) {
+            return Sale::CATEGORY_EBOOK;
+        }
+        if (in_array($v, ['design', 'designing', 'graphics', 'graphic'], true)) {
+            return Sale::CATEGORY_DESIGN;
+        }
+
+        return null;
+    }
+
     private function parseStatus(string $raw): ?string
     {
         $v = Str::lower(trim($raw));
@@ -547,6 +653,9 @@ class SaleImportService
         }
         if (in_array($v, ['refunded', 'refund'], true)) {
             return Sale::STATUS_REFUNDED;
+        }
+        if (in_array($v, ['chargeback', 'charge back', 'disputed', 'dispute'], true)) {
+            return Sale::STATUS_CHARGEBACK;
         }
 
         return null;

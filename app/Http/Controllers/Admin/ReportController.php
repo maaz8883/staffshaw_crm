@@ -299,6 +299,9 @@ class ReportController extends Controller
         $refundedCount = (clone $salesInPeriod)->where(function ($q) {
             $q->where('is_refunded', true)->orWhere('status', Sale::STATUS_REFUNDED);
         })->count();
+        $chargebackCount = (clone $salesInPeriod)->where(function ($q) {
+            $q->where('is_chargeback', true)->orWhere('status', Sale::STATUS_CHARGEBACK);
+        })->count();
 
         $frontRevenue = (float) (clone $approvedCompleted)->where('sale_type', Sale::TYPE_FRONT)->sum('amount');
         $upsellRevenue = (float) (clone $approvedCompleted)->where('sale_type', Sale::TYPE_UPSELL)->sum('amount');
@@ -335,6 +338,7 @@ class ReportController extends Controller
             'completedCount' => $completedCount,
             'pendingApprovalCount' => $pendingApprovalCount,
             'refundedCount' => $refundedCount,
+            'chargebackCount' => $chargebackCount,
             'frontRevenue' => $frontRevenue,
             'upsellRevenue' => $upsellRevenue,
             'salesByStatus' => $salesByStatus,
@@ -434,10 +438,25 @@ class ReportController extends Controller
             ->get()
             ->keyBy('merchant_name');
 
-        $merchantRows = $base->map(function ($row) use ($refundAgg) {
+        $chargebackAgg = (clone $salesInPeriod)
+            ->where(function ($q) {
+                $q->where('is_chargeback', true)->orWhere('status', Sale::STATUS_CHARGEBACK);
+            })
+            ->toBase()
+            ->selectRaw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —') as merchant_name")
+            ->selectRaw('COUNT(*) as chargeback_count')
+            ->selectRaw('SUM(amount) as chargeback_total')
+            ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —')"))
+            ->get()
+            ->keyBy('merchant_name');
+
+        $merchantRows = $base->map(function ($row) use ($refundAgg, $chargebackAgg) {
             $refund = $refundAgg->get($row->merchant_name);
+            $chargeback = $chargebackAgg->get($row->merchant_name);
             $refunded = $refund ? (float) $refund->refunded_total : 0.0;
             $refundCount = $refund ? (int) $refund->refund_count : 0;
+            $chargebackTotal = $chargeback ? (float) $chargeback->chargeback_total : 0.0;
+            $chargebackCount = $chargeback ? (int) $chargeback->chargeback_count : 0;
             $gross = (float) $row->gross_total;
 
             return [
@@ -446,7 +465,9 @@ class ReportController extends Controller
                 'gross_total' => $gross,
                 'refunded' => $refunded,
                 'refund_count' => $refundCount,
-                'net_total' => round($gross - $refunded, 2),
+                'chargeback' => $chargebackTotal,
+                'chargeback_count' => $chargebackCount,
+                'net_total' => round($gross - $refunded - $chargebackTotal, 2),
             ];
         })->values();
 

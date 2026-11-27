@@ -124,8 +124,10 @@ class DashboardController extends Controller
         $invoiceModel = \App\Models\Invoice::class;
         $notVoid = fn ($q) => $q->where('status', '!=', \App\Models\Invoice::STATUS_VOID);
 
-        $booked = (float) self::approved()->whereBetween('sale_date', $range)->where('is_refunded', false)->sum('amount');
-        $salesCount = self::approved()->whereBetween('sale_date', $range)->where('is_refunded', false)->count();
+        $booked = (float) self::approved()->whereBetween('sale_date', $range)
+            ->where('is_refunded', false)->where('is_chargeback', false)->sum('amount');
+        $salesCount = self::approved()->whereBetween('sale_date', $range)
+            ->where('is_refunded', false)->where('is_chargeback', false)->count();
         $receiptsIn = (float) $invoiceModel::query()->whereNotNull('sale_id')->tap($notVoid)->whereBetween('issued_at', $range)->sum('amount');
         $paymentsIn = (float) \App\Models\InvoicePayment::query()
             ->whereBetween('paid_at', $range)
@@ -136,9 +138,12 @@ class DashboardController extends Controller
         $ppc = (float) \App\Models\TeamPpcSpending::query()->where('month', $month)->where('year', $year)->sum('amount');
         $refunds = Sale::query()->where('is_refunded', true)->whereBetween('refunded_at', [$from, $to]);
         $refundTotal = (float) (clone $refunds)->sum('amount');
+        $chargebacks = Sale::query()->where('is_chargeback', true)->whereBetween('chargeback_at', [$from, $to]);
+        $chargebackTotal = (float) (clone $chargebacks)->sum('amount');
 
-        // Still owed: approved, not refunded sales not fully received + issued invoices with a balance
-        $openSales = self::approved()->where('is_refunded', false)->whereColumn('received_amount', '<', 'amount');
+        // Still owed: approved, not refunded/chargeback sales not fully received + issued invoices with a balance
+        $openSales = self::approved()->where('is_refunded', false)->where('is_chargeback', false)
+            ->whereColumn('received_amount', '<', 'amount');
         $saleBalance = (float) (clone $openSales)->sum(DB::raw('amount - received_amount'));
         $topOpenSales = (clone $openSales)->with(['user:id,name', 'brand:id,name'])
             ->orderByRaw('(amount - received_amount) desc')->limit(8)->get();
@@ -170,6 +175,8 @@ class DashboardController extends Controller
                 'net' => round($received - $ppc, 2),
                 'refunds' => $refundTotal,
                 'refund_count' => (clone $refunds)->count(),
+                'chargebacks' => $chargebackTotal,
+                'chargeback_count' => (clone $chargebacks)->count(),
                 'sale_balance' => $saleBalance,
                 'invoice_balance' => (float) $openInvoices->sum(fn ($i) => $i->amountDue()),
                 'overdue_total' => (float) $overdue->sum(fn ($i) => $i->amountDue()),

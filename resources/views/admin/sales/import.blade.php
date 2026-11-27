@@ -70,19 +70,25 @@
             <div class="card-body small">
                 <ul class="mb-3">
                     <li><strong>Sales Type</strong> — Front or Upsell</li>
+                    <li><strong>Service</strong> — optional; Ebook or Design (skip if your sheet has no such column)</li>
                     <li><strong>PPC</strong> — Yes / No</li>
-                    <li><strong>Brand</strong> — exact CRM brand name</li>
+                    <li><strong>Brand</strong> — CRM brand name <em>or</em> Short code (set on Brands → Edit)</li>
                     <li><strong>Order Date</strong> — YYYY-MM-DD or MM/DD/YYYY (US)</li>
                     <li><strong>Paid Amount + Balance</strong> = total sale amount</li>
                     <li><strong>Status</strong> — Pending, Completed, Cancelled (blank = Completed)</li>
-                    <li><strong>Sales Agent</strong> — match CRM user when possible; if the person left / isn’t in CRM, their <em>name is still saved</em> on the sale (shown as Former)</li>
+                    <li><strong>Sales Agent</strong> — match CRM user when possible; if the person left / isn’t in CRM, their <em>name is still saved</em> on the sale (shown as Former). If the sheet has no Sales Agent (common on Upsell sheets) but has <strong>Account Manager</strong>, that name is used as the sales agent</li>
                     <li><strong>Account / Project Manager</strong> — same: link if found, otherwise keep the sheet name for history</li>
                     <li>Do <strong>not</strong> fill merchant summary columns (Gross Total, Disputes, etc.) — those come from reports</li>
                 </ul>
                 <p class="mb-1 fw-semibold">Your CRM brands</p>
                 <div class="border rounded p-2" style="max-height:140px;overflow:auto">
                     @forelse($brands as $brand)
-                        <span class="badge bg-secondary me-1 mb-1">{{ $brand->name }}</span>
+                        <span class="badge bg-secondary me-1 mb-1">
+                            {{ $brand->name }}
+                            @if($brand->short_code)
+                                <span class="opacity-75">({{ $brand->short_code }})</span>
+                            @endif
+                        </span>
                     @empty
                         <span class="text-muted">No brands available.</span>
                     @endforelse

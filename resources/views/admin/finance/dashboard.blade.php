@@ -48,6 +48,7 @@
         ['PPC spend', $m($stats['ppc']), 'All teams', route('admin.ppc.index'), ''],
         ['Net cash flow (USD)', $m($stats['net']), 'Received − PPC · rupee expenses not included', null, $stats['net'] >= 0 ? 'fin-net-pos' : 'fin-net-neg'],
         ['Refunds', $m($stats['refunds']), $stats['refund_count'].' sale'.($stats['refund_count'] === 1 ? '' : 's').' refunded', route('admin.sales.index'), $stats['refunds'] > 0 ? 'text-danger' : ''],
+        ['Chargebacks', $m($stats['chargebacks'] ?? 0), ($stats['chargeback_count'] ?? 0).' sale'.(($stats['chargeback_count'] ?? 0) === 1 ? '' : 's').' chargeback', route('admin.sales.index'), ($stats['chargebacks'] ?? 0) > 0 ? 'text-danger' : ''],
     ] as [$label, $value, $sub, $url, $class])
         <div class="col-6 col-md-4 col-xl-2">
             <div class="card border-0 shadow-sm h-100 fin-tile"><div class="card-body">

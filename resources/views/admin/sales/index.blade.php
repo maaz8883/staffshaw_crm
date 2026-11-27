@@ -48,6 +48,7 @@
         <option value="pending">Pending</option>
         <option value="cancelled">Cancelled</option>
         <option value="{{ \App\Models\Sale::STATUS_REFUNDED }}">Refunded</option>
+        <option value="{{ \App\Models\Sale::STATUS_CHARGEBACK }}">Chargeback</option>
     </select>
 
     <select id="filter-approval" class="form-select form-select-sm" style="width:auto">
@@ -63,6 +64,13 @@
         <option value="upsell">Upsell</option>
     </select>
 
+    <select id="filter-service-category" class="form-select form-select-sm" style="width:auto">
+        <option value="">All services</option>
+        @foreach(\App\Models\Sale::SERVICE_CATEGORY_LABELS as $value => $label)
+            <option value="{{ $value }}">{{ $label }}</option>
+        @endforeach
+    </select>
+
     <select id="filter-brand" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Brands</option>
         @foreach($brands as $brand)
@@ -74,6 +82,12 @@
         <option value="">All (refund)</option>
         <option value="0">Not refunded</option>
         <option value="1">Refunded</option>
+    </select>
+
+    <select id="filter-chargeback" class="form-select form-select-sm" style="width:auto">
+        <option value="">All (chargeback)</option>
+        <option value="0">No chargeback</option>
+        <option value="1">Chargeback</option>
     </select>
 
     <select id="filter-received" class="form-select form-select-sm" style="width:auto">
@@ -122,6 +136,7 @@
                     <th>Client</th>
                     <th>Brand</th>
                     <th>Type</th>
+                    <th>Service</th>
                     <th>Amount</th>
                     <th>Received</th>
                     <th>Remaining</th>
@@ -131,6 +146,7 @@
                     <th>Status</th>
                     <th>Approval</th>
                     <th class="text-center">Refund</th>
+                    <th class="text-center">Chargeback</th>
                     <th class="text-end">Actions</th>
                 </tr>
                 </thead>
@@ -212,7 +228,9 @@ $(function () {
                 d.status          = $('#filter-status').val();
                 d.approval_status = $('#filter-approval').val();
                 d.sale_type       = $('#filter-sale-type').val();
+                d.service_category = $('#filter-service-category').val();
                 d.refunded        = $('#filter-refunded').val();
+                d.chargeback      = $('#filter-chargeback').val();
                 d.received_filter  = $('#filter-received').val();
                 d.remaining_filter = $('#filter-remaining').val();
                 d.brand_id         = $('#filter-brand').val();
@@ -224,6 +242,7 @@ $(function () {
             {data: 'client_name',    name: 'client_name'},
             {data: 'brand_name',     name: 'brand.name', searchable: false},
             {data: 'sale_type_badge', name: 'sale_type', orderable: true, searchable: false},
+            {data: 'service_category_badge', name: 'service_category', orderable: true, searchable: false},
             {data: 'amount',         name: 'amount'},
             {data: 'received_amount', name: 'received_amount'},
             {data: 'remaining_amount', name: 'remaining_amount', orderable: true, searchable: false},
@@ -233,6 +252,7 @@ $(function () {
             {data: 'status',         name: 'status'},
             {data: 'approval_badge', name: 'approval_status'},
             {data: 'refund_toggle',  name: 'is_refunded', orderable: true, searchable: false, className: 'text-center'},
+            {data: 'chargeback_toggle', name: 'is_chargeback', orderable: true, searchable: false, className: 'text-center'},
             {data: 'actions',        name: 'actions', orderable: false, searchable: false, className: 'text-end'}
         ],
         drawCallback: function () {
@@ -323,12 +343,12 @@ $(function () {
         postBulk(bulkDeleteUrl, selectedIds('data-can-delete'), 'Delete selected sales?');
     });
 
-    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').on('change', function () {
+    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-service-category, #filter-brand, #filter-refunded, #filter-chargeback, #filter-received, #filter-remaining').on('change', function () {
         table.draw();
     });
 
     $('#btn-reset').on('click', function () {
-        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-refunded, #filter-received, #filter-remaining').val('').trigger('change.select2');
+        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-service-category, #filter-brand, #filter-refunded, #filter-chargeback, #filter-received, #filter-remaining').val('').trigger('change.select2');
         table.draw();
     });
 

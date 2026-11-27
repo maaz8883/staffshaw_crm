@@ -25,6 +25,8 @@ class ActivityLogController extends Controller
             UserActivityLog::TYPE_SALE_REJECTED,
             UserActivityLog::TYPE_SALE_REFUNDED,
             UserActivityLog::TYPE_SALE_REFUND_REVERTED,
+            UserActivityLog::TYPE_SALE_CHARGEBACK,
+            UserActivityLog::TYPE_SALE_CHARGEBACK_REVERTED,
             UserActivityLog::TYPE_INVOICE_CREATED,
             UserActivityLog::TYPE_INVOICE_UPDATED,
             UserActivityLog::TYPE_INVOICE_ISSUED,

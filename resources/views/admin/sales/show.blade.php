@@ -75,7 +75,7 @@
             <div class="col-md-6">
                 <small class="text-muted d-block">Status</small>
                 @php
-                    $colors = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger',\App\Models\Sale::STATUS_REFUNDED=>'dark'];
+                    $colors = ['completed'=>'success','pending'=>'warning','cancelled'=>'danger',\App\Models\Sale::STATUS_REFUNDED=>'dark',\App\Models\Sale::STATUS_CHARGEBACK=>'dark'];
                 @endphp
                 <span class="badge bg-{{ $colors[$sale->status] ?? 'secondary' }}">{{ $sale->statusLabel() }}</span>
             </div>
@@ -103,6 +103,14 @@
                 <small class="text-muted d-block">Sale type</small>
                 @php $tc = ['front'=>'primary','upsell'=>'info']; @endphp
                 <span class="badge bg-{{ $tc[$sale->sale_type ?? 'front'] ?? 'secondary' }}">{{ $sale->saleTypeLabel() }}</span>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted d-block">Service</small>
+                @if($sale->service_category)
+                    <span class="badge bg-{{ $sale->service_category === 'design' ? 'warning' : 'secondary' }}">{{ $sale->serviceCategoryLabel() }}</span>
+                @else
+                    —
+                @endif
             </div>
             <div class="col-md-6">
                 <small class="text-muted d-block">Brand</small>
@@ -135,7 +143,7 @@
             
             <div class="col-md-6">
                 <small class="text-muted d-block">Amount (Total)</small>
-                <span class="fw-bold fs-5 {{ $sale->is_refunded ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
+                <span class="fw-bold fs-5 {{ ($sale->is_refunded || $sale->is_chargeback) ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
                 @if($sale->is_refunded)
                     <span class="badge bg-danger ms-2">Refunded</span>
                     @if($sale->refunded_at)
@@ -143,6 +151,15 @@
                     @endif
                     @if($sale->refundedBy)
                         <span class="text-muted small">· {{ $sale->refundedBy->name }}</span>
+                    @endif
+                @endif
+                @if($sale->is_chargeback)
+                    <span class="badge bg-dark ms-2">Chargeback</span>
+                    @if($sale->chargeback_at)
+                        <span class="text-muted small ms-1">{{ $sale->chargeback_at->format('d M Y H:i') }}</span>
+                    @endif
+                    @if($sale->chargebackBy)
+                        <span class="text-muted small">· {{ $sale->chargebackBy->name }}</span>
                     @endif
                 @endif
             </div>
@@ -156,7 +173,7 @@
                 <span class="fw-bold {{ $remaining > 0 ? 'text-warning' : 'text-success' }}">${{ number_format($remaining, 2) }}</span>
             </div>
             @if($canToggleRefund ?? false)
-            <div class="col-12">
+            <div class="col-md-6">
                 <small class="text-muted d-block mb-1">Refund (admin / team lead)</small>
                 <form action="{{ route('admin.sales.toggle-refund', $sale) }}" method="POST" class="d-inline-flex align-items-center gap-2">
                     @csrf
@@ -165,6 +182,20 @@
                             {{ $sale->is_refunded ? 'checked' : '' }}
                             onchange="this.form.submit()">
                         <label class="form-check-label" for="refund-switch">Mark as refunded</label>
+                    </div>
+                </form>
+            </div>
+            @endif
+            @if($canToggleChargeback ?? false)
+            <div class="col-md-6">
+                <small class="text-muted d-block mb-1">Chargeback (admin / team lead)</small>
+                <form action="{{ route('admin.sales.toggle-chargeback', $sale) }}" method="POST" class="d-inline-flex align-items-center gap-2">
+                    @csrf
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="chargeback-switch"
+                            {{ $sale->is_chargeback ? 'checked' : '' }}
+                            onchange="this.form.submit()">
+                        <label class="form-check-label" for="chargeback-switch">Mark as chargeback</label>
                     </div>
                 </form>
             </div>
@@ -319,6 +350,8 @@
         <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Payment receipts can only be recorded after the sale is approved.</p>
         @elseif($sale->is_refunded || $sale->status === \App\Models\Sale::STATUS_REFUNDED)
         <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Payments cannot be recorded for refunded sales.</p>
+        @elseif($sale->is_chargeback || $sale->status === \App\Models\Sale::STATUS_CHARGEBACK)
+        <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Payments cannot be recorded for chargeback sales.</p>
         @elseif($billableRemaining <= 0 || $sale->remainingAmount() <= 0)
         <p class="text-muted mb-0 border-top pt-3"><i class="bi bi-info-circle"></i> Sale amount is fully received.</p>
         @endif

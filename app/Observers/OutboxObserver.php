@@ -88,6 +88,10 @@ class OutboxObserver
         if ($sale->wasChanged('is_refunded') && $sale->is_refunded) {
             Outbox::record('sale.refunded', 'sale', $sale->id, $this->salePayload($sale));
         }
+
+        if ($sale->wasChanged('is_chargeback') && $sale->is_chargeback) {
+            Outbox::record('sale.chargeback', 'sale', $sale->id, $this->salePayload($sale));
+        }
     }
 
     private function paymentCreated(InvoicePayment $payment): void

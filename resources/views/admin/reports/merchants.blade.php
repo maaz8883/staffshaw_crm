@@ -23,6 +23,8 @@
                         <th class="text-end">Gross total</th>
                         <th class="text-end">Refunded</th>
                         <th class="text-end">No. of refunds</th>
+                        <th class="text-end">Chargeback</th>
+                        <th class="text-end">No. of chargebacks</th>
                         <th class="text-end">Net total</th>
                     </tr>
                 </thead>
@@ -34,10 +36,12 @@
                         <td class="text-end">${{ number_format($row['gross_total'], 2) }}</td>
                         <td class="text-end text-danger">${{ number_format($row['refunded'], 2) }}</td>
                         <td class="text-end">{{ number_format($row['refund_count']) }}</td>
+                        <td class="text-end text-danger">${{ number_format($row['chargeback'] ?? 0, 2) }}</td>
+                        <td class="text-end">{{ number_format($row['chargeback_count'] ?? 0) }}</td>
                         <td class="text-end fw-semibold">${{ number_format($row['net_total'], 2) }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="text-muted text-center py-4">No merchant data yet. Import or create sales with a Merchant value.</td></tr>
+                    <tr><td colspan="8" class="text-muted text-center py-4">No merchant data yet. Import or create sales with a Merchant value.</td></tr>
                 @endforelse
                 </tbody>
                 @if($merchantRows->isNotEmpty())
@@ -48,6 +52,8 @@
                         <td class="text-end">${{ number_format($merchantRows->sum('gross_total'), 2) }}</td>
                         <td class="text-end text-danger">${{ number_format($merchantRows->sum('refunded'), 2) }}</td>
                         <td class="text-end">{{ number_format($merchantRows->sum('refund_count')) }}</td>
+                        <td class="text-end text-danger">${{ number_format($merchantRows->sum('chargeback'), 2) }}</td>
+                        <td class="text-end">{{ number_format($merchantRows->sum('chargeback_count')) }}</td>
                         <td class="text-end">${{ number_format($merchantRows->sum('net_total'), 2) }}</td>
                     </tr>
                 </tfoot>
@@ -57,6 +63,6 @@
     </div>
 </div>
 <p class="text-muted small mt-2 mb-0">
-    Disputed columns from the old spreadsheet are not tracked per sale yet — refunds are included above. Net = Gross − Refunded.
+    Net = Gross − Refunded − Chargeback.
 </p>
 @endsection

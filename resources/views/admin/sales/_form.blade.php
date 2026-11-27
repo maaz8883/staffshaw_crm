@@ -123,6 +123,18 @@
         <div class="form-text">Defaults from your Front/Upsell seat when set. Refunds are marked by admin or team lead.</div>
     </div>
 
+    <div class="col-md-6 mb-3">
+        <label for="service_category" class="form-label">Service</label>
+        <select id="service_category" name="service_category" class="form-select">
+            @php $sc = old('service_category', $sale->service_category ?? ''); @endphp
+            <option value="">-- Optional --</option>
+            @foreach(\App\Models\Sale::SERVICE_CATEGORY_LABELS as $value => $label)
+                <option value="{{ $value }}" {{ (string) $sc === (string) $value ? 'selected' : '' }}>{{ $label }}</option>
+            @endforeach
+        </select>
+        <div class="form-text">Ebook or Design (optional — CSV sheets without this column still import).</div>
+    </div>
+
     @if(isset($sale))
     <div class="col-md-6 mb-3">
         <label for="user_id" class="form-label">Sales Agent</label>

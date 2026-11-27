@@ -14,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -34,6 +35,7 @@ class BrandController extends Controller
 
                 return '<span class="text-muted">—</span>';
             })
+            ->editColumn('short_code', fn (Brand $brand) => e($brand->short_code ?: '—'))
             ->editColumn('website', fn (Brand $brand) =>
                 '<a href="' . e($brand->website) . '" target="_blank" rel="noopener">' . e($brand->website) . '</a>')
             ->addColumn('actions', function (Brand $brand) {
@@ -68,12 +70,8 @@ class BrandController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name'    => 'required|string|max:255',
-            'website' => 'required|url|max:255',
-            'image'   => 'required|image|max:2048',
-            ...$this->briefFormsValidationRules(),
-        ]);
+        $validated = $request->validate($this->brandRules());
+        $validated['short_code'] = $this->normalizeShortCode($validated['short_code'] ?? null);
 
         $validated['image'] = $request->file('image')->store('brands', 'public');
         unset($validated['brief_forms']);
@@ -105,21 +103,8 @@ class BrandController extends Controller
 
     public function update(Request $request, Brand $brand): RedirectResponse
     {
-        $validated = $request->validate([
-            'name'    => 'required|string|max:255',
-            'website' => 'required|url|max:255',
-            'image'   => [
-                'nullable',
-                'image',
-                'max:2048',
-                function (string $attribute, mixed $value, \Closure $fail) use ($request, $brand): void {
-                    if (! $request->hasFile('image') && ! $brand->image) {
-                        $fail('The image field is required.');
-                    }
-                },
-            ],
-            ...$this->briefFormsValidationRules(),
-        ]);
+        $validated = $request->validate($this->brandRules($brand));
+        $validated['short_code'] = $this->normalizeShortCode($validated['short_code'] ?? null);
 
         if ($request->hasFile('image')) {
             if ($brand->image) {
@@ -356,5 +341,41 @@ class BrandController extends Controller
         if ($briefForm->document) {
             Storage::disk('public')->delete($briefForm->document);
         }
+    }
+
+    /** @return array<string, mixed> */
+    private function brandRules(?Brand $brand = null): array
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'short_code' => [
+                'nullable',
+                'string',
+                'max:32',
+                'regex:/^[A-Za-z0-9 _-]+$/',
+                Rule::unique('brands', 'short_code')->ignore($brand?->id),
+            ],
+            'website' => 'required|url|max:255',
+            'image' => $brand
+                ? [
+                    'nullable',
+                    'image',
+                    'max:2048',
+                    function (string $attribute, mixed $value, \Closure $fail) use ($brand): void {
+                        if (! request()->hasFile('image') && ! $brand->image) {
+                            $fail('The image field is required.');
+                        }
+                    },
+                ]
+                : 'required|image|max:2048',
+            ...$this->briefFormsValidationRules(),
+        ];
+    }
+
+    private function normalizeShortCode(mixed $value): ?string
+    {
+        $code = trim((string) $value);
+
+        return $code === '' ? null : $code;
     }
 }

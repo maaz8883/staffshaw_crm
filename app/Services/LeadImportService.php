@@ -356,15 +356,26 @@ class LeadImportService
         return null;
     }
 
-    /** @return Collection<string, Brand> */
+    /** @return Collection<string, Brand> keyed by name and short_code */
     private function brandLookup(): Collection
     {
         $ids = AuthScope::accessibleBrandIds();
-
-        return Brand::query()
+        $brands = Brand::query()
             ->whereIn('id', $ids->isEmpty() ? [0] : $ids->all())
-            ->get()
-            ->keyBy(fn (Brand $b) => $this->norm($b->name));
+            ->get();
+
+        $map = collect();
+        foreach ($brands as $brand) {
+            $map[$this->norm($brand->name)] = $brand;
+            if (filled($brand->short_code)) {
+                $codeKey = $this->norm($brand->short_code);
+                if ($codeKey !== '' && ! $map->has($codeKey)) {
+                    $map[$codeKey] = $brand;
+                }
+            }
+        }
+
+        return $map;
     }
 
     /** @return Collection<string, User> */

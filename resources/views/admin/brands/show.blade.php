@@ -28,6 +28,10 @@
                     <strong>{{ $brand->name }}</strong>
                 </div>
                 <div class="col-md-6">
+                    <small class="text-muted d-block">Short code</small>
+                    {{ $brand->short_code ?: '—' }}
+                </div>
+                <div class="col-md-6">
                     <small class="text-muted d-block">URL</small>
                     <a href="{{ $brand->website }}" target="_blank" rel="noopener">{{ $brand->website }}</a>
                 </div>

@@ -95,8 +95,13 @@ class SaleController extends Controller
         return $query;
     }
 
-    /** Refunds need the sale approver (Admin / Manager / Team Head); Finance only sees them. */
+    /** Refunds / chargebacks need the sale approver (Admin / Manager / Team Head); Finance only sees them. */
     private function canToggleRefund(Sale $sale): bool
+    {
+        return $this->canApprove($sale);
+    }
+
+    private function canToggleChargeback(Sale $sale): bool
     {
         return $this->canApprove($sale);
     }
@@ -167,11 +172,21 @@ class SaleController extends Controller
         if ($request->filled('sale_type')) {
             $query->where('sale_type', $request->sale_type);
         }
+        if ($request->filled('service_category')) {
+            $query->where('service_category', $request->service_category);
+        }
         if ($request->filled('refunded')) {
             if ($request->refunded === '1') {
                 $query->where('is_refunded', true);
             } elseif ($request->refunded === '0') {
                 $query->where('is_refunded', false);
+            }
+        }
+        if ($request->filled('chargeback')) {
+            if ($request->chargeback === '1') {
+                $query->where('is_chargeback', true);
+            } elseif ($request->chargeback === '0') {
+                $query->where('is_chargeback', false);
             }
         }
         if ($request->filled('received_filter')) {
@@ -197,7 +212,7 @@ class SaleController extends Controller
         return DataTables::eloquent($query)
             ->editColumn('amount', function (Sale $s) {
                 $fmt = '$' . number_format($s->amount, 2);
-                if ($s->is_refunded) {
+                if ($s->is_refunded || $s->is_chargeback) {
                     return '<span class="text-danger">' . e($fmt) . '</span>';
                 }
 
@@ -216,6 +231,14 @@ class SaleController extends Controller
             ->editColumn('sale_date', fn (Sale $s) => $s->sale_date->format('d M Y'))
             ->addColumn('sale_type_badge', fn (Sale $s) =>
                 '<span class="badge bg-' . self::saleTypeColor($s->sale_type) . '">' . e($s->saleTypeLabel()) . '</span>')
+            ->addColumn('service_category_badge', function (Sale $s) {
+                if (! $s->service_category) {
+                    return '<span class="text-muted">—</span>';
+                }
+                $color = $s->service_category === Sale::CATEGORY_DESIGN ? 'warning' : 'secondary';
+
+                return '<span class="badge bg-'.$color.'">'.e($s->serviceCategoryLabel()).'</span>';
+            })
             ->addColumn('refund_toggle', function (Sale $sale) {
                 if (! $this->canToggleRefund($sale)) {
                     return $sale->is_refunded
@@ -233,6 +256,24 @@ class SaleController extends Controller
                     . '<input class="form-check-input" type="checkbox" role="switch" ' . $checked
                     . ' onchange="this.form.submit()" title="Mark refunded / revert" aria-label="Refunded">'
                     . '</div></form>';
+            })
+            ->addColumn('chargeback_toggle', function (Sale $sale) {
+                if (! $this->canToggleChargeback($sale)) {
+                    return $sale->is_chargeback
+                        ? '<span class="badge bg-dark">Chargeback</span>'
+                        : '<span class="text-muted small">—</span>';
+                }
+
+                $url = route('admin.sales.toggle-chargeback', $sale);
+                $checked = $sale->is_chargeback ? 'checked' : '';
+                $csrf = csrf_token();
+
+                return '<form action="'.$url.'" method="POST" class="d-inline" data-sale-id="'.$sale->id.'">'
+                    .'<input type="hidden" name="_token" value="'.$csrf.'">'
+                    .'<div class="form-check form-switch mb-0 d-flex justify-content-center">'
+                    .'<input class="form-check-input" type="checkbox" role="switch" '.$checked
+                    .' onchange="this.form.submit()" title="Mark chargeback / revert" aria-label="Chargeback">'
+                    .'</div></form>';
             })
             ->editColumn('status', fn (Sale $s) =>
                 '<span class="badge bg-' . self::statusColor($s->status) . '">' . e($s->statusLabel()) . '</span>')
@@ -303,7 +344,7 @@ class SaleController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['select', 'amount', 'remaining_amount', 'sale_type_badge', 'refund_toggle', 'status', 'approval_badge', 'agent_name', 'actions'])
+            ->rawColumns(['select', 'amount', 'remaining_amount', 'sale_type_badge', 'service_category_badge', 'refund_toggle', 'chargeback_toggle', 'status', 'approval_badge', 'agent_name', 'actions'])
             ->toJson();
     }
 
@@ -521,9 +562,10 @@ class SaleController extends Controller
     public function show(Sale $sale): View
     {
         $this->authorizeView($sale);
-        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'invoices', 'accountManager', 'projectManager']);
+        $sale->load(['user', 'team', 'company', 'brand', 'approvedBy', 'refundedBy', 'chargebackBy', 'invoices', 'accountManager', 'projectManager']);
 
         $canToggleRefund = $this->canToggleRefund($sale);
+        $canToggleChargeback = $this->canToggleChargeback($sale);
         $canDecide = $this->canApprove($sale) && $sale->isPendingApproval(); // Approve / Reject buttons
         $canEdit = $this->userCanEditSale($sale);
         $canDelete = $this->userCanDeleteSale($sale);
@@ -539,6 +581,7 @@ class SaleController extends Controller
         return view('admin.sales.show', compact(
             'sale',
             'canToggleRefund',
+            'canToggleChargeback',
             'canDecide',
             'canEdit',
             'canDelete',
@@ -573,7 +616,7 @@ class SaleController extends Controller
             unset($validated['user_id']);
         }
 
-        if ($sale->is_refunded || $sale->isApproved()) {
+        if ($sale->is_refunded || $sale->is_chargeback || $sale->isApproved()) {
             unset($validated['status']);
             $sale->update($validated);
 
@@ -706,7 +749,9 @@ class SaleController extends Controller
         if ($newRefunded) {
             $prev = $sale->status === Sale::STATUS_REFUNDED
                 ? ($sale->status_before_refund ?? 'completed')
-                : $sale->status;
+                : ($sale->status === Sale::STATUS_CHARGEBACK
+                    ? ($sale->status_before_chargeback ?? 'completed')
+                    : $sale->status);
             if (! in_array($prev, Sale::STATUSES, true)) {
                 $prev = 'completed';
             }
@@ -719,22 +764,24 @@ class SaleController extends Controller
                 'status'               => Sale::STATUS_REFUNDED,
             ]);
 
-            // Log refund activity
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_REFUNDED,
                 "Marked sale as refunded: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
             );
         } else {
+            $restore = $sale->is_chargeback
+                ? Sale::STATUS_CHARGEBACK
+                : ($sale->status_before_refund ?? 'completed');
+
             $sale->update([
                 'is_refunded'          => false,
                 'refunded_at'          => null,
                 'refunded_by'          => null,
-                'status'               => $sale->status_before_refund ?? 'completed',
+                'status'               => $restore,
                 'status_before_refund' => null,
             ]);
 
-            // Log refund revert activity
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_REFUND_REVERTED,
@@ -745,6 +792,62 @@ class SaleController extends Controller
         return redirect()
             ->back()
             ->with('success', $newRefunded ? 'Sale marked as refunded.' : 'Refund reverted.');
+    }
+
+    public function toggleChargeback(Sale $sale): RedirectResponse
+    {
+        if (! $this->canToggleChargeback($sale)) {
+            abort(403);
+        }
+
+        $newChargeback = ! $sale->is_chargeback;
+
+        if ($newChargeback) {
+            $prev = $sale->status === Sale::STATUS_CHARGEBACK
+                ? ($sale->status_before_chargeback ?? 'completed')
+                : ($sale->status === Sale::STATUS_REFUNDED
+                    ? ($sale->status_before_refund ?? 'completed')
+                    : $sale->status);
+            if (! in_array($prev, Sale::STATUSES, true)) {
+                $prev = 'completed';
+            }
+
+            $sale->update([
+                'is_chargeback' => true,
+                'chargeback_at' => now(),
+                'chargeback_by' => Auth::id(),
+                'status_before_chargeback' => $prev,
+                'status' => Sale::STATUS_CHARGEBACK,
+            ]);
+
+            ActivityLogger::log(
+                Auth::user(),
+                UserActivityLog::TYPE_SALE_CHARGEBACK,
+                "Marked sale as chargeback: {$sale->title} (\$".number_format($sale->amount, 2).')'
+            );
+        } else {
+            $restore = $sale->is_refunded
+                ? Sale::STATUS_REFUNDED
+                : ($sale->status_before_chargeback ?? 'completed');
+
+            $sale->update([
+                'is_chargeback' => false,
+                'chargeback_at' => null,
+                'chargeback_by' => null,
+                'status' => $restore,
+                'status_before_chargeback' => null,
+            ]);
+
+            ActivityLogger::log(
+                Auth::user(),
+                UserActivityLog::TYPE_SALE_CHARGEBACK_REVERTED,
+                "Reverted chargeback for sale: {$sale->title} (\$".number_format($sale->amount, 2).')'
+            );
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', $newChargeback ? 'Sale marked as chargeback.' : 'Chargeback reverted.');
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -840,6 +943,7 @@ class SaleController extends Controller
             'pending'   => 'warning',
             'cancelled' => 'danger',
             Sale::STATUS_REFUNDED => 'dark',
+            Sale::STATUS_CHARGEBACK => 'dark',
             default     => 'secondary',
         };
     }
@@ -983,6 +1087,9 @@ class SaleController extends Controller
         $validated['merchant'] = isset($validated['merchant']) && trim((string) $validated['merchant']) !== ''
             ? trim((string) $validated['merchant'])
             : null;
+        $validated['service_category'] = ! empty($validated['service_category'])
+            ? $validated['service_category']
+            : null;
 
         return $validated;
     }
@@ -1092,6 +1199,7 @@ class SaleController extends Controller
             ],
             'sale_date'        => 'required|date',
             'sale_type'        => 'required|in:' . implode(',', Sale::SALE_TYPES),
+            'service_category' => 'nullable|in:' . implode(',', Sale::SERVICE_CATEGORIES),
             'merchant'         => 'nullable|string|max:120',
             'is_ppc'           => 'sometimes|boolean',
             'user_id'          => 'nullable|integer|exists:users,id',

@@ -50,12 +50,26 @@ class Sale extends Model
 
     public const STATUS_REFUNDED = 'refunded';
 
+    public const STATUS_CHARGEBACK = 'chargeback';
+
     public const TYPE_FRONT  = 'front';
 
     public const TYPE_UPSELL = 'upsell';
 
     /** @var list<string> */
     public const SALE_TYPES = [self::TYPE_FRONT, self::TYPE_UPSELL];
+
+    public const CATEGORY_EBOOK = 'ebook';
+
+    public const CATEGORY_DESIGN = 'design';
+
+    /** @var list<string> */
+    public const SERVICE_CATEGORIES = [self::CATEGORY_EBOOK, self::CATEGORY_DESIGN];
+
+    public const SERVICE_CATEGORY_LABELS = [
+        self::CATEGORY_EBOOK => 'Ebook',
+        self::CATEGORY_DESIGN => 'Design',
+    ];
 
     public const APPROVAL_PENDING  = 'pending_approval';
     public const APPROVAL_APPROVED = 'approved';
@@ -82,10 +96,15 @@ class Sale extends Model
         'brand_id',
         'status',
         'status_before_refund',
+        'status_before_chargeback',
         'sale_type',
+        'service_category',
         'is_refunded',
         'refunded_at',
         'refunded_by',
+        'is_chargeback',
+        'chargeback_at',
+        'chargeback_by',
         'notes',
         'merchant',
         'is_ppc',
@@ -111,6 +130,8 @@ class Sale extends Model
         'approved_at'  => 'datetime',
         'refunded_at'  => 'datetime',
         'is_refunded'  => 'boolean',
+        'chargeback_at' => 'datetime',
+        'is_chargeback' => 'boolean',
         'is_ppc'       => 'boolean',
         'is_draft'     => 'boolean',
     ];
@@ -165,6 +186,11 @@ class Sale extends Model
         return $this->belongsTo(User::class, 'refunded_by');
     }
 
+    public function chargebackBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'chargeback_by');
+    }
+
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
@@ -193,14 +219,23 @@ class Sale extends Model
         };
     }
 
+    public function serviceCategoryLabel(): string
+    {
+        return self::SERVICE_CATEGORY_LABELS[$this->service_category] ?? '—';
+    }
+
     /** All status values stored in DB (charts / filters). */
     public static function allStatuses(): array
     {
-        return [...self::STATUSES, self::STATUS_REFUNDED];
+        return [...self::STATUSES, self::STATUS_REFUNDED, self::STATUS_CHARGEBACK];
     }
 
     public function statusLabel(): string
     {
+        if ($this->status === self::STATUS_CHARGEBACK || $this->is_chargeback) {
+            return 'Chargeback';
+        }
+
         if ($this->status === self::STATUS_REFUNDED) {
             return 'Refunded';
         }
@@ -218,7 +253,8 @@ class Sale extends Model
 
     public function isEditableByOwner(): bool
     {
-        if ($this->is_refunded || $this->status === self::STATUS_REFUNDED) {
+        if ($this->is_refunded || $this->status === self::STATUS_REFUNDED
+            || $this->is_chargeback || $this->status === self::STATUS_CHARGEBACK) {
             return false;
         }
 

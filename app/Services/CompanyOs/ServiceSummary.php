@@ -28,7 +28,8 @@ class ServiceSummary
         $range = [$from->toDateString(), $to->toDateString()];
         $notVoid = fn ($q) => $q->where('status', '!=', Invoice::STATUS_VOID);
 
-        $bookedQuery = $this->approved()->whereBetween('sale_date', $range)->where('is_refunded', false);
+        $bookedQuery = $this->approved()->whereBetween('sale_date', $range)
+            ->where('is_refunded', false)->where('is_chargeback', false);
         $booked = (float) (clone $bookedQuery)->sum('amount');
         $salesCount = (clone $bookedQuery)->count();
 
@@ -47,6 +48,8 @@ class ServiceSummary
 
         $refunds = Sale::query()->where('is_refunded', true)
             ->whereBetween('refunded_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]);
+        $chargebacks = Sale::query()->where('is_chargeback', true)
+            ->whereBetween('chargeback_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]);
 
         $ppc = (float) TeamPpcSpending::query()
             ->whereRaw('(year * 100 + month) between ? and ?', [
@@ -55,7 +58,8 @@ class ServiceSummary
             ])
             ->sum('amount');
 
-        $openSales = $this->approved()->where('is_refunded', false)->whereColumn('received_amount', '<', 'amount');
+        $openSales = $this->approved()->where('is_refunded', false)->where('is_chargeback', false)
+            ->whereColumn('received_amount', '<', 'amount');
         $openInvoices = Invoice::query()->whereNull('sale_id')
             ->where('status', Invoice::STATUS_ISSUED)
             ->with('payments')->get()
@@ -74,6 +78,8 @@ class ServiceSummary
                 'received' => $received,
                 'refunds_total' => round((float) (clone $refunds)->sum('amount'), 2),
                 'refunds_count' => (clone $refunds)->count(),
+                'chargebacks_total' => round((float) (clone $chargebacks)->sum('amount'), 2),
+                'chargebacks_count' => (clone $chargebacks)->count(),
                 'awaiting_approval_count' => Sale::query()
                     ->where('approval_status', Sale::APPROVAL_PENDING)
                     ->where('is_draft', false)
@@ -114,6 +120,7 @@ class ServiceSummary
         $rows = $this->approved()
             ->whereBetween('sale_date', $range)
             ->where('is_refunded', false)
+            ->where('is_chargeback', false)
             ->selectRaw('team_id, COUNT(*) as sales_count, SUM(amount) as booked, SUM(received_amount) as received')
             ->groupBy('team_id')
             ->get();

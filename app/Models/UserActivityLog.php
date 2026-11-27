@@ -25,6 +25,8 @@ class UserActivityLog extends Model
     public const TYPE_SALE_REJECTED = 'sale_rejected';
     public const TYPE_SALE_REFUNDED = 'sale_refunded';
     public const TYPE_SALE_REFUND_REVERTED = 'sale_refund_reverted';
+    public const TYPE_SALE_CHARGEBACK = 'sale_chargeback';
+    public const TYPE_SALE_CHARGEBACK_REVERTED = 'sale_chargeback_reverted';
     public const TYPE_TEAM_CREATED = 'team_created';
     public const TYPE_TEAM_UPDATED = 'team_updated';
     public const TYPE_TEAM_DELETED = 'team_deleted';
@@ -66,6 +68,8 @@ class UserActivityLog extends Model
             self::TYPE_SALE_REJECTED  => 'danger',
             self::TYPE_SALE_REFUNDED  => 'warning',
             self::TYPE_SALE_REFUND_REVERTED => 'info',
+            self::TYPE_SALE_CHARGEBACK => 'danger',
+            self::TYPE_SALE_CHARGEBACK_REVERTED => 'info',
             self::TYPE_TEAM_CREATED   => 'success',
             self::TYPE_TEAM_UPDATED   => 'warning',
             self::TYPE_TEAM_DELETED   => 'danger',

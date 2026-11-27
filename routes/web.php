@@ -344,6 +344,7 @@ Route::prefix('admin')->group(function () {
             Route::post('sales/{sale}/invoices',      [InvoiceController::class, 'store'])->name('admin.invoices.store');
             Route::get('sales/{sale}/brief-document/{brandBriefForm}', [SaleController::class, 'downloadBriefDocument'])->name('admin.sales.brief-document');
             Route::post('sales/{sale}/toggle-refund', [SaleController::class, 'toggleRefund'])->name('admin.sales.toggle-refund');
+            Route::post('sales/{sale}/toggle-chargeback', [SaleController::class, 'toggleChargeback'])->name('admin.sales.toggle-chargeback');
 
             Route::get('invoices/create', [InvoiceController::class, 'create'])->name('admin.invoices.create');
             Route::post('invoices', [InvoiceController::class, 'storeStandalone'])->name('admin.invoices.store-standalone');

@@ -75,6 +75,7 @@ class ServiceDataController extends Controller
             'status' => $s->status,
             'approval_status' => $s->approval_status,
             'is_refunded' => (bool) $s->is_refunded,
+            'is_chargeback' => (bool) $s->is_chargeback,
             'is_ppc' => (bool) $s->is_ppc,
             'agent_id' => $s->user_id,
             'agent_name' => $s->sales_agent_name,

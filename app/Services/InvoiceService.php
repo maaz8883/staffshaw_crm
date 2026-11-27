@@ -74,7 +74,8 @@ class InvoiceService
             return false;
         }
 
-        if ($sale->is_refunded || $sale->status === Sale::STATUS_REFUNDED) {
+        if ($sale->is_refunded || $sale->status === Sale::STATUS_REFUNDED
+            || $sale->is_chargeback || $sale->status === Sale::STATUS_CHARGEBACK) {
             return false;
         }
 
@@ -126,7 +127,8 @@ class InvoiceService
     public function receiptForReceivedOnSale(Sale $sale, User $creator, ?string $issuedAt = null): ?Invoice
     {
         $sale = $sale->fresh();
-        if (! $sale || $sale->is_draft || ! $sale->isApproved() || $sale->is_refunded || $sale->status === Sale::STATUS_REFUNDED) {
+        if (! $sale || $sale->is_draft || ! $sale->isApproved() || $sale->is_refunded || $sale->status === Sale::STATUS_REFUNDED
+            || $sale->is_chargeback || $sale->status === Sale::STATUS_CHARGEBACK) {
             return null;
         }
 
