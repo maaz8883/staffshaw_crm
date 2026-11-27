@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Services\SaleImportService;
 use App\Support\AuthScope;
+use App\Support\Outbox;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -46,7 +47,8 @@ class SaleImportController extends Controller
             'file.mimes' => 'Upload a CSV file (Excel → Save As → CSV).',
         ]);
 
-        $result = $importer->import($request->file('file'), Auth::user());
+        // Tag events as 'import' so CompanyOS automations don't notify for historical rows.
+        $result = Outbox::withContext('import', fn () => $importer->import($request->file('file'), Auth::user()));
 
         $msg = "Imported {$result['created']} sale(s).";
         if ($result['skipped'] > 0) {

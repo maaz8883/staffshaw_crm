@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\InvoicePayment;
+use App\Models\Lead;
+use App\Models\Sale;
+use App\Observers\OutboxObserver;
 use App\Services\CrmOverview;
 use App\Support\CompanyContext;
 use Illuminate\Pagination\Paginator;
@@ -27,6 +31,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useBootstrapFive();
+
+        // CompanyOS events (sale / lead / payment) — see App\Support\Outbox
+        Sale::observe(OutboxObserver::class);
+        Lead::observe(OutboxObserver::class);
+        InvoicePayment::observe(OutboxObserver::class);
 
         // Config-only — safe even when MySQL is saturated
         View::share('singleCompany', CompanyContext::single());

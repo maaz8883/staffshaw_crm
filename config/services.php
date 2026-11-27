@@ -47,4 +47,9 @@ return [
         'api_key' => env('ORBIT_BRIEF_API_KEY'),
     ],
 
+    // CompanyOS hub: read-only access to /api/v1/service/* (header X-Service-Key)
+    'companyos' => [
+        'service_key' => env('COMPANYOS_SERVICE_KEY'),
+    ],
+
 ];
