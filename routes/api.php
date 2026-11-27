@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\ClientBriefController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\Service\ServiceDataController;
+use App\Http\Controllers\Api\Service\ServiceEventController;
 use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Http\Request;
@@ -37,6 +39,17 @@ Route::middleware('orbit.brief.api')->prefix('v1')->group(function () {
         ->where('briefType', '[a-z0-9_-]+');
     Route::post('sales/{sale}/brief-submissions', [BriefSubmissionController::class, 'store']);
     Route::post('sales/{sale}/brief-upload', [BriefSubmissionController::class, 'upload']);
+});
+
+// CompanyOS hub — read-only service API (X-Service-Key). See docs/companyos-service-api.md
+Route::middleware(['service.key', 'throttle:120,1'])->prefix('v1/service')->group(function () {
+    Route::get('summary', [ServiceDataController::class, 'summary']);
+    Route::get('sales', [ServiceDataController::class, 'sales']);
+    Route::get('leads', [ServiceDataController::class, 'leads']);
+    Route::get('invoices', [ServiceDataController::class, 'invoices']);
+    Route::get('expenses', [ServiceDataController::class, 'expenses']);
+    Route::get('users', [ServiceDataController::class, 'users']);
+    Route::get('events', [ServiceEventController::class, 'index']);
 });
 
 // Public API - no token required
