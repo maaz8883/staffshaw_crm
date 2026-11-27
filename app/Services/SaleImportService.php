@@ -417,7 +417,7 @@ class SaleImportService
             $finalStatus = Sale::STATUS_REFUNDED;
         }
 
-        Sale::query()->create([
+        $sale = Sale::query()->create([
             'title' => Str::limit($title, 255, ''),
             'client_id' => $clientId,
             'client_name' => Str::limit($clientName, 255, ''),
@@ -454,6 +454,15 @@ class SaleImportService
             'approved_at' => $autoApprove ? now() : null,
             'is_draft' => false,
         ]);
+
+        // Same as manual approve: Paid Amount → payment receipt when sale is already approved.
+        if ($autoApprove && $paid > 0 && ! $isRefunded && ! $isChargeback) {
+            app(InvoiceService::class)->receiptForReceivedOnSale(
+                $sale,
+                $actor,
+                $saleDate instanceof Carbon ? $saleDate->toDateString() : (string) $saleDate
+            );
+        }
 
         return ['ok' => true, 'warnings' => $warnings];
     }

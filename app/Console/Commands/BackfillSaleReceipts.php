@@ -25,6 +25,7 @@ class BackfillSaleReceipts extends Command
             ->where('received_amount', '>', 0)
             ->where('is_draft', false)
             ->where(fn ($q) => $q->whereNull('is_refunded')->orWhere('is_refunded', false))
+            ->where(fn ($q) => $q->whereNull('is_chargeback')->orWhere('is_chargeback', false))
             ->orderBy('id')
             ->get();
 
