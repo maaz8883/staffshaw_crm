@@ -64,13 +64,6 @@
         <option value="upsell">Upsell</option>
     </select>
 
-    <select id="filter-service-category" class="form-select form-select-sm" style="width:auto">
-        <option value="">All services</option>
-        @foreach(\App\Models\Sale::SERVICE_CATEGORY_LABELS as $value => $label)
-            <option value="{{ $value }}">{{ $label }}</option>
-        @endforeach
-    </select>
-
     <select id="filter-brand" class="form-select form-select-sm js-select2" data-width="180px" style="width:180px">
         <option value="">All Brands</option>
         @foreach($brands as $brand)
@@ -78,29 +71,24 @@
         @endforeach
     </select>
 
-    <select id="filter-refunded" class="form-select form-select-sm" style="width:auto">
-        <option value="">All (refund)</option>
-        <option value="0">Not refunded</option>
-        <option value="1">Refunded</option>
+    <select id="filter-month" class="form-select form-select-sm" style="width:auto">
+        <option value="">All Months</option>
+        @foreach(range(1, 12) as $m)
+            <option value="{{ $m }}">{{ \Carbon\Carbon::create()->month($m)->format('F') }}</option>
+        @endforeach
     </select>
 
-    <select id="filter-chargeback" class="form-select form-select-sm" style="width:auto">
-        <option value="">All (chargeback)</option>
-        <option value="0">No chargeback</option>
-        <option value="1">Chargeback</option>
-    </select>
-
-    <select id="filter-received" class="form-select form-select-sm" style="width:auto">
-        <option value="">All Received</option>
-        <option value="none">No payment ($0)</option>
-        <option value="partial">Partially received</option>
-        <option value="full">Fully received</option>
+    <select id="filter-year" class="form-select form-select-sm" style="width:auto">
+        <option value="">All Years</option>
+        @foreach(range((int) now()->year + 1, 2020, -1) as $y)
+            <option value="{{ $y }}">{{ $y }}</option>
+        @endforeach
     </select>
 
     <select id="filter-remaining" class="form-select form-select-sm" style="width:auto">
         <option value="">All Remaining</option>
-        <option value="zero">Fully paid ($0 remaining)</option>
-        <option value="outstanding">Has outstanding balance</option>
+        <option value="zero">Fully paid</option>
+        <option value="outstanding">Outstanding balance</option>
     </select>
 
     <button id="btn-reset" class="btn btn-outline-secondary btn-sm">Reset</button>
@@ -223,17 +211,15 @@ $(function () {
         ajax: {
             url: @json(route('admin.sales.datatable')),
             data: function (d) {
-                d.team_id         = $('#filter-team').val();
-                d.user_id         = $('#filter-user').val();
-                d.status          = $('#filter-status').val();
-                d.approval_status = $('#filter-approval').val();
-                d.sale_type       = $('#filter-sale-type').val();
-                d.service_category = $('#filter-service-category').val();
-                d.refunded        = $('#filter-refunded').val();
-                d.chargeback      = $('#filter-chargeback').val();
-                d.received_filter  = $('#filter-received').val();
-                d.remaining_filter = $('#filter-remaining').val();
+                d.team_id          = $('#filter-team').val();
+                d.user_id          = $('#filter-user').val();
+                d.status           = $('#filter-status').val();
+                d.approval_status  = $('#filter-approval').val();
+                d.sale_type        = $('#filter-sale-type').val();
                 d.brand_id         = $('#filter-brand').val();
+                d.month            = $('#filter-month').val();
+                d.year             = $('#filter-year').val();
+                d.remaining_filter = $('#filter-remaining').val();
             }
         },
         columns: [
@@ -343,12 +329,12 @@ $(function () {
         postBulk(bulkDeleteUrl, selectedIds('data-can-delete'), 'Delete selected sales?');
     });
 
-    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-service-category, #filter-brand, #filter-refunded, #filter-chargeback, #filter-received, #filter-remaining').on('change', function () {
+    $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-month, #filter-year, #filter-remaining').on('change', function () {
         table.draw();
     });
 
     $('#btn-reset').on('click', function () {
-        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-service-category, #filter-brand, #filter-refunded, #filter-chargeback, #filter-received, #filter-remaining').val('').trigger('change.select2');
+        $('#filter-team, #filter-user, #filter-status, #filter-approval, #filter-sale-type, #filter-brand, #filter-month, #filter-year, #filter-remaining').val('').trigger('change.select2');
         table.draw();
     });
 
@@ -359,6 +345,76 @@ $(function () {
         $('#approval_note').val('');
         new bootstrap.Modal(document.getElementById('rejectModal')).show();
     });
+
+    function bindMoneyToggle(switchSelector, activeAttr, amountField, title, confirmLabel) {
+        $(document).on('change', switchSelector, function () {
+            var input = this;
+            var form = $(input).closest('form')[0];
+            if (!form) return;
+
+            var wasActive = form.getAttribute(activeAttr) === '1';
+            if (wasActive) {
+                if (window.Swal) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Revert ' + title.toLowerCase() + '?',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, revert'
+                    }).then(function (r) {
+                        if (r.isConfirmed) form.submit();
+                        else input.checked = true;
+                    });
+                } else if (confirm('Revert ' + title.toLowerCase() + '?')) {
+                    form.submit();
+                } else {
+                    input.checked = true;
+                }
+                return;
+            }
+
+            var max = form.getAttribute('data-max') || '0';
+            var def = form.getAttribute('data-default') || max;
+            var hidden = form.querySelector('input[name="' + amountField + '"]');
+
+            if (window.Swal) {
+                Swal.fire({
+                    title: title + ' amount',
+                    input: 'number',
+                    inputLabel: 'How much? (max $' + max + ')',
+                    inputValue: def,
+                    inputAttributes: { min: '0.01', max: max, step: '0.01' },
+                    showCancelButton: true,
+                    confirmButtonText: confirmLabel,
+                    inputValidator: function (value) {
+                        var n = parseFloat(value);
+                        if (!n || n <= 0) return 'Enter the amount';
+                        if (n > parseFloat(max)) return 'Cannot exceed $' + max;
+                        return null;
+                    }
+                }).then(function (r) {
+                    if (r.isConfirmed) {
+                        if (hidden) hidden.value = r.value;
+                        form.submit();
+                    } else {
+                        input.checked = false;
+                    }
+                });
+            } else {
+                var value = prompt(title + ' amount (max $' + max + ')', def);
+                var n = parseFloat(value);
+                if (!value || !n || n <= 0 || n > parseFloat(max)) {
+                    input.checked = false;
+                    alert('Enter a valid amount up to $' + max);
+                    return;
+                }
+                if (hidden) hidden.value = n;
+                form.submit();
+            }
+        });
+    }
+
+    bindMoneyToggle('.js-refund-switch', 'data-refunded', 'refunded_amount', 'Refund', 'Mark refunded');
+    bindMoneyToggle('.js-chargeback-switch', 'data-chargeback', 'chargeback_amount', 'Chargeback', 'Mark chargeback');
 });
 </script>
 @endsection

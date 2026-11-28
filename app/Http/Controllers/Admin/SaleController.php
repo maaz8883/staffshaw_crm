@@ -208,6 +208,18 @@ class SaleController extends Controller
         if ($request->filled('brand_id')) {
             $query->where('brand_id', $request->brand_id);
         }
+        if ($request->filled('month') && ctype_digit((string) $request->month)) {
+            $month = (int) $request->month;
+            if ($month >= 1 && $month <= 12) {
+                $query->whereMonth('sale_date', $month);
+            }
+        }
+        if ($request->filled('year') && ctype_digit((string) $request->year)) {
+            $year = (int) $request->year;
+            if ($year >= 2000 && $year <= 2100) {
+                $query->whereYear('sale_date', $year);
+            }
+        }
 
         return DataTables::eloquent($query)
             ->editColumn('amount', function (Sale $s) {
@@ -240,40 +252,78 @@ class SaleController extends Controller
                 return '<span class="badge bg-'.$color.'">'.e($s->serviceCategoryLabel()).'</span>';
             })
             ->addColumn('refund_toggle', function (Sale $sale) {
+                $refundAmt = $sale->is_refunded
+                    ? '$'.number_format((float) ($sale->refunded_amount ?? $sale->amount), 2)
+                    : null;
+
                 if (! $this->canToggleRefund($sale)) {
                     return $sale->is_refunded
-                        ? '<span class="badge bg-danger">Refunded</span>'
+                        ? '<span class="badge bg-danger" title="Refunded amount">Refunded '.$refundAmt.'</span>'
                         : '<span class="text-muted small">—</span>';
                 }
 
-                $url     = route('admin.sales.toggle-refund', $sale);
+                $url = route('admin.sales.toggle-refund', $sale);
                 $checked = $sale->is_refunded ? 'checked' : '';
-                $csrf    = csrf_token();
+                $csrf = csrf_token();
+                $max = number_format((float) $sale->amount, 2, '.', '');
+                $default = number_format(
+                    (float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount),
+                    2,
+                    '.',
+                    ''
+                );
+                $label = $sale->is_refunded
+                    ? '<div class="small text-danger mt-1">'.$refundAmt.'</div>'
+                    : '';
 
-                return '<form action="' . $url . '" method="POST" class="d-inline js-refund-toggle-form" data-sale-id="' . $sale->id . '">'
-                    . '<input type="hidden" name="_token" value="' . $csrf . '">'
-                    . '<div class="form-check form-switch mb-0 d-flex justify-content-center">'
-                    . '<input class="form-check-input" type="checkbox" role="switch" ' . $checked
-                    . ' onchange="this.form.submit()" title="Mark refunded / revert" aria-label="Refunded">'
-                    . '</div></form>';
+                return '<form action="'.$url.'" method="POST" class="d-inline js-refund-toggle-form"'
+                    .' data-sale-id="'.$sale->id.'"'
+                    .' data-max="'.$max.'"'
+                    .' data-default="'.$default.'"'
+                    .' data-refunded="'.($sale->is_refunded ? '1' : '0').'">'
+                    .'<input type="hidden" name="_token" value="'.$csrf.'">'
+                    .'<input type="hidden" name="refunded_amount" value="">'
+                    .'<div class="form-check form-switch mb-0 d-flex justify-content-center">'
+                    .'<input class="form-check-input js-refund-switch" type="checkbox" role="switch" '.$checked
+                    .' title="Mark refunded / revert" aria-label="Refunded">'
+                    .'</div>'.$label.'</form>';
             })
             ->addColumn('chargeback_toggle', function (Sale $sale) {
+                $cbAmt = $sale->is_chargeback
+                    ? '$'.number_format((float) ($sale->chargeback_amount ?? $sale->amount), 2)
+                    : null;
+
                 if (! $this->canToggleChargeback($sale)) {
                     return $sale->is_chargeback
-                        ? '<span class="badge bg-dark">Chargeback</span>'
+                        ? '<span class="badge bg-dark" title="Chargeback amount">Chargeback '.$cbAmt.'</span>'
                         : '<span class="text-muted small">—</span>';
                 }
 
                 $url = route('admin.sales.toggle-chargeback', $sale);
                 $checked = $sale->is_chargeback ? 'checked' : '';
                 $csrf = csrf_token();
+                $max = number_format((float) $sale->amount, 2, '.', '');
+                $default = number_format(
+                    (float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount),
+                    2,
+                    '.',
+                    ''
+                );
+                $label = $sale->is_chargeback
+                    ? '<div class="small text-danger mt-1">'.$cbAmt.'</div>'
+                    : '';
 
-                return '<form action="'.$url.'" method="POST" class="d-inline" data-sale-id="'.$sale->id.'">'
+                return '<form action="'.$url.'" method="POST" class="d-inline js-chargeback-toggle-form"'
+                    .' data-sale-id="'.$sale->id.'"'
+                    .' data-max="'.$max.'"'
+                    .' data-default="'.$default.'"'
+                    .' data-chargeback="'.($sale->is_chargeback ? '1' : '0').'">'
                     .'<input type="hidden" name="_token" value="'.$csrf.'">'
+                    .'<input type="hidden" name="chargeback_amount" value="">'
                     .'<div class="form-check form-switch mb-0 d-flex justify-content-center">'
-                    .'<input class="form-check-input" type="checkbox" role="switch" '.$checked
-                    .' onchange="this.form.submit()" title="Mark chargeback / revert" aria-label="Chargeback">'
-                    .'</div></form>';
+                    .'<input class="form-check-input js-chargeback-switch" type="checkbox" role="switch" '.$checked
+                    .' title="Mark chargeback / revert" aria-label="Chargeback">'
+                    .'</div>'.$label.'</form>';
             })
             ->editColumn('status', fn (Sale $s) =>
                 '<span class="badge bg-' . self::statusColor($s->status) . '">' . e($s->statusLabel()) . '</span>')
@@ -738,7 +788,7 @@ class SaleController extends Controller
         return back()->with('success', "Sale \"{$sale->title}\" rejected.");
     }
 
-    public function toggleRefund(Sale $sale): RedirectResponse
+    public function toggleRefund(Request $request, Sale $sale): RedirectResponse
     {
         if (! $this->canToggleRefund($sale)) {
             abort(403);
@@ -747,6 +797,15 @@ class SaleController extends Controller
         $newRefunded = ! $sale->is_refunded;
 
         if ($newRefunded) {
+            $maxRefund = round((float) $sale->amount, 2);
+            $validated = $request->validate([
+                'refunded_amount' => ['required', 'numeric', 'min:0.01', 'max:'.$maxRefund],
+            ], [
+                'refunded_amount.required' => 'Enter how much is being refunded.',
+                'refunded_amount.max' => 'Refund cannot exceed the sale amount ($'.number_format($maxRefund, 2).').',
+            ]);
+            $refundedAmount = round((float) $validated['refunded_amount'], 2);
+
             $prev = $sale->status === Sale::STATUS_REFUNDED
                 ? ($sale->status_before_refund ?? 'completed')
                 : ($sale->status === Sale::STATUS_CHARGEBACK
@@ -760,6 +819,7 @@ class SaleController extends Controller
                 'is_refunded'          => true,
                 'refunded_at'          => now(),
                 'refunded_by'          => Auth::id(),
+                'refunded_amount'      => $refundedAmount,
                 'status_before_refund' => $prev,
                 'status'               => Sale::STATUS_REFUNDED,
             ]);
@@ -767,17 +827,19 @@ class SaleController extends Controller
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_REFUNDED,
-                "Marked sale as refunded: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
+                "Marked sale as refunded: {$sale->title} (refund \$".number_format($refundedAmount, 2).' of $'.number_format((float) $sale->amount, 2).')'
             );
         } else {
             $restore = $sale->is_chargeback
                 ? Sale::STATUS_CHARGEBACK
                 : ($sale->status_before_refund ?? 'completed');
+            $wasAmount = (float) ($sale->refunded_amount ?? $sale->amount);
 
             $sale->update([
                 'is_refunded'          => false,
                 'refunded_at'          => null,
                 'refunded_by'          => null,
+                'refunded_amount'      => null,
                 'status'               => $restore,
                 'status_before_refund' => null,
             ]);
@@ -785,16 +847,18 @@ class SaleController extends Controller
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_REFUND_REVERTED,
-                "Reverted refund for sale: {$sale->title} (\$" . number_format($sale->amount, 2) . ")"
+                "Reverted refund for sale: {$sale->title} (\$".number_format($wasAmount, 2).')'
             );
         }
 
         return redirect()
             ->back()
-            ->with('success', $newRefunded ? 'Sale marked as refunded.' : 'Refund reverted.');
+            ->with('success', $newRefunded
+                ? 'Sale marked as refunded ($'.number_format((float) $sale->refunded_amount, 2).').'
+                : 'Refund reverted.');
     }
 
-    public function toggleChargeback(Sale $sale): RedirectResponse
+    public function toggleChargeback(Request $request, Sale $sale): RedirectResponse
     {
         if (! $this->canToggleChargeback($sale)) {
             abort(403);
@@ -803,6 +867,15 @@ class SaleController extends Controller
         $newChargeback = ! $sale->is_chargeback;
 
         if ($newChargeback) {
+            $maxChargeback = round((float) $sale->amount, 2);
+            $validated = $request->validate([
+                'chargeback_amount' => ['required', 'numeric', 'min:0.01', 'max:'.$maxChargeback],
+            ], [
+                'chargeback_amount.required' => 'Enter how much is being charged back.',
+                'chargeback_amount.max' => 'Chargeback cannot exceed the sale amount ($'.number_format($maxChargeback, 2).').',
+            ]);
+            $chargebackAmount = round((float) $validated['chargeback_amount'], 2);
+
             $prev = $sale->status === Sale::STATUS_CHARGEBACK
                 ? ($sale->status_before_chargeback ?? 'completed')
                 : ($sale->status === Sale::STATUS_REFUNDED
@@ -816,6 +889,7 @@ class SaleController extends Controller
                 'is_chargeback' => true,
                 'chargeback_at' => now(),
                 'chargeback_by' => Auth::id(),
+                'chargeback_amount' => $chargebackAmount,
                 'status_before_chargeback' => $prev,
                 'status' => Sale::STATUS_CHARGEBACK,
             ]);
@@ -823,17 +897,19 @@ class SaleController extends Controller
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_CHARGEBACK,
-                "Marked sale as chargeback: {$sale->title} (\$".number_format($sale->amount, 2).')'
+                "Marked sale as chargeback: {$sale->title} (chargeback \$".number_format($chargebackAmount, 2).' of $'.number_format((float) $sale->amount, 2).')'
             );
         } else {
             $restore = $sale->is_refunded
                 ? Sale::STATUS_REFUNDED
                 : ($sale->status_before_chargeback ?? 'completed');
+            $wasAmount = (float) ($sale->chargeback_amount ?? $sale->amount);
 
             $sale->update([
                 'is_chargeback' => false,
                 'chargeback_at' => null,
                 'chargeback_by' => null,
+                'chargeback_amount' => null,
                 'status' => $restore,
                 'status_before_chargeback' => null,
             ]);
@@ -841,13 +917,15 @@ class SaleController extends Controller
             ActivityLogger::log(
                 Auth::user(),
                 UserActivityLog::TYPE_SALE_CHARGEBACK_REVERTED,
-                "Reverted chargeback for sale: {$sale->title} (\$".number_format($sale->amount, 2).')'
+                "Reverted chargeback for sale: {$sale->title} (\$".number_format($wasAmount, 2).')'
             );
         }
 
         return redirect()
             ->back()
-            ->with('success', $newChargeback ? 'Sale marked as chargeback.' : 'Chargeback reverted.');
+            ->with('success', $newChargeback
+                ? 'Sale marked as chargeback ($'.number_format((float) $sale->chargeback_amount, 2).').'
+                : 'Chargeback reverted.');
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

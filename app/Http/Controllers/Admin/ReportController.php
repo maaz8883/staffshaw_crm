@@ -433,7 +433,7 @@ class ReportController extends Controller
             ->toBase()
             ->selectRaw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —') as merchant_name")
             ->selectRaw('COUNT(*) as refund_count')
-            ->selectRaw('SUM(amount) as refunded_total')
+            ->selectRaw('SUM(COALESCE(refunded_amount, amount)) as refunded_total')
             ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —')"))
             ->get()
             ->keyBy('merchant_name');
@@ -445,7 +445,7 @@ class ReportController extends Controller
             ->toBase()
             ->selectRaw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —') as merchant_name")
             ->selectRaw('COUNT(*) as chargeback_count')
-            ->selectRaw('SUM(amount) as chargeback_total')
+            ->selectRaw('SUM(COALESCE(chargeback_amount, amount)) as chargeback_total')
             ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(merchant), ''), '— Unassigned —')"))
             ->get()
             ->keyBy('merchant_name');

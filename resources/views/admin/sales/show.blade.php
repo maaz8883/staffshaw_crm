@@ -145,7 +145,7 @@
                 <small class="text-muted d-block">Amount (Total)</small>
                 <span class="fw-bold fs-5 {{ ($sale->is_refunded || $sale->is_chargeback) ? 'text-danger' : 'text-success' }}">${{ number_format($sale->amount, 2) }}</span>
                 @if($sale->is_refunded)
-                    <span class="badge bg-danger ms-2">Refunded</span>
+                    <span class="badge bg-danger ms-2">Refunded ${{ number_format((float) ($sale->refunded_amount ?? $sale->amount), 2) }}</span>
                     @if($sale->refunded_at)
                         <span class="text-muted small ms-1">{{ $sale->refunded_at->format('d M Y H:i') }}</span>
                     @endif
@@ -154,7 +154,7 @@
                     @endif
                 @endif
                 @if($sale->is_chargeback)
-                    <span class="badge bg-dark ms-2">Chargeback</span>
+                    <span class="badge bg-dark ms-2">Chargeback ${{ number_format((float) ($sale->chargeback_amount ?? $sale->amount), 2) }}</span>
                     @if($sale->chargeback_at)
                         <span class="text-muted small ms-1">{{ $sale->chargeback_at->format('d M Y H:i') }}</span>
                     @endif
@@ -175,13 +175,27 @@
             @if($canToggleRefund ?? false)
             <div class="col-md-6">
                 <small class="text-muted d-block mb-1">Refund (admin / team lead)</small>
-                <form action="{{ route('admin.sales.toggle-refund', $sale) }}" method="POST" class="d-inline-flex align-items-center gap-2">
+                <form action="{{ route('admin.sales.toggle-refund', $sale) }}" method="POST" class="js-refund-toggle-form"
+                    data-refunded="{{ $sale->is_refunded ? '1' : '0' }}"
+                    data-max="{{ number_format((float) $sale->amount, 2, '.', '') }}"
+                    data-default="{{ number_format((float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount), 2, '.', '') }}">
                     @csrf
+                    @if(! $sale->is_refunded)
+                    <div class="input-group input-group-sm mb-2" style="max-width:220px">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="refunded_amount" class="form-control" step="0.01" min="0.01"
+                            max="{{ number_format((float) $sale->amount, 2, '.', '') }}"
+                            value="{{ number_format((float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount), 2, '.', '') }}"
+                            placeholder="Refund amount" required>
+                    </div>
+                    <div class="form-text mb-2">Max ${{ number_format((float) $sale->amount, 2) }} (sale total)</div>
+                    @endif
                     <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" role="switch" id="refund-switch"
-                            {{ $sale->is_refunded ? 'checked' : '' }}
-                            onchange="this.form.submit()">
-                        <label class="form-check-label" for="refund-switch">Mark as refunded</label>
+                        <input class="form-check-input js-refund-switch" type="checkbox" role="switch" id="refund-switch"
+                            {{ $sale->is_refunded ? 'checked' : '' }}>
+                        <label class="form-check-label" for="refund-switch">
+                            {{ $sale->is_refunded ? 'Revert refund' : 'Mark as refunded' }}
+                        </label>
                     </div>
                 </form>
             </div>
@@ -189,13 +203,27 @@
             @if($canToggleChargeback ?? false)
             <div class="col-md-6">
                 <small class="text-muted d-block mb-1">Chargeback (admin / team lead)</small>
-                <form action="{{ route('admin.sales.toggle-chargeback', $sale) }}" method="POST" class="d-inline-flex align-items-center gap-2">
+                <form action="{{ route('admin.sales.toggle-chargeback', $sale) }}" method="POST" class="js-chargeback-toggle-form"
+                    data-chargeback="{{ $sale->is_chargeback ? '1' : '0' }}"
+                    data-max="{{ number_format((float) $sale->amount, 2, '.', '') }}"
+                    data-default="{{ number_format((float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount), 2, '.', '') }}">
                     @csrf
+                    @if(! $sale->is_chargeback)
+                    <div class="input-group input-group-sm mb-2" style="max-width:220px">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="chargeback_amount" class="form-control" step="0.01" min="0.01"
+                            max="{{ number_format((float) $sale->amount, 2, '.', '') }}"
+                            value="{{ number_format((float) ($sale->received_amount > 0 ? $sale->received_amount : $sale->amount), 2, '.', '') }}"
+                            placeholder="Chargeback amount" required>
+                    </div>
+                    <div class="form-text mb-2">Max ${{ number_format((float) $sale->amount, 2) }} (sale total)</div>
+                    @endif
                     <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" role="switch" id="chargeback-switch"
-                            {{ $sale->is_chargeback ? 'checked' : '' }}
-                            onchange="this.form.submit()">
-                        <label class="form-check-label" for="chargeback-switch">Mark as chargeback</label>
+                        <input class="form-check-input js-chargeback-switch" type="checkbox" role="switch" id="chargeback-switch"
+                            {{ $sale->is_chargeback ? 'checked' : '' }}>
+                        <label class="form-check-label" for="chargeback-switch">
+                            {{ $sale->is_chargeback ? 'Revert chargeback' : 'Mark as chargeback' }}
+                        </label>
                     </div>
                 </form>
             </div>
@@ -464,4 +492,91 @@
     </div>
 </div>
 @endif
+@endsection
+
+@section('scripts')
+<script>
+$(function () {
+    $(document).on('change', '.js-refund-switch', function () {
+        var input = this;
+        var form = $(input).closest('form')[0];
+        if (!form) return;
+
+        var wasRefunded = form.getAttribute('data-refunded') === '1';
+        if (wasRefunded) {
+            // Turning off → confirm revert
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Revert refund?',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, revert'
+                }).then(function (r) {
+                    if (r.isConfirmed) form.submit();
+                    else input.checked = true;
+                });
+            } else if (confirm('Revert refund?')) {
+                form.submit();
+            } else {
+                input.checked = true;
+            }
+            return;
+        }
+
+        var amountInput = form.querySelector('input[name="refunded_amount"]');
+        var amount = amountInput ? parseFloat(amountInput.value) : NaN;
+        var max = parseFloat(form.getAttribute('data-max') || '0');
+        if (!amount || amount <= 0 || amount > max) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: 'Enter a valid refund amount', text: 'Between $0.01 and $' + max.toFixed(2) });
+            } else {
+                alert('Enter a valid refund amount (max $' + max.toFixed(2) + ')');
+            }
+            input.checked = false;
+            return;
+        }
+        form.submit();
+    });
+
+    $(document).on('change', '.js-chargeback-switch', function () {
+        var input = this;
+        var form = $(input).closest('form')[0];
+        if (!form) return;
+
+        var wasChargeback = form.getAttribute('data-chargeback') === '1';
+        if (wasChargeback) {
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Revert chargeback?',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, revert'
+                }).then(function (r) {
+                    if (r.isConfirmed) form.submit();
+                    else input.checked = true;
+                });
+            } else if (confirm('Revert chargeback?')) {
+                form.submit();
+            } else {
+                input.checked = true;
+            }
+            return;
+        }
+
+        var amountInput = form.querySelector('input[name="chargeback_amount"]');
+        var amount = amountInput ? parseFloat(amountInput.value) : NaN;
+        var max = parseFloat(form.getAttribute('data-max') || '0');
+        if (!amount || amount <= 0 || amount > max) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: 'Enter a valid chargeback amount', text: 'Between $0.01 and $' + max.toFixed(2) });
+            } else {
+                alert('Enter a valid chargeback amount (max $' + max.toFixed(2) + ')');
+            }
+            input.checked = false;
+            return;
+        }
+        form.submit();
+    });
+});
+</script>
 @endsection

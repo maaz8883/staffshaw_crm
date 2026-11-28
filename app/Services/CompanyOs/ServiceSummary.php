@@ -76,9 +76,9 @@ class ServiceSummary
                 'count' => $salesCount,
                 'completed_revenue' => round($completedRevenue, 2),
                 'received' => $received,
-                'refunds_total' => round((float) (clone $refunds)->sum('amount'), 2),
+                'refunds_total' => round((float) (clone $refunds)->sum(DB::raw('COALESCE(refunded_amount, amount)')), 2),
                 'refunds_count' => (clone $refunds)->count(),
-                'chargebacks_total' => round((float) (clone $chargebacks)->sum('amount'), 2),
+                'chargebacks_total' => round((float) (clone $chargebacks)->sum(DB::raw('COALESCE(chargeback_amount, amount)')), 2),
                 'chargebacks_count' => (clone $chargebacks)->count(),
                 'awaiting_approval_count' => Sale::query()
                     ->where('approval_status', Sale::APPROVAL_PENDING)

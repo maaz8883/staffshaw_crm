@@ -137,9 +137,9 @@ class DashboardController extends Controller
         $expenses = (float) \App\Models\Expense::query()->whereBetween('expense_date', $range)->sum('amount');
         $ppc = (float) \App\Models\TeamPpcSpending::query()->where('month', $month)->where('year', $year)->sum('amount');
         $refunds = Sale::query()->where('is_refunded', true)->whereBetween('refunded_at', [$from, $to]);
-        $refundTotal = (float) (clone $refunds)->sum('amount');
+        $refundTotal = (float) (clone $refunds)->sum(DB::raw('COALESCE(refunded_amount, amount)'));
         $chargebacks = Sale::query()->where('is_chargeback', true)->whereBetween('chargeback_at', [$from, $to]);
-        $chargebackTotal = (float) (clone $chargebacks)->sum('amount');
+        $chargebackTotal = (float) (clone $chargebacks)->sum(DB::raw('COALESCE(chargeback_amount, amount)'));
 
         // Still owed: approved, not refunded/chargeback sales not fully received + issued invoices with a balance
         $openSales = self::approved()->where('is_refunded', false)->where('is_chargeback', false)
